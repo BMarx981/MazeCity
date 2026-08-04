@@ -80,7 +80,7 @@ These encode fixes for real bugs in an earlier version. Any change to `MazeGener
 | Service | Tags consumed | Notes |
 |---|---|---|
 | WorldBootstrap | `SlideEntrance` | Builds sections; the only writer of `workspace.MazeCity`. |
-| TowerTimerService | `LevelTrigger`, `TowerStart` | Timer starts on touching a floor's arrival trigger. Fail action configurable: `restartLevel` (default) or `restartTower`. Pushes to clients over the `TimerUpdate` RemoteEvent at 4 Hz. |
+| TowerTimerService | `LevelTrigger`, `RoofTrigger`, `TowerStart` | Timer counts up from touching a floor's arrival trigger; `Config.getParTime` is a scoring target, not a deadline. Clearing a floor and topping out award `leaderstats.Score`. Death is the only failure: respawn configurable via `Config.DeathAction`, `restartLevel` (default) or `restartTower`. Pushes state, score, and celebration events to clients over the `TimerUpdate` RemoteEvent at 4 Hz. |
 | MovingWallService | `MovingWall` | Reads Mode (slide/rotate), Travel, TweenTime, DwellOpen/Closed, Phase attributes. Checks player occupancy before closing; postpones instead of shoving. |
 | EnemyService | `EnemySpawn` | Type from marker attribute, overridable per section in MazeConfig. Rigs from `ServerStorage/Enemies/<TypeName>`, placeholder fallback. Respawn via `NeedsRespawn` attribute polling. |
 | TraversalService | `SlideEntrance`, `SlideBooster`, `SlideExit`, `BouncePad` | PlatformStand during rides, velocity boosters, safety release after SlideMaxSeconds. |
@@ -109,5 +109,5 @@ All gameplay tuning lives in `MazeConfig`. World-shape knobs meant to change bet
 
 1. `selene src/` clean.
 2. Generator changes: run twice with the same seed and confirm identical output (part counts per section folder are a cheap proxy; `print(#folder:GetDescendants())`).
-3. Runtime changes: Play test one full floor including a timer expiry, one moving wall cycle on level 5+, and one slide ride into a lazily generated section.
+3. Runtime changes: Play test one full floor including a score award, one death and floor respawn, one moving wall cycle on level 5+, and one slide ride into a lazily generated section.
 4. No new magic numbers outside `MazeConfig` or `MazeGenerator.CFG`.

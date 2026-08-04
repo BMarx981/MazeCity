@@ -21,24 +21,43 @@ Config.World = {
 }
 
 -- ============================================================
--- Floor timers
+-- Floor timers and scoring
 -- ============================================================
 -- The timer for a floor starts the moment a player touches that floor's
--- LevelTrigger, which the plugin places at the cell the stairs arrive in.
+-- LevelTrigger, at the cell the stairs arrive in, and counts up from zero.
+-- Par is a target worth points, never a deadline: running long costs score and
+-- nothing else. Dying is the only way to lose a floor.
 
 Config.TimerEnabled = true
-Config.BaseSeconds = 150 -- allowance for level 0
-Config.PerLevelReduction = 6 -- shaved off per floor climbed
-Config.MinSeconds = 65 -- floor on the allowance
+Config.BaseSeconds = 150 -- par for level 0
+Config.PerLevelReduction = 6 -- shaved off par per floor climbed
+Config.MinSeconds = 65 -- floor on par
 Config.GraceSeconds = 2 -- ignore re-triggers within this window
 
--- "restartLevel"  send the player back to the start of the floor they failed
--- "restartTower"  send them back to the tower's ground entrance
-Config.FailAction = "restartLevel"
+-- "restartLevel"  respawn at the start of the floor the player died on
+-- "restartTower"  respawn at the tower's ground entrance, losing floor progress
+Config.DeathAction = "restartLevel"
 
-function Config.getLevelTime(level)
+function Config.getParTime(level)
 	local t = Config.BaseSeconds - (level * Config.PerLevelReduction)
 	return math.max(Config.MinSeconds, t)
+end
+
+-- Clearing a floor pays a flat base plus SpeedBonusPerSecond for every second
+-- under par, and the whole award scales with how high the floor was. Reaching
+-- the roof pays TowerBonus on top of the last floor's award.
+Config.Scoring = {
+	FloorClearBase = 100,
+	SpeedBonusPerSecond = 4,
+	LevelMultiplier = 0.15, -- award is multiplied by 1 + level * this
+	TowerBonus = 1000,
+}
+
+function Config.scoreFloor(level, elapsed)
+	local s = Config.Scoring
+	local saved = math.max(0, Config.getParTime(level) - elapsed)
+	local raw = s.FloorClearBase + saved * s.SpeedBonusPerSecond
+	return math.floor(raw * (1 + level * s.LevelMultiplier))
 end
 
 -- ============================================================

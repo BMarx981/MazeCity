@@ -876,7 +876,12 @@ local function buildFacade(parent, origin, style, entrySide, entryCell, ctx)
 	spawn.TopSurface = Enum.SurfaceType.Smooth
 	spawn.Neutral = true
 	spawn.AllowTeamChangeOnTouch = false
-	spawn.Enabled = true
+	-- Every tower plaza is a SpawnLocation, but only section 1's are eligible
+	-- for the join and death respawn roll. Leaving them all enabled drops
+	-- players into lazily built sections they have never reached, and on a
+	-- section that has not been generated yet there is nothing to stand on.
+	-- TowerTimerService still teleports off these for floor and tower restarts.
+	spawn.Enabled = (ctx.section == 1)
 	spawn:SetAttribute("TowerName", towerName)
 	spawn.Parent = folder
 	-- The plaza is at street level, so the spawn belongs to level 0 regardless
@@ -937,6 +942,25 @@ local function buildRoof(parent, origin, hole, style, isExit, ctx)
 	}
 	for i, r in ipairs(ring) do
 		makePart(folder, "Parapet" .. i, CFrame.new(origin + r.pos), r.size, style.trim, Enum.Material.Concrete)
+	end
+
+	-- Win state. The roof has no LevelTrigger of its own because there is no
+	-- level above it, so completion is detected by a trigger sitting over the
+	-- top stair hole, the one spot a climbing player must pass through. Mirrors
+	-- buildLevelTrigger's size and offset; hole is nil only if LEVELS is 0.
+	if hole then
+		local trigger = makePart(
+			folder,
+			"RoofTrigger",
+			CFrame.new(origin + Vector3.new(hole.x, ROOF_Y + 4, hole.z)),
+			Vector3.new(CFG.CELL - 3, 8, CFG.CELL - 3),
+			Color3.fromRGB(0, 200, 255),
+			Enum.Material.SmoothPlastic
+		)
+		trigger.Transparency = 1
+		trigger.CanCollide = false
+		trigger:SetAttribute("TowerName", towerName)
+		tagWithContext(trigger, "RoofTrigger", sectionIndex, ctx.building, CFG.LEVELS)
 	end
 
 	local deck = Instance.new("Folder")
