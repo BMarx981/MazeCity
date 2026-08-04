@@ -15,7 +15,7 @@ Config.World = {
 	Levels = 10,
 	PregenerateSections = 2,
 	LazyGeneration = true,
-	LampBrightness = 1.1,
+	LampBrightness = 2.6,
 	MovingWallMinLevel = 4,
 	PhantomWallsPerLevel = 4,
 }
@@ -48,13 +48,17 @@ end
 -- every EnemySpawn marker inherits it. Override per section here if you want
 -- a whole district to feel different regardless of building style.
 
+-- Player WalkSpeed is 16. Anything below that can never close distance in a
+-- corridor, which is why four of these used to be harmless. Sentry stays the
+-- slow heavy hitter, but at 14 it still gains ground on a player who stops to
+-- read a junction. Leashes are wide enough to cross most of a 250-stud floor.
 Config.EnemyProfiles = {
-	Drifter = { walkSpeed = 9, damage = 12, leash = 90, attackCooldown = 1.2, color = Color3.fromRGB(120, 160, 220) },
-	Stalker = { walkSpeed = 13, damage = 18, leash = 130, attackCooldown = 1.0, color = Color3.fromRGB(200, 150, 90) },
-	Sentry = { walkSpeed = 6, damage = 26, leash = 60, attackCooldown = 1.8, color = Color3.fromRGB(150, 150, 160) },
-	Swarmer = { walkSpeed = 16, damage = 8, leash = 110, attackCooldown = 0.6, color = Color3.fromRGB(110, 200, 170) },
-	Lurker = { walkSpeed = 11, damage = 22, leash = 75, attackCooldown = 1.4, color = Color3.fromRGB(210, 205, 185) },
-	Charger = { walkSpeed = 18, damage = 20, leash = 150, attackCooldown = 1.1, color = Color3.fromRGB(210, 100, 95) },
+	Drifter = { walkSpeed = 15, damage = 12, leash = 150, attackCooldown = 1.2, color = Color3.fromRGB(120, 160, 220) },
+	Stalker = { walkSpeed = 17, damage = 18, leash = 190, attackCooldown = 1.0, color = Color3.fromRGB(200, 150, 90) },
+	Sentry = { walkSpeed = 14, damage = 26, leash = 120, attackCooldown = 1.8, color = Color3.fromRGB(150, 150, 160) },
+	Swarmer = { walkSpeed = 19, damage = 8, leash = 170, attackCooldown = 0.6, color = Color3.fromRGB(110, 200, 170) },
+	Lurker = { walkSpeed = 16, damage = 22, leash = 135, attackCooldown = 1.4, color = Color3.fromRGB(210, 205, 185) },
+	Charger = { walkSpeed = 21, damage = 20, leash = 210, attackCooldown = 1.1, color = Color3.fromRGB(210, 100, 95) },
 }
 
 -- Section index -> enemy type that replaces whatever the building style picked.

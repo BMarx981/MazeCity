@@ -13,6 +13,13 @@ local Players = game:GetService("Players")
 
 local Config = require(ReplicatedStorage:WaitForChild("MazeConfig"))
 
+-- Waypoints to walk before recomputing, and how far the target may drift from
+-- the position the path was planned against before the plan is abandoned. The
+-- old loop committed to five waypoints with a blocking MoveToFinished on each,
+-- so an enemy spent most of its time walking to where the player had been.
+local FOLLOW_WAYPOINTS = 2
+local REPLAN_DRIFT = 8
+
 local enemyFolder = ServerStorage:FindFirstChild("Enemies")
 
 local liveFolder = workspace:FindFirstChild("LiveEnemies")
@@ -111,32 +118,42 @@ local function driveEnemy(model, humanoid, root, profile, marker)
 		local path = PathfindingService:CreatePath({
 			AgentRadius = 2,
 			AgentHeight = 5,
-			AgentCanJump = false,
+			AgentCanJump = true,
 		})
 
 		while model.Parent and humanoid.Health > 0 do
 			local target = nearestTarget(root, profile.leash)
 			if not target then
-				task.wait(1)
+				task.wait(0.6)
 			else
+				local aim = target.Position
 				local ok = pcall(function()
-					path:ComputeAsync(root.Position, target.Position)
+					path:ComputeAsync(root.Position, aim)
 				end)
 
 				if ok and path.Status == Enum.PathStatus.Success then
 					local waypoints = path:GetWaypoints()
-					for i = 2, math.min(#waypoints, 6) do
+					for i = 2, math.min(#waypoints, 1 + FOLLOW_WAYPOINTS) do
 						if not model.Parent or humanoid.Health <= 0 then
 							return
 						end
+						if waypoints[i].Action == Enum.PathWaypointAction.Jump then
+							humanoid.Jump = true
+						end
 						humanoid:MoveTo(waypoints[i].Position)
 						humanoid.MoveToFinished:Wait()
+						-- The plan is stale the moment the player rounds a
+						-- corner. Abandon it rather than finishing a walk to
+						-- where they used to be.
+						if (target.Position - aim).Magnitude > REPLAN_DRIFT then
+							break
+						end
 					end
 				else
-					humanoid:MoveTo(target.Position)
-					task.wait(0.4)
+					humanoid:MoveTo(aim)
+					task.wait(0.25)
 				end
-				task.wait(0.15)
+				task.wait(0.1)
 			end
 		end
 	end)

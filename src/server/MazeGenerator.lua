@@ -28,8 +28,11 @@ local CFG = {
 
 	PHANTOM_PER_LEVEL = 4,
 	LAMP_GRID = 3,
-	LAMP_BRIGHTNESS = 1.1,
-	LAMP_RANGE_MULT = 1.6,
+	LAMP_BRIGHTNESS = 2.6,
+	-- Lamps sit on a LAMP_GRID square grid, so spacing is FX/(LAMP_GRID+1) = 62.5
+	-- studs. Range must exceed that or the coverage circles leave dark bands
+	-- between them. 2.6 * CELL = 65.
+	LAMP_RANGE_MULT = 2.6,
 
 	MOVING_WALL_MIN_LEVEL = 4,
 	MOVING_WALL_BASE = 2,
@@ -315,6 +318,14 @@ local function buildWalls(parent, origin, baseY, g, style)
 	local wallY = baseY + CFG.WALL_HEIGHT / 2
 	local interior = {}
 
+	-- Walls run CELL + WALL_THICKNESS long rather than exactly CELL. A wall
+	-- sized exactly CELL stops at the cell boundary, while the perpendicular
+	-- wall meeting it there is centred on that boundary and so extends half a
+	-- thickness past it. That leaves an empty WALL_THICKNESS/2 square at every
+	-- corner. Overlapping by half a thickness at each end fills it. Openings
+	-- narrow from CELL to CELL - WALL_THICKNESS, which is still 23 studs.
+	local runLong = CFG.CELL + CFG.WALL_THICKNESS
+
 	local function place(x, z, side, pos, size, boundary)
 		local p = makePart(
 			parent,
@@ -340,7 +351,7 @@ local function buildWalls(parent, origin, baseY, g, style)
 					z,
 					"north",
 					Vector3.new(c.X, 0, c.Z - CFG.CELL / 2),
-					Vector3.new(CFG.CELL, CFG.WALL_HEIGHT, CFG.WALL_THICKNESS),
+					Vector3.new(runLong, CFG.WALL_HEIGHT, CFG.WALL_THICKNESS),
 					z == 1
 				)
 			end
@@ -350,7 +361,7 @@ local function buildWalls(parent, origin, baseY, g, style)
 					z,
 					"west",
 					Vector3.new(c.X - CFG.CELL / 2, 0, c.Z),
-					Vector3.new(CFG.WALL_THICKNESS, CFG.WALL_HEIGHT, CFG.CELL),
+					Vector3.new(CFG.WALL_THICKNESS, CFG.WALL_HEIGHT, runLong),
 					x == 1
 				)
 			end
@@ -360,7 +371,7 @@ local function buildWalls(parent, origin, baseY, g, style)
 					z,
 					"east",
 					Vector3.new(c.X + CFG.CELL / 2, 0, c.Z),
-					Vector3.new(CFG.WALL_THICKNESS, CFG.WALL_HEIGHT, CFG.CELL),
+					Vector3.new(CFG.WALL_THICKNESS, CFG.WALL_HEIGHT, runLong),
 					true
 				)
 			end
@@ -370,7 +381,7 @@ local function buildWalls(parent, origin, baseY, g, style)
 					z,
 					"south",
 					Vector3.new(c.X, 0, c.Z + CFG.CELL / 2),
-					Vector3.new(CFG.CELL, CFG.WALL_HEIGHT, CFG.WALL_THICKNESS),
+					Vector3.new(runLong, CFG.WALL_HEIGHT, CFG.WALL_THICKNESS),
 					true
 				)
 			end
@@ -393,8 +404,14 @@ local function tagPhantoms(interior, blocked, count, rng)
 		local i = rng:NextInteger(1, #pool)
 		local w = pool[i]
 		table.remove(pool, i)
+		-- A phantom is a shortcut the player is meant to spot and choose. At the
+		-- old 0.12 it was 88% opaque and read as solid, so it got walked into
+		-- rather than through. Phantoms are never required: the carved maze is a
+		-- spanning tree, and making a wall passable only ever adds a connection.
 		w.part.CanCollide = false
-		w.part.Transparency = 0.12
+		w.part.Transparency = 0.62
+		w.part.Material = Enum.Material.ForceField
+		w.part.CastShadow = false
 		w.part.Name = "PhantomWall"
 		CollectionService:AddTag(w.part, "PhantomWall")
 		picked[w.part] = true
@@ -498,14 +515,17 @@ local function buildLamps(parent, origin, baseY)
 			)
 			base.CanCollide = false
 
-			local spot = Instance.new("SpotLight")
-			spot.Brightness = CFG.LAMP_BRIGHTNESS
-			spot.Range = CFG.CELL * CFG.LAMP_RANGE_MULT
-			spot.Angle = 120
-			spot.Face = Enum.NormalId.Bottom
-			spot.Color = Color3.fromRGB(255, 240, 208)
-			spot.Shadows = true
-			spot.Parent = base
+			-- PointLight, not SpotLight: a downward cone lights the floor and
+			-- leaves the wall faces in grazing light, which is what made the
+			-- maze unreadable. Omnidirectional light hits vertical surfaces.
+			-- Shadows stay off so walls cannot occlude their own lighting into
+			-- black corridors, and so the per-floor light budget stays cheap.
+			local lamp = Instance.new("PointLight")
+			lamp.Brightness = CFG.LAMP_BRIGHTNESS
+			lamp.Range = CFG.CELL * CFG.LAMP_RANGE_MULT
+			lamp.Color = Color3.fromRGB(255, 240, 208)
+			lamp.Shadows = false
+			lamp.Parent = base
 		end
 	end
 end
