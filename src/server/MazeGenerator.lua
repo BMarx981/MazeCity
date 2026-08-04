@@ -335,28 +335,44 @@ local function buildWalls(parent, origin, baseY, g, style)
 			local c = cellCenter(x, z)
 
 			if cell.walls.north then
-				place(x, z, "north",
+				place(
+					x,
+					z,
+					"north",
 					Vector3.new(c.X, 0, c.Z - CFG.CELL / 2),
 					Vector3.new(CFG.CELL, CFG.WALL_HEIGHT, CFG.WALL_THICKNESS),
-					z == 1)
+					z == 1
+				)
 			end
 			if cell.walls.west then
-				place(x, z, "west",
+				place(
+					x,
+					z,
+					"west",
 					Vector3.new(c.X - CFG.CELL / 2, 0, c.Z),
 					Vector3.new(CFG.WALL_THICKNESS, CFG.WALL_HEIGHT, CFG.CELL),
-					x == 1)
+					x == 1
+				)
 			end
 			if x == CFG.MAZE_W and cell.walls.east then
-				place(x, z, "east",
+				place(
+					x,
+					z,
+					"east",
 					Vector3.new(c.X + CFG.CELL / 2, 0, c.Z),
 					Vector3.new(CFG.WALL_THICKNESS, CFG.WALL_HEIGHT, CFG.CELL),
-					true)
+					true
+				)
 			end
 			if z == CFG.MAZE_H and cell.walls.south then
-				place(x, z, "south",
+				place(
+					x,
+					z,
+					"south",
 					Vector3.new(c.X, 0, c.Z + CFG.CELL / 2),
 					Vector3.new(CFG.CELL, CFG.WALL_HEIGHT, CFG.WALL_THICKNESS),
-					true)
+					true
+				)
 			end
 		end
 	end
@@ -665,34 +681,64 @@ local function buildCrown(parent, origin, style)
 	local cx, cz = FX / 2, FZ / 2
 
 	if style.crown == "setback" then
-		makePart(parent, "Penthouse",
+		makePart(
+			parent,
+			"Penthouse",
 			CFrame.new(origin + Vector3.new(cx, topY + 14, cz)),
-			Vector3.new(FX * 0.45, 28, FZ * 0.45), style.skin, style.material)
-		makePart(parent, "PenthouseCap",
+			Vector3.new(FX * 0.45, 28, FZ * 0.45),
+			style.skin,
+			style.material
+		)
+		makePart(
+			parent,
+			"PenthouseCap",
 			CFrame.new(origin + Vector3.new(cx, topY + 29, cz)),
-			Vector3.new(FX * 0.5, 2, FZ * 0.5), style.trim, Enum.Material.Metal)
+			Vector3.new(FX * 0.5, 2, FZ * 0.5),
+			style.trim,
+			Enum.Material.Metal
+		)
 	elseif style.crown == "spire" then
 		local h = 18
 		for i = 1, 5 do
 			local f = 1 - (i - 1) * 0.17
-			makePart(parent, "Spire" .. i,
+			makePart(
+				parent,
+				"Spire" .. i,
 				CFrame.new(origin + Vector3.new(cx, topY + (i - 0.5) * h, cz)),
-				Vector3.new(FX * 0.22 * f, h, FZ * 0.22 * f), style.skin, style.material)
+				Vector3.new(FX * 0.22 * f, h, FZ * 0.22 * f),
+				style.skin,
+				style.material
+			)
 		end
-		local mast = makePart(parent, "Mast",
+		local mast = makePart(
+			parent,
+			"Mast",
 			CFrame.new(origin + Vector3.new(cx, topY + 5 * h + 16, cz)),
-			Vector3.new(2, 32, 2), style.trim, Enum.Material.Neon)
+			Vector3.new(2, 32, 2),
+			style.trim,
+			Enum.Material.Neon
+		)
 		mast.Shape = Enum.PartType.Cylinder
 		mast.CFrame = mast.CFrame * CFrame.Angles(0, 0, math.rad(90))
 	elseif style.crown == "watertower" then
 		for _, off in ipairs({ { -14, -14 }, { 14, -14 }, { -14, 14 }, { 14, 14 } }) do
-			makePart(parent, "TowerLeg",
+			makePart(
+				parent,
+				"TowerLeg",
 				CFrame.new(origin + Vector3.new(cx + off[1], topY + 11, cz + off[2])),
-				Vector3.new(2, 22, 2), style.trim, Enum.Material.Metal)
+				Vector3.new(2, 22, 2),
+				style.trim,
+				Enum.Material.Metal
+			)
 		end
-		local tank = makePart(parent, "Tank",
+		local tank = makePart(
+			parent,
+			"Tank",
 			CFrame.new(origin + Vector3.new(cx, topY + 36, cz)),
-			Vector3.new(34, 34, 34), style.skin, Enum.Material.CorrodedMetal)
+			Vector3.new(34, 34, 34),
+			style.skin,
+			Enum.Material.CorrodedMetal
+		)
 		tank.Shape = Enum.PartType.Cylinder
 		tank.CFrame = tank.CFrame * CFrame.Angles(0, 0, math.rad(90))
 	end
@@ -747,8 +793,13 @@ local function buildFacade(parent, origin, style, entrySide, entryCell, towerNam
 			if rightLen > 0.1 then
 				panel("Facade_" .. side .. "_R", uStart + total - rightLen / 2, rightLen, midY, height)
 			end
-			panel("Facade_" .. side .. "_Header", doorU, CFG.DOOR_WIDTH,
-				CFG.DOOR_HEIGHT + (height - CFG.DOOR_HEIGHT) / 2, height - CFG.DOOR_HEIGHT)
+			panel(
+				"Facade_" .. side .. "_Header",
+				doorU,
+				CFG.DOOR_WIDTH,
+				CFG.DOOR_HEIGHT + (height - CFG.DOOR_HEIGHT) / 2,
+				height - CFG.DOOR_HEIGHT
+			)
 		end
 
 		buildWindows(folder, origin, style, side)
@@ -815,10 +866,22 @@ local function buildRoof(parent, origin, hole, style, towerName, isExit, section
 
 	local O = CFG.FACADE_OUTSET
 	local ring = {
-		{ pos = Vector3.new(FX / 2, ROOF_Y + CFG.PARAPET_HEIGHT / 2, -O), size = Vector3.new(FX + 2 * O, CFG.PARAPET_HEIGHT, 2) },
-		{ pos = Vector3.new(FX / 2, ROOF_Y + CFG.PARAPET_HEIGHT / 2, FZ + O), size = Vector3.new(FX + 2 * O, CFG.PARAPET_HEIGHT, 2) },
-		{ pos = Vector3.new(-O, ROOF_Y + CFG.PARAPET_HEIGHT / 2, FZ / 2), size = Vector3.new(2, CFG.PARAPET_HEIGHT, FZ + 2 * O) },
-		{ pos = Vector3.new(FX + O, ROOF_Y + CFG.PARAPET_HEIGHT / 2, FZ / 2), size = Vector3.new(2, CFG.PARAPET_HEIGHT, FZ + 2 * O) },
+		{
+			pos = Vector3.new(FX / 2, ROOF_Y + CFG.PARAPET_HEIGHT / 2, -O),
+			size = Vector3.new(FX + 2 * O, CFG.PARAPET_HEIGHT, 2),
+		},
+		{
+			pos = Vector3.new(FX / 2, ROOF_Y + CFG.PARAPET_HEIGHT / 2, FZ + O),
+			size = Vector3.new(FX + 2 * O, CFG.PARAPET_HEIGHT, 2),
+		},
+		{
+			pos = Vector3.new(-O, ROOF_Y + CFG.PARAPET_HEIGHT / 2, FZ / 2),
+			size = Vector3.new(2, CFG.PARAPET_HEIGHT, FZ + 2 * O),
+		},
+		{
+			pos = Vector3.new(FX + O, ROOF_Y + CFG.PARAPET_HEIGHT / 2, FZ / 2),
+			size = Vector3.new(2, CFG.PARAPET_HEIGHT, FZ + 2 * O),
+		},
 	}
 	for i, r in ipairs(ring) do
 		makePart(folder, "Parapet" .. i, CFrame.new(origin + r.pos), r.size, style.trim, Enum.Material.Concrete)
@@ -829,22 +892,37 @@ local function buildRoof(parent, origin, hole, style, towerName, isExit, section
 	deck.Parent = folder
 
 	for i = 1, 3 do
-		local pad = makePart(deck, "BouncePad",
+		local pad = makePart(
+			deck,
+			"BouncePad",
 			CFrame.new(origin + Vector3.new(FX * (0.25 * i), ROOF_Y + 0.6, FZ * 0.3)),
-			Vector3.new(12, 1.2, 12), Color3.fromRGB(255, 120, 200), Enum.Material.Neon)
+			Vector3.new(12, 1.2, 12),
+			Color3.fromRGB(255, 120, 200),
+			Enum.Material.Neon
+		)
 		pad:SetAttribute("Power", 140)
 		CollectionService:AddTag(pad, "BouncePad")
 	end
 
 	for i = 1, 4 do
-		makePart(deck, "Planter",
+		makePart(
+			deck,
+			"Planter",
 			CFrame.new(origin + Vector3.new(FX * 0.15 * i, ROOF_Y + 2, FZ * 0.75)),
-			Vector3.new(10, 4, 10), Color3.fromRGB(96, 128, 84), Enum.Material.Grass)
+			Vector3.new(10, 4, 10),
+			Color3.fromRGB(96, 128, 84),
+			Enum.Material.Grass
+		)
 	end
 
-	local sign = makePart(deck, "RoofSign",
+	local sign = makePart(
+		deck,
+		"RoofSign",
 		CFrame.new(origin + Vector3.new(FX / 2, ROOF_Y + 12, FZ * 0.92)),
-		Vector3.new(FX * 0.5, 10, 1.5), style.trim, Enum.Material.Neon)
+		Vector3.new(FX * 0.5, 10, 1.5),
+		style.trim,
+		Enum.Material.Neon
+	)
 	sign.CanCollide = false
 
 	local sg = Instance.new("SurfaceGui")
@@ -867,10 +945,14 @@ local function buildRoof(parent, origin, hole, style, towerName, isExit, section
 	amb.Parent = sign
 
 	if isExit then
-		local ent = makePart(deck, "SlideEntrance",
+		local ent = makePart(
+			deck,
+			"SlideEntrance",
 			CFrame.new(origin + Vector3.new(FX + O - 8, ROOF_Y + 2, FZ / 2)),
 			Vector3.new(CFG.SLIDE_WIDTH, 3, CFG.SLIDE_WIDTH),
-			Color3.fromRGB(255, 210, 60), Enum.Material.Neon)
+			Color3.fromRGB(255, 210, 60),
+			Enum.Material.Neon
+		)
 		ent.CanCollide = false
 		ent:SetAttribute("FromSection", sectionIndex)
 		ent:SetAttribute("ToSection", sectionIndex + 1)
@@ -900,25 +982,38 @@ local function buildSlide(parent, startPos, endPos)
 		local len = (b - a).Magnitude
 		local cf = CFrame.lookAt(mid, b)
 
-		local seg = makePart(folder, "SlideSurface", cf,
+		local seg = makePart(
+			folder,
+			"SlideSurface",
+			cf,
 			Vector3.new(CFG.SLIDE_WIDTH, 1.5, len),
-			Color3.fromRGB(255, 210, 60), Enum.Material.SmoothPlastic)
+			Color3.fromRGB(255, 210, 60),
+			Enum.Material.SmoothPlastic
+		)
 		seg.CustomPhysicalProperties = physical
 		CollectionService:AddTag(seg, "SlideSurface")
 
 		for _, s in ipairs({ -1, 1 }) do
-			local rail = makePart(folder, "SlideRail",
+			local rail = makePart(
+				folder,
+				"SlideRail",
 				cf * CFrame.new(s * (CFG.SLIDE_WIDTH / 2 + 0.6), 2.2, 0),
 				Vector3.new(1.2, 6, len),
-				Color3.fromRGB(60, 60, 70), Enum.Material.Metal)
+				Color3.fromRGB(60, 60, 70),
+				Enum.Material.Metal
+			)
 			rail.CustomPhysicalProperties = physical
 		end
 
 		if i % 3 == 0 then
-			local boost = makePart(folder, "SlideBooster",
+			local boost = makePart(
+				folder,
+				"SlideBooster",
 				cf * CFrame.new(0, 4, 0),
 				Vector3.new(CFG.SLIDE_WIDTH, 6, 4),
-				Color3.fromRGB(0, 255, 255), Enum.Material.Neon)
+				Color3.fromRGB(0, 255, 255),
+				Enum.Material.Neon
+			)
 			boost.Transparency = 1
 			boost.CanCollide = false
 			boost:SetAttribute("Speed", 105)
@@ -929,9 +1024,14 @@ local function buildSlide(parent, startPos, endPos)
 		end
 	end
 
-	local pad = makePart(folder, "SlideExit",
+	local pad = makePart(
+		folder,
+		"SlideExit",
 		CFrame.new(endPos + Vector3.new(0, -2, 0)),
-		Vector3.new(70, 3, 70), Color3.fromRGB(255, 210, 60), Enum.Material.Neon)
+		Vector3.new(70, 3, 70),
+		Color3.fromRGB(255, 210, 60),
+		Enum.Material.Neon
+	)
 	CollectionService:AddTag(pad, "SlideExit")
 
 	local rampLen = 60
@@ -939,8 +1039,14 @@ local function buildSlide(parent, startPos, endPos)
 		endPos + Vector3.new(0, -CFG.SLIDE_LANDING_Y / 2 - 2, 40),
 		endPos + Vector3.new(0, -CFG.SLIDE_LANDING_Y, 70)
 	)
-	makePart(folder, "LandingRamp", rampCF,
-		Vector3.new(40, 2, rampLen), Color3.fromRGB(120, 120, 128), Enum.Material.Concrete)
+	makePart(
+		folder,
+		"LandingRamp",
+		rampCF,
+		Vector3.new(40, 2, rampLen),
+		Color3.fromRGB(120, 120, 128),
+		Enum.Material.Concrete
+	)
 
 	return folder
 end
@@ -981,8 +1087,7 @@ local function buildBuilding(sectionFolder, origin, sectionIndex, buildingIndex,
 		local levelHole = (level == 0) and nil or pendingHole
 		local result = buildLevel(folder, origin, level, entrySide, entryCell, style, rng, ctx)
 
-		buildSlab(result.folder, origin, level * LEVEL_HEIGHT, levelHole,
-			style.skin, Enum.Material.Slate, "Floor")
+		buildSlab(result.folder, origin, level * LEVEL_HEIGHT, levelHole, style.skin, Enum.Material.Slate, "Floor")
 
 		pendingHole = result.hole
 		entrySide = result.exitSide
@@ -1015,10 +1120,14 @@ function MazeGenerator.buildSection(root, sectionIndex, seed)
 	local groundW = CFG.PLOT_COLS * PLOT_SPAN_X + 240
 	local groundD = CFG.PLOT_ROWS * PLOT_SPAN_Z + 240
 
-	local ground = makePart(folder, "Ground",
+	local ground = makePart(
+		folder,
+		"Ground",
 		CFrame.new(sectionOrigin + Vector3.new(groundW / 2 - 120, -2, groundD / 2 - 120)),
 		Vector3.new(groundW, 4, groundD),
-		Color3.fromRGB(72, 74, 78), Enum.Material.Asphalt)
+		Color3.fromRGB(72, 74, 78),
+		Enum.Material.Asphalt
+	)
 	ground:SetAttribute("Section", sectionIndex)
 
 	local totalPlots = CFG.PLOT_COLS * CFG.PLOT_ROWS

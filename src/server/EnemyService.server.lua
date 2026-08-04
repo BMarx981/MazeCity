@@ -97,8 +97,12 @@ local function driveEnemy(model, humanoid, root, profile, marker)
 	root.Touched:Connect(function(hit)
 		local char = hit:FindFirstAncestorOfClass("Model")
 		local targetHum = char and char:FindFirstChildOfClass("Humanoid")
-		if not targetHum or not Players:GetPlayerFromCharacter(char) then return end
-		if os.clock() - lastAttack < profile.attackCooldown then return end
+		if not targetHum or not Players:GetPlayerFromCharacter(char) then
+			return
+		end
+		if os.clock() - lastAttack < profile.attackCooldown then
+			return
+		end
 		lastAttack = os.clock()
 		targetHum:TakeDamage(profile.damage)
 	end)
@@ -122,7 +126,9 @@ local function driveEnemy(model, humanoid, root, profile, marker)
 				if ok and path.Status == Enum.PathStatus.Success then
 					local waypoints = path:GetWaypoints()
 					for i = 2, math.min(#waypoints, 6) do
-						if not model.Parent or humanoid.Health <= 0 then return end
+						if not model.Parent or humanoid.Health <= 0 then
+							return
+						end
 						humanoid:MoveTo(waypoints[i].Position)
 						humanoid.MoveToFinished:Wait()
 					end
@@ -149,7 +155,9 @@ local function driveEnemy(model, humanoid, root, profile, marker)
 end
 
 local function spawnFromMarker(marker)
-	if not marker:IsA("BasePart") then return end
+	if not marker:IsA("BasePart") then
+		return
+	end
 
 	local section = marker:GetAttribute("Section") or 1
 	local level = marker:GetAttribute("Level") or 0

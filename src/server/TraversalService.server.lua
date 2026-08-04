@@ -12,16 +12,22 @@ local bounceCooldown = {}
 
 local function playerFrom(hit)
 	local char = hit:FindFirstAncestorOfClass("Model")
-	if not char then return nil, nil, nil end
+	if not char then
+		return nil, nil, nil
+	end
 	local player = Players:GetPlayerFromCharacter(char)
-	if not player then return nil, nil, nil end
+	if not player then
+		return nil, nil, nil
+	end
 	local humanoid = char:FindFirstChildOfClass("Humanoid")
 	local root = char:FindFirstChild("HumanoidRootPart")
 	return player, humanoid, root
 end
 
 local function endRide(player, humanoid)
-	if not riding[player] then return end
+	if not riding[player] then
+		return
+	end
 	riding[player] = nil
 	if humanoid then
 		humanoid.PlatformStand = false
@@ -29,11 +35,17 @@ local function endRide(player, humanoid)
 end
 
 local function bindEntrance(part)
-	if not part:IsA("BasePart") then return end
+	if not part:IsA("BasePart") then
+		return
+	end
 	part.Touched:Connect(function(hit)
 		local player, humanoid, root = playerFrom(hit)
-		if not player or not humanoid or not root then return end
-		if riding[player] then return end
+		if not player or not humanoid or not root then
+			return
+		end
+		if riding[player] then
+			return
+		end
 
 		riding[player] = os.clock()
 		humanoid.PlatformStand = true
@@ -48,17 +60,20 @@ local function bindEntrance(part)
 end
 
 local function bindBooster(part)
-	if not part:IsA("BasePart") then return end
+	if not part:IsA("BasePart") then
+		return
+	end
 	part.Touched:Connect(function(hit)
 		local player, _, root = playerFrom(hit)
-		if not player or not root or not riding[player] then return end
+		if not player or not root or not riding[player] then
+			return
+		end
 
-		local dir = Vector3.new(
-			part:GetAttribute("DirX") or 0,
-			part:GetAttribute("DirY") or 0,
-			part:GetAttribute("DirZ") or 0
-		)
-		if dir.Magnitude < 0.01 then return end
+		local dir =
+			Vector3.new(part:GetAttribute("DirX") or 0, part:GetAttribute("DirY") or 0, part:GetAttribute("DirZ") or 0)
+		if dir.Magnitude < 0.01 then
+			return
+		end
 
 		local speed = part:GetAttribute("Speed") or Config.SlideBoostSpeed
 		root.AssemblyLinearVelocity = dir.Unit * speed
@@ -66,30 +81,36 @@ local function bindBooster(part)
 end
 
 local function bindExit(part)
-	if not part:IsA("BasePart") then return end
+	if not part:IsA("BasePart") then
+		return
+	end
 	part.Touched:Connect(function(hit)
 		local player, humanoid = playerFrom(hit)
-		if not player then return end
+		if not player then
+			return
+		end
 		endRide(player, humanoid)
 	end)
 end
 
 local function bindBouncePad(part)
-	if not part:IsA("BasePart") then return end
+	if not part:IsA("BasePart") then
+		return
+	end
 	part.Touched:Connect(function(hit)
 		local player, _, root = playerFrom(hit)
-		if not player or not root then return end
+		if not player or not root then
+			return
+		end
 
 		local last = bounceCooldown[player] or 0
-		if os.clock() - last < Config.BouncePadCooldown then return end
+		if os.clock() - last < Config.BouncePadCooldown then
+			return
+		end
 		bounceCooldown[player] = os.clock()
 
 		local power = part:GetAttribute("Power") or 140
-		root.AssemblyLinearVelocity = Vector3.new(
-			root.AssemblyLinearVelocity.X,
-			power,
-			root.AssemblyLinearVelocity.Z
-		)
+		root.AssemblyLinearVelocity = Vector3.new(root.AssemblyLinearVelocity.X, power, root.AssemblyLinearVelocity.Z)
 	end)
 end
 

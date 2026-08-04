@@ -24,7 +24,9 @@ end
 
 local function spaceIsClear(cframe, size)
 	local params, count = characterParts()
-	if count == 0 then return true end
+	if count == 0 then
+		return true
+	end
 	local hits = workspace:GetPartBoundsInBox(cframe, size + Vector3.new(2, 2, 2), params)
 	return #hits == 0
 end
@@ -43,7 +45,9 @@ local function openCFrameFor(part, home)
 end
 
 local function run(part)
-	if not part:IsA("BasePart") then return end
+	if not part:IsA("BasePart") then
+		return
+	end
 
 	local home = part.CFrame
 	local away = openCFrameFor(part, home)
@@ -58,15 +62,21 @@ local function run(part)
 		task.wait(phase)
 		while part.Parent do
 			task.wait(dwellClosed)
-			if not part.Parent then return end
+			if not part.Parent then
+				return
+			end
 
 			TweenService:Create(part, info, { CFrame = away }):Play()
 			task.wait(tweenTime + dwellOpen)
-			if not part.Parent then return end
+			if not part.Parent then
+				return
+			end
 
 			while not spaceIsClear(home, part.Size) do
 				task.wait(Config.MovingWallRetrySeconds)
-				if not part.Parent then return end
+				if not part.Parent then
+					return
+				end
 			end
 
 			TweenService:Create(part, info, { CFrame = home }):Play()

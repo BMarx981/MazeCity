@@ -41,7 +41,9 @@ end
 
 local function teleport(player, cframe)
 	local char = player.Character
-	if not char then return end
+	if not char then
+		return
+	end
 	local root = char:FindFirstChild("HumanoidRootPart")
 	if root then
 		root.CFrame = cframe + Vector3.new(0, 4, 0)
@@ -84,7 +86,9 @@ end
 
 local function fail(player)
 	local s = state[player]
-	if not s then return end
+	if not s then
+		return
+	end
 
 	if Config.FailAction == "restartTower" then
 		local spawn = findTowerStart(s.section, s.building)
@@ -103,17 +107,27 @@ local function fail(player)
 end
 
 local function bindTrigger(trigger)
-	if not trigger:IsA("BasePart") then return end
+	if not trigger:IsA("BasePart") then
+		return
+	end
 	trigger.Touched:Connect(function(hit)
 		local char = hit:FindFirstAncestorOfClass("Model")
-		if not char then return end
+		if not char then
+			return
+		end
 		local player = Players:GetPlayerFromCharacter(char)
-		if not player then return end
+		if not player then
+			return
+		end
 
 		local s = state[player]
 		local key = keyFor(trigger)
-		if s and s.key == key then return end
-		if s and (os.clock() - s.startedAt) < Config.GraceSeconds then return end
+		if s and s.key == key then
+			return
+		end
+		if s and (os.clock() - s.startedAt) < Config.GraceSeconds then
+			return
+		end
 
 		startFloor(player, trigger)
 	end)
@@ -139,7 +153,9 @@ if Config.TimerEnabled then
 	local accumulator = 0
 	RunService.Heartbeat:Connect(function(dt)
 		accumulator = accumulator + dt
-		if accumulator < 0.25 then return end
+		if accumulator < 0.25 then
+			return
+		end
 		accumulator = 0
 
 		local now = os.clock()

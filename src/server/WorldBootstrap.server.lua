@@ -51,9 +51,13 @@ workspace:SetAttribute("MazeCityReady", true)
 
 if Config.World.LazyGeneration then
 	local function bindEntrance(part)
-		if not part:IsA("BasePart") then return end
+		if not part:IsA("BasePart") then
+			return
+		end
 		local target = part:GetAttribute("ToSection")
-		if not target then return end
+		if not target then
+			return
+		end
 		part.Touched:Connect(function()
 			task.spawn(ensureSection, target)
 		end)

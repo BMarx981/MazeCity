@@ -20,7 +20,7 @@ Players enter a building at street level, solve a maze on each of 10 floors agai
 ```
 maze-city/
   default.project.json      Rojo tree (also sets Lighting defaults)
-  aftman.toml               pinned toolchain
+  aftman.toml               pinned toolchain (read by Rokit)
   selene.toml               lint config (roblox std)
   stylua.toml               formatter config
   src/
@@ -41,7 +41,7 @@ Rojo infers class from suffix: `.server.lua` is a Script, `.client.lua` is a Loc
 
 ## Toolchain and workflow
 
-Install tools once: `aftman install` (or Rokit with the same manifest).
+Install tools once: `rokit install`. Rokit reads the existing `aftman.toml` manifest, so no migration is needed. Aftman itself is archived upstream and its Homebrew formula was disabled in July 2026; do not try to install it.
 
 ```
 rojo serve                    # live sync; connect from the Rojo plugin in Studio, then hit Play

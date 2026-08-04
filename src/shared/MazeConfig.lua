@@ -27,10 +27,10 @@ Config.World = {
 -- LevelTrigger, which the plugin places at the cell the stairs arrive in.
 
 Config.TimerEnabled = true
-Config.BaseSeconds = 150          -- allowance for level 0
-Config.PerLevelReduction = 6      -- shaved off per floor climbed
-Config.MinSeconds = 65            -- floor on the allowance
-Config.GraceSeconds = 2           -- ignore re-triggers within this window
+Config.BaseSeconds = 150 -- allowance for level 0
+Config.PerLevelReduction = 6 -- shaved off per floor climbed
+Config.MinSeconds = 65 -- floor on the allowance
+Config.GraceSeconds = 2 -- ignore re-triggers within this window
 
 -- "restartLevel"  send the player back to the start of the floor they failed
 -- "restartTower"  send them back to the tower's ground entrance
@@ -99,7 +99,7 @@ Config.MovingWallRetrySeconds = 3
 -- ============================================================
 
 Config.SlideBoostSpeed = 105
-Config.SlideMaxSeconds = 30       -- safety release if someone gets stuck
+Config.SlideMaxSeconds = 30 -- safety release if someone gets stuck
 Config.BouncePadCooldown = 0.6
 
 return Config
