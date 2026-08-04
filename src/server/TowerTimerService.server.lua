@@ -26,14 +26,15 @@ local function keyFor(trigger)
 	)
 end
 
+-- TowerStart carries Section/Building itself, so match on the tagged part
+-- rather than walking ancestors. The walk it replaces started at the Facade
+-- folder, which has no attributes, and then stepped to the Facade's own
+-- ancestor rather than to Building_N, so it skipped the only folder that
+-- could have matched and always returned nil.
 local function findTowerStart(section, building)
 	for _, spawn in ipairs(CollectionService:GetTagged("TowerStart")) do
-		local folder = spawn:FindFirstAncestorWhichIsA("Folder")
-		while folder do
-			if folder:GetAttribute("Building") == building and folder:GetAttribute("Section") == section then
-				return spawn
-			end
-			folder = folder.Parent and folder.Parent:FindFirstAncestorWhichIsA("Folder")
+		if spawn:GetAttribute("Section") == section and spawn:GetAttribute("Building") == building then
+			return spawn
 		end
 	end
 	return nil

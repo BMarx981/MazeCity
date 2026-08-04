@@ -162,6 +162,18 @@ local function makePart(parent, name, cf, size, color, material)
 	return p
 end
 
+-- Every tagged part must carry Section/Building/Level: runtime services key
+-- all of their lookups off those three attributes, so a tag applied without
+-- them is invisible to whichever service consumes it. Attributes are set
+-- before AddTag because GetInstanceAddedSignal fires on the tag, and a
+-- service that reads attributes in its handler would otherwise see nil.
+local function tagWithContext(part, tag, section, building, level)
+	part:SetAttribute("Section", section)
+	part:SetAttribute("Building", building)
+	part:SetAttribute("Level", level)
+	CollectionService:AddTag(part, tag)
+end
+
 local function cellCenter(x, z)
 	return Vector3.new((x - 0.5) * CFG.CELL, 0, (z - 0.5) * CFG.CELL)
 end
@@ -391,7 +403,7 @@ local function buildWalls(parent, origin, baseY, g, style)
 	return interior
 end
 
-local function tagPhantoms(interior, blocked, count, rng)
+local function tagPhantoms(interior, blocked, count, rng, ctx)
 	local pool = {}
 	for _, w in ipairs(interior) do
 		if not blocked[w.x .. "_" .. w.z] then
@@ -413,13 +425,13 @@ local function tagPhantoms(interior, blocked, count, rng)
 		w.part.Material = Enum.Material.ForceField
 		w.part.CastShadow = false
 		w.part.Name = "PhantomWall"
-		CollectionService:AddTag(w.part, "PhantomWall")
+		tagWithContext(w.part, "PhantomWall", ctx.section, ctx.building, ctx.level)
 		picked[w.part] = true
 	end
 	return picked
 end
 
-local function tagMovingWalls(interior, blocked, used, level, rng)
+local function tagMovingWalls(interior, blocked, used, level, rng, ctx)
 	if level < CFG.MOVING_WALL_MIN_LEVEL then
 		return
 	end
@@ -448,7 +460,7 @@ local function tagMovingWalls(interior, blocked, used, level, rng)
 		p:SetAttribute("DwellOpen", rng:NextNumber(6, 14))
 		p:SetAttribute("DwellClosed", rng:NextNumber(8, 18))
 		p:SetAttribute("Phase", rng:NextNumber(0, 12))
-		CollectionService:AddTag(p, "MovingWall")
+		tagWithContext(p, "MovingWall", ctx.section, ctx.building, level)
 		used[p] = true
 	end
 end
@@ -562,10 +574,7 @@ local function buildEnemySpawns(parent, origin, baseY, g, blocked, entryCell, st
 		marker.Transparency = 1
 		marker.CanCollide = false
 		marker:SetAttribute("EnemyType", style.enemy)
-		marker:SetAttribute("Section", ctx.section)
-		marker:SetAttribute("Building", ctx.building)
-		marker:SetAttribute("Level", ctx.level)
-		CollectionService:AddTag(marker, "EnemySpawn")
+		tagWithContext(marker, "EnemySpawn", ctx.section, ctx.building, ctx.level)
 	end
 end
 
@@ -581,11 +590,8 @@ local function buildLevelTrigger(parent, origin, baseY, entryCell, ctx)
 	)
 	trigger.Transparency = 1
 	trigger.CanCollide = false
-	trigger:SetAttribute("Section", ctx.section)
-	trigger:SetAttribute("Building", ctx.building)
-	trigger:SetAttribute("Level", ctx.level)
 	trigger:SetAttribute("TowerName", ctx.towerName)
-	CollectionService:AddTag(trigger, "LevelTrigger")
+	tagWithContext(trigger, "LevelTrigger", ctx.section, ctx.building, ctx.level)
 end
 
 -- ============================================================
@@ -594,6 +600,7 @@ end
 
 local function buildLevel(buildingFolder, origin, level, entrySide, entryCell, style, rng, ctx)
 	local baseY = level * LEVEL_HEIGHT
+	ctx.level = level
 
 	local exitSide = rotateSide(entrySide, rng:NextNumber() < 0.5 and 1 or -1)
 	local span = sideRunLength(exitSide)
@@ -628,13 +635,12 @@ local function buildLevel(buildingFolder, origin, level, entrySide, entryCell, s
 	}
 
 	local interior = buildWalls(folder, origin, baseY, g, style)
-	local used = tagPhantoms(interior, blocked, CFG.PHANTOM_PER_LEVEL, rng)
-	tagMovingWalls(interior, blocked, used, level, rng)
+	local used = tagPhantoms(interior, blocked, CFG.PHANTOM_PER_LEVEL, rng, ctx)
+	tagMovingWalls(interior, blocked, used, level, rng, ctx)
 
 	local hole = buildStairs(folder, origin, baseY, exitSide, cellB, cellE, style)
 	buildLamps(folder, origin, baseY)
 
-	ctx.level = level
 	buildEnemySpawns(folder, origin, baseY, g, blocked, entryCell, style, rng, ctx)
 	buildLevelTrigger(folder, origin, baseY, entryCell, ctx)
 
@@ -764,10 +770,12 @@ local function buildCrown(parent, origin, style)
 	end
 end
 
-local function buildFacade(parent, origin, style, entrySide, entryCell, towerName)
+local function buildFacade(parent, origin, style, entrySide, entryCell, ctx)
 	local folder = Instance.new("Folder")
 	folder.Name = "Facade"
 	folder.Parent = parent
+
+	local towerName = ctx.towerName
 
 	local O = CFG.FACADE_OUTSET
 	local T = CFG.FACADE_THICKNESS
@@ -852,7 +860,9 @@ local function buildFacade(parent, origin, style, entrySide, entryCell, towerNam
 	spawn.Enabled = true
 	spawn:SetAttribute("TowerName", towerName)
 	spawn.Parent = folder
-	CollectionService:AddTag(spawn, "TowerStart")
+	-- The plaza is at street level, so the spawn belongs to level 0 regardless
+	-- of how far up the tower the player has climbed.
+	tagWithContext(spawn, "TowerStart", ctx.section, ctx.building, 0)
 
 	local bb = Instance.new("BillboardGui")
 	bb.Size = UDim2.new(0, 190, 0, 42)
@@ -877,10 +887,13 @@ end
 -- Roof deck
 -- ============================================================
 
-local function buildRoof(parent, origin, hole, style, towerName, isExit, sectionIndex)
+local function buildRoof(parent, origin, hole, style, isExit, ctx)
 	local folder = Instance.new("Folder")
 	folder.Name = "Roof"
 	folder.Parent = parent
+
+	local towerName = ctx.towerName
+	local sectionIndex = ctx.section
 
 	buildSlab(folder, origin, ROOF_Y, hole, style.skin, style.material, "RoofSlab")
 
@@ -921,7 +934,7 @@ local function buildRoof(parent, origin, hole, style, towerName, isExit, section
 			Enum.Material.Neon
 		)
 		pad:SetAttribute("Power", 140)
-		CollectionService:AddTag(pad, "BouncePad")
+		tagWithContext(pad, "BouncePad", sectionIndex, ctx.building, CFG.LEVELS)
 	end
 
 	for i = 1, 4 do
@@ -976,7 +989,7 @@ local function buildRoof(parent, origin, hole, style, towerName, isExit, section
 		ent.CanCollide = false
 		ent:SetAttribute("FromSection", sectionIndex)
 		ent:SetAttribute("ToSection", sectionIndex + 1)
-		CollectionService:AddTag(ent, "SlideEntrance")
+		tagWithContext(ent, "SlideEntrance", sectionIndex, ctx.building, CFG.LEVELS)
 	end
 
 	return folder
@@ -986,7 +999,7 @@ end
 -- Slide to the next section
 -- ============================================================
 
-local function buildSlide(parent, startPos, endPos)
+local function buildSlide(parent, startPos, endPos, section, building)
 	local folder = Instance.new("Folder")
 	folder.Name = "Slide"
 	folder.Parent = parent
@@ -1011,7 +1024,7 @@ local function buildSlide(parent, startPos, endPos)
 			Enum.Material.SmoothPlastic
 		)
 		seg.CustomPhysicalProperties = physical
-		CollectionService:AddTag(seg, "SlideSurface")
+		tagWithContext(seg, "SlideSurface", section, building, CFG.LEVELS)
 
 		for _, s in ipairs({ -1, 1 }) do
 			local rail = makePart(
@@ -1040,7 +1053,7 @@ local function buildSlide(parent, startPos, endPos)
 			boost:SetAttribute("DirX", (b - a).Unit.X)
 			boost:SetAttribute("DirY", (b - a).Unit.Y)
 			boost:SetAttribute("DirZ", (b - a).Unit.Z)
-			CollectionService:AddTag(boost, "SlideBooster")
+			tagWithContext(boost, "SlideBooster", section, building, CFG.LEVELS)
 		end
 	end
 
@@ -1052,7 +1065,7 @@ local function buildSlide(parent, startPos, endPos)
 		Color3.fromRGB(255, 210, 60),
 		Enum.Material.Neon
 	)
-	CollectionService:AddTag(pad, "SlideExit")
+	tagWithContext(pad, "SlideExit", section, building, CFG.LEVELS)
 
 	local rampLen = 60
 	local rampCF = CFrame.lookAt(
@@ -1100,7 +1113,7 @@ local function buildBuilding(sectionFolder, origin, sectionIndex, buildingIndex,
 	local entrySide = SIDE_ORDER[rng:NextInteger(1, 4)]
 	local entryCell = edgeCell(entrySide, rng:NextInteger(2, sideRunLength(entrySide) - 1))
 
-	buildFacade(folder, origin, style, entrySide, entryCell, towerName)
+	buildFacade(folder, origin, style, entrySide, entryCell, ctx)
 
 	local pendingHole = nil
 	for level = 0, CFG.LEVELS - 1 do
@@ -1114,7 +1127,7 @@ local function buildBuilding(sectionFolder, origin, sectionIndex, buildingIndex,
 		entryCell = result.exitCell
 	end
 
-	buildRoof(folder, origin, pendingHole, style, towerName, isExit, sectionIndex)
+	buildRoof(folder, origin, pendingHole, style, isExit, ctx)
 	return folder, style
 end
 
@@ -1174,7 +1187,7 @@ function MazeGenerator.buildSection(root, sectionIndex, seed)
 				local start = origin + Vector3.new(FX + CFG.FACADE_OUTSET, ROOF_Y + 2, FZ / 2)
 				local nextOrigin = MazeGenerator.sectionOrigin(sectionIndex + 1)
 				local landing = nextOrigin + Vector3.new(-140, CFG.SLIDE_LANDING_Y, PLOT_SPAN_Z * 0.5)
-				local slide = buildSlide(folder, start, landing)
+				local slide = buildSlide(folder, start, landing, sectionIndex, index)
 				slide.Name = "Slide_To_Section_" .. (sectionIndex + 1)
 				slide:SetAttribute("FromSection", sectionIndex)
 				slide:SetAttribute("ToSection", sectionIndex + 1)
