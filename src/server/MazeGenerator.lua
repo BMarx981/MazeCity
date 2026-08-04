@@ -48,6 +48,12 @@ local CFG = {
 	STAIR_WIDTH_FRAC = 0.84,
 	STAIR_RUN_CELLS = 1.9,
 
+	-- Level 0's slab would otherwise top out at Y = 0, exactly level with the
+	-- street Ground part, so the lobby floor read as more asphalt. Lifting it
+	-- makes the threshold a visible step in. Kept under 2 so a character walks
+	-- up it without jumping.
+	GROUND_FLOOR_LIFT = 1.5,
+
 	SLIDE_WIDTH = 14,
 	SLIDE_SEGMENT_LEN = 40,
 	SLIDE_LANDING_Y = 22,
@@ -59,6 +65,10 @@ local FZ = CFG.MAZE_H * CFG.CELL
 local PLOT_SPAN_X = FX + 2 * CFG.FACADE_OUTSET + CFG.STREET
 local PLOT_SPAN_Z = FZ + 2 * CFG.FACADE_OUTSET + CFG.STREET
 local SECTION_SPAN = CFG.PLOT_COLS * PLOT_SPAN_X + CFG.SECTION_GAP
+-- How far past the maze footprint slabs run. Half a facade thickness past the
+-- outset puts the slab edge inside the facade part, so no two faces are
+-- coplanar and nothing z-fights.
+local SLAB_APRON = CFG.FACADE_OUTSET + CFG.FACADE_THICKNESS / 2
 local ROOF_Y = CFG.LEVELS * LEVEL_HEIGHT
 
 local function refreshFromConfig()
@@ -291,20 +301,29 @@ end
 -- Slabs
 -- ============================================================
 
+-- Slabs run out to the facade, not just to the maze footprint. The maze fills
+-- 0..FX by 0..FZ while the facade stands SLAB_APRON studs further out, so a
+-- slab sized to the maze alone leaves an open ring around every floor: a slot
+-- on the roof between the deck and the parapet, and a shaft from there down to
+-- the street. Widening the rects rather than adding an apron ring keeps the
+-- part count per slab unchanged.
 local function buildSlab(parent, origin, topY, hole, color, material, prefix)
+	local ax0, ax1 = -SLAB_APRON, FX + SLAB_APRON
+	local az0, az1 = -SLAB_APRON, FZ + SLAB_APRON
+
 	local rects
 	if not hole then
-		rects = { { cx = FX / 2, cz = FZ / 2, sx = FX, sz = FZ } }
+		rects = { { cx = (ax0 + ax1) / 2, cz = (az0 + az1) / 2, sx = ax1 - ax0, sz = az1 - az0 } }
 	else
 		local x0 = hole.x - hole.sx / 2
 		local x1 = hole.x + hole.sx / 2
 		local z0 = hole.z - hole.sz / 2
 		local z1 = hole.z + hole.sz / 2
 		rects = {
-			{ cx = x0 / 2, cz = FZ / 2, sx = x0, sz = FZ },
-			{ cx = (x1 + FX) / 2, cz = FZ / 2, sx = FX - x1, sz = FZ },
-			{ cx = (x0 + x1) / 2, cz = z0 / 2, sx = x1 - x0, sz = z0 },
-			{ cx = (x0 + x1) / 2, cz = (z1 + FZ) / 2, sx = x1 - x0, sz = FZ - z1 },
+			{ cx = (ax0 + x0) / 2, cz = (az0 + az1) / 2, sx = x0 - ax0, sz = az1 - az0 },
+			{ cx = (x1 + ax1) / 2, cz = (az0 + az1) / 2, sx = ax1 - x1, sz = az1 - az0 },
+			{ cx = (x0 + x1) / 2, cz = (az0 + z0) / 2, sx = x1 - x0, sz = z0 - az0 },
+			{ cx = (x0 + x1) / 2, cz = (z1 + az1) / 2, sx = x1 - x0, sz = az1 - z1 },
 		}
 	end
 
@@ -1120,7 +1139,8 @@ local function buildBuilding(sectionFolder, origin, sectionIndex, buildingIndex,
 		local levelHole = (level == 0) and nil or pendingHole
 		local result = buildLevel(folder, origin, level, entrySide, entryCell, style, rng, ctx)
 
-		buildSlab(result.folder, origin, level * LEVEL_HEIGHT, levelHole, style.skin, Enum.Material.Slate, "Floor")
+		local slabTop = level * LEVEL_HEIGHT + ((level == 0) and CFG.GROUND_FLOOR_LIFT or 0)
+		buildSlab(result.folder, origin, slabTop, levelHole, style.skin, Enum.Material.Slate, "Floor")
 
 		pendingHole = result.hole
 		entrySide = result.exitSide
