@@ -1,0 +1,40 @@
+{
+  "name": "maze-city",
+  "tree": {
+    "$className": "DataModel",
+    "ReplicatedStorage": {
+      "MazeConfig": { "$path": "src/shared/MazeConfig.lua" }
+    },
+    "ServerScriptService": {
+      "MazeGenerator": { "$path": "src/server/MazeGenerator.lua" },
+      "WorldBootstrap": { "$path": "src/server/WorldBootstrap.server.lua" },
+      "TowerTimerService": { "$path": "src/server/TowerTimerService.server.lua" },
+      "MovingWallService": { "$path": "src/server/MovingWallService.server.lua" },
+      "EnemyService": { "$path": "src/server/EnemyService.server.lua" },
+      "TraversalService": { "$path": "src/server/TraversalService.server.lua" }
+    },
+    "StarterPlayer": {
+      "$className": "StarterPlayer",
+      "StarterPlayerScripts": {
+        "$className": "StarterPlayerScripts",
+        "TimerGui": { "$path": "src/client/TimerGui.client.lua" }
+      }
+    },
+    "Workspace": {
+      "$className": "Workspace",
+      "$properties": {
+        "FilteringEnabled": true
+      }
+    },
+    "Lighting": {
+      "$className": "Lighting",
+      "$properties": {
+        "Technology": "ShadowMap",
+        "Ambient": [0.117, 0.117, 0.141],
+        "OutdoorAmbient": [0.196, 0.196, 0.235],
+        "ExposureCompensation": -0.3,
+        "Brightness": 2
+      }
+    }
+  }
+}
