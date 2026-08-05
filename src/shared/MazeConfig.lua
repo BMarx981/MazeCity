@@ -15,10 +15,16 @@ Config.World = {
 	Levels = 10,
 	PregenerateSections = 2,
 	LazyGeneration = true,
-	-- Per-lamp, and lamps overlap: spacing is 62.5 studs against a range of 65,
-	-- and shadows are off so a wall face collects light from lamps on both
-	-- sides of it. Whatever this is set to, a wall reads at several times it.
-	LampBrightness = 1.2,
+	-- Three lighting knobs, and they do different jobs. Brightness is overall
+	-- level. Range is contrast: a light falls off toward its range, so a short
+	-- range lights whatever is under the fixture far harder than the far wall,
+	-- which is what glares off a player. Raising Range past the 62.5-stud lamp
+	-- spacing flattens that ratio, so the fix for "player glares, walls dim" is
+	-- more range and less brightness, not less brightness alone. Ambient, in
+	-- default.project.json, is flat fill with no falloff at all; too much of it
+	-- and the maze looks unlit and papery.
+	LampBrightness = 0.6,
+	LampRange = 110,
 	MovingWallMinLevel = 4,
 	PhantomWallsPerLevel = 4,
 }

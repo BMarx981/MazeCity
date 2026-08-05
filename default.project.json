@@ -30,7 +30,7 @@
       "$className": "Lighting",
       "$properties": {
         "Technology": "ShadowMap",
-        "Ambient": [0.18, 0.18, 0.22],
+        "Ambient": [0.20, 0.20, 0.24],
         "OutdoorAmbient": [0.30, 0.30, 0.35],
         "ExposureCompensation": 0,
         "Brightness": 2

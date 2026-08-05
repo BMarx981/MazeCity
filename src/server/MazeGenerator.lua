@@ -31,8 +31,10 @@ local CFG = {
 	LAMP_BRIGHTNESS = 2.6,
 	-- Lamps sit on a LAMP_GRID square grid, so spacing is FX/(LAMP_GRID+1) = 62.5
 	-- studs. Range must exceed that or the coverage circles leave dark bands
-	-- between them. 2.6 * CELL = 65.
-	LAMP_RANGE_MULT = 2.6,
+	-- between them, and exceeding it by a lot is also how the near-to-far ratio
+	-- gets flattened: a light falls off toward its range, so a short range means
+	-- whatever is under the fixture is lit far harder than the far wall.
+	LAMP_RANGE = 110,
 
 	MOVING_WALL_MIN_LEVEL = 4,
 	MOVING_WALL_BASE = 2,
@@ -75,6 +77,7 @@ local function refreshFromConfig()
 	local w = Config.World or {}
 	CFG.LEVELS = w.Levels or CFG.LEVELS
 	CFG.LAMP_BRIGHTNESS = w.LampBrightness or CFG.LAMP_BRIGHTNESS
+	CFG.LAMP_RANGE = w.LampRange or CFG.LAMP_RANGE
 	CFG.MOVING_WALL_MIN_LEVEL = w.MovingWallMinLevel or CFG.MOVING_WALL_MIN_LEVEL
 	CFG.PHANTOM_PER_LEVEL = w.PhantomWallsPerLevel or CFG.PHANTOM_PER_LEVEL
 	ROOF_Y = CFG.LEVELS * LEVEL_HEIGHT
@@ -629,7 +632,7 @@ local function buildLamps(parent, origin, baseY)
 			-- black corridors, and so the per-floor light budget stays cheap.
 			local lamp = Instance.new("PointLight")
 			lamp.Brightness = CFG.LAMP_BRIGHTNESS
-			lamp.Range = CFG.CELL * CFG.LAMP_RANGE_MULT
+			lamp.Range = CFG.LAMP_RANGE
 			lamp.Color = Color3.fromRGB(255, 240, 208)
 			lamp.Shadows = false
 			lamp.Parent = base
