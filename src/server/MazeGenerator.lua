@@ -27,10 +27,21 @@ local CFG = {
 	DOOR_HEIGHT = 13,
 
 	PHANTOM_PER_LEVEL = 4,
-	LAMP_GRID = 3,
+	-- Most of the route a floor's phantoms are allowed to remove between them.
+	-- Uncapped greedy picking cut a typical floor from 60 cells to 12, which
+	-- deletes the maze and makes every par time in MazeConfig unreachable in the
+	-- wrong direction. Capped, a shortcut is worth hunting for and the floor is
+	-- still a floor.
+	PHANTOM_MAX_SHORTCUT = 0.35,
+	-- Lamps sit on a LAMP_GRID square grid, so spacing is FX/(LAMP_GRID+1): 62.5
+	-- studs at 3, 50 at 4. Range stopped being the binding constraint once lamp
+	-- shadows went on, because a shadowed lamp only lights corridors it can
+	-- actually see into; nine of them leave whole wings of a 10x10 floor dark no
+	-- matter how far they reach. Density is the fix, at 7 extra lamps per level,
+	-- 420 per section. Config.World.LampGrid drops it back to 3 without an edit.
+	LAMP_GRID = 4,
 	LAMP_BRIGHTNESS = 2.6,
-	-- Lamps sit on a LAMP_GRID square grid, so spacing is FX/(LAMP_GRID+1) = 62.5
-	-- studs. Range must exceed that or the coverage circles leave dark bands
+	-- Range must exceed lamp spacing or the coverage circles leave dark bands
 	-- between them, and exceeding it by a lot is also how the near-to-far ratio
 	-- gets flattened: a light falls off toward its range, so a short range means
 	-- whatever is under the fixture is lit far harder than the far wall.
@@ -48,8 +59,13 @@ local CFG = {
 	SECTION_GAP = 620,
 
 	STAIR_RISER = 0.75,
-	STAIR_WIDTH_FRAC = 0.84,
-	STAIR_RUN_CELLS = 1.9,
+	STAIR_WIDTH_FRAC = 0.48,
+	STAIR_RUN_CELLS = 1.8,
+	-- Clearance left under the slab where the floor above closes over the
+	-- stairs, and how far the opening runs past the treads to either side.
+	-- Together these size the hole; the cell around it stays floor.
+	STAIR_HEADROOM = 6,
+	STAIR_HOLE_MARGIN = 1,
 
 	-- Level 0's slab would otherwise top out at Y = 0, exactly level with the
 	-- street Ground part, so the lobby floor read as more asphalt. Lifting it
@@ -59,7 +75,14 @@ local CFG = {
 
 	SLIDE_WIDTH = 14,
 	SLIDE_SEGMENT_LEN = 40,
-	SLIDE_LANDING_Y = 22,
+	-- Where the slide ends, relative to the next section's origin. X was -140,
+	-- which put the 70-stud pad's far half over open void: the next section's
+	-- Ground starts at -120. Y was 22, so the pad also floated two storeys up and
+	-- needed a ramp down to the street. -80 lands the whole pad on the ground
+	-- slab, west of the first plot's facade, and 2 makes it a step rather than a
+	-- drop, which is why there is no LandingRamp any more.
+	SLIDE_LANDING_X = -80,
+	SLIDE_LANDING_Y = 2,
 }
 
 local LEVEL_HEIGHT = CFG.WALL_HEIGHT + CFG.SLAB
@@ -79,11 +102,13 @@ local function refreshFromConfig()
 	CFG.LEVELS = w.Levels or CFG.LEVELS
 	CFG.LAMP_BRIGHTNESS = w.LampBrightness or CFG.LAMP_BRIGHTNESS
 	CFG.LAMP_RANGE = w.LampRange or CFG.LAMP_RANGE
+	CFG.LAMP_GRID = w.LampGrid or CFG.LAMP_GRID
 	if w.LampShadows ~= nil then
 		CFG.LAMP_SHADOWS = w.LampShadows
 	end
 	CFG.MOVING_WALL_MIN_LEVEL = w.MovingWallMinLevel or CFG.MOVING_WALL_MIN_LEVEL
 	CFG.PHANTOM_PER_LEVEL = w.PhantomWallsPerLevel or CFG.PHANTOM_PER_LEVEL
+	CFG.PHANTOM_MAX_SHORTCUT = w.PhantomMaxShortcut or CFG.PHANTOM_MAX_SHORTCUT
 	ROOF_Y = CFG.LEVELS * LEVEL_HEIGHT
 end
 
@@ -304,6 +329,56 @@ local function sealCell(g, c)
 	end
 end
 
+local function inBounds(c)
+	return c.x >= 1 and c.x <= CFG.MAZE_W and c.z >= 1 and c.z <= CFG.MAZE_H
+end
+
+-- One wall is shared by two cells, and each names it by a different side. Naming
+-- it by the cell on the north or west of the pair gives both the same key, which
+-- is what lets a phantom opened from one side be seen as open from the other.
+local function edgeKey(x, z, side)
+	if side == "north" then
+		return "H_" .. x .. "_" .. z
+	elseif side == "south" then
+		return "H_" .. x .. "_" .. (z + 1)
+	elseif side == "west" then
+		return "V_" .. x .. "_" .. z
+	end
+	return "V_" .. (x + 1) .. "_" .. z
+end
+
+-- Breadth-first distance in cells from start, treating any wall listed in
+-- extraOpen as passable. Reserved cells are sealed on every side before this
+-- runs, so the flood never enters them except through the one opening
+-- buildLevel cuts into the stair cell, which is exactly the route being
+-- measured. Returns a sparse [x][z] table; nil means unreachable.
+local function cellDistances(g, start, extraOpen)
+	local dist = {}
+	for x = 1, CFG.MAZE_W do
+		dist[x] = {}
+	end
+	dist[start.x][start.z] = 0
+
+	local queue = { { x = start.x, z = start.z } }
+	local head = 1
+	while head <= #queue do
+		local cur = queue[head]
+		head = head + 1
+		for _, side in ipairs(SIDE_ORDER) do
+			local n = neighborCell(cur, side)
+			if inBounds(n) and dist[n.x][n.z] == nil then
+				local open = not g[cur.x][cur.z].walls[side] or extraOpen[edgeKey(cur.x, cur.z, side)]
+				if open then
+					dist[n.x][n.z] = dist[cur.x][cur.z] + 1
+					table.insert(queue, n)
+				end
+			end
+		end
+	end
+
+	return dist
+end
+
 -- ============================================================
 -- Slabs
 -- ============================================================
@@ -505,19 +580,95 @@ local function buildWalls(parent, origin, baseY, g, style, door)
 	return interior
 end
 
-local function tagPhantoms(interior, blocked, count, rng, ctx)
+-- Phantoms are chosen for how much they shorten the run, not uniformly. A wall
+-- picked at random usually joins two cells that are already near each other in
+-- the spanning tree, so walking through it saves nothing and the player learns
+-- to ignore phantoms entirely. Scoring each candidate by the cells it would
+-- save makes every one of them worth taking.
+--
+-- Walls touching a reserved cell are excluded outright. They score highest by
+-- construction, since they open straight into the stairwell, so a biased pick
+-- would put one on every floor and turn the last leg of every maze into a
+-- formality.
+local function tagPhantoms(interior, g, blocked, entryCell, stairCell, count, rng, ctx)
 	local pool = {}
 	for _, w in ipairs(interior) do
-		if not blocked[w.x .. "_" .. w.z] then
+		local n = neighborCell({ x = w.x, z = w.z }, w.side)
+		if not blocked[w.x .. "_" .. w.z] and not blocked[n.x .. "_" .. n.z] then
 			table.insert(pool, w)
 		end
 	end
 
 	local picked = {}
+	local opened = {}
+	local shortest
 	for _ = 1, math.min(count, #pool) do
-		local i = rng:NextInteger(1, #pool)
-		local w = pool[i]
-		table.remove(pool, i)
+		-- Rescored every pick, with the phantoms already placed counted as open,
+		-- so the second shortcut is measured against a maze that has the first
+		-- one in it. Otherwise the top few candidates are all variations on the
+		-- same bypass and only one of them does anything.
+		local fromEntry = cellDistances(g, entryCell, opened)
+		local toStair = cellDistances(g, stairCell, opened)
+		local base = fromEntry[stairCell.x][stairCell.z]
+		-- Measured once, off the untouched maze, so the cap is on what the
+		-- phantoms do between them rather than on each one separately.
+		shortest = shortest or math.ceil(base * (1 - CFG.PHANTOM_MAX_SHORTCUT))
+		local allowance = base - shortest
+
+		local ranked = {}
+		for i, w in ipairs(pool) do
+			local a = { x = w.x, z = w.z }
+			local b = neighborCell(a, w.side)
+			local gain = 0
+			if fromEntry[a.x][a.z] and toStair[b.x][b.z] then
+				gain = math.max(gain, base - (fromEntry[a.x][a.z] + 1 + toStair[b.x][b.z]))
+			end
+			if fromEntry[b.x][b.z] and toStair[a.x][a.z] then
+				gain = math.max(gain, base - (fromEntry[b.x][b.z] + 1 + toStair[a.x][a.z]))
+			end
+			table.insert(ranked, { index = i, gain = gain })
+		end
+		-- Ties broken on pool index so the order is a pure function of the seed;
+		-- table.sort is not stable and equal-gain candidates are common.
+		table.sort(ranked, function(p, q)
+			if p.gain ~= q.gain then
+				return p.gain > q.gain
+			end
+			return p.index < q.index
+		end)
+
+		-- ranked is sorted by gain, so the affordable candidates are a contiguous
+		-- run: skip the ones that would overspend the allowance, then take while
+		-- the gain is still positive.
+		local first = 1
+		while first <= #ranked and ranked[first].gain > allowance do
+			first = first + 1
+		end
+		local last = first - 1
+		while last < #ranked and ranked[last + 1].gain > 0 do
+			last = last + 1
+		end
+
+		-- Sample from the strongest affordable handful rather than always taking
+		-- the best, so two towers with the same layout still get different
+		-- shortcuts. Once the allowance is spent every affordable candidate has
+		-- gain 0, and one of those is picked at random: a phantom that only opens
+		-- a loop is still a readable wall and a way back. Falling back to the
+		-- whole pool here instead is what let the last phantom on a floor spend
+		-- an allowance that was already gone.
+		local chosen
+		if last >= first then
+			chosen = ranked[rng:NextInteger(first, math.min(last, first + math.max(2, count) - 1))]
+		elseif first <= #ranked then
+			chosen = ranked[rng:NextInteger(first, #ranked)]
+		else
+			chosen = ranked[rng:NextInteger(1, #ranked)]
+		end
+
+		local w = pool[chosen.index]
+		table.remove(pool, chosen.index)
+		opened[edgeKey(w.x, w.z, w.side)] = true
+
 		-- A phantom is a shortcut the player is meant to spot and choose. At the
 		-- old 0.12 it was 88% opaque and read as solid, so it got walked into
 		-- rather than through. Phantoms are never required: the carved maze is a
@@ -567,7 +718,7 @@ local function tagMovingWalls(interior, blocked, used, level, rng, ctx)
 	end
 end
 
-local function buildStairs(parent, origin, baseY, exitSide, cellB, cellE, style)
+local function buildStairs(parent, origin, baseY, exitSide, cellB, style)
 	local outward = outwardVector(exitSide)
 	local cB = cellCenter(cellB.x, cellB.z)
 
@@ -598,13 +749,24 @@ local function buildStairs(parent, origin, baseY, exitSide, cellB, cellE, style)
 		)
 	end
 
-	local cE = cellCenter(cellE.x, cellE.z)
-	local holeAlong = CFG.CELL * 0.9
+	-- The opening in the floor above is sized to the stairs, not to the cell it
+	-- sits in. It only has to start far enough back that a climbing player still
+	-- clears the slab by STAIR_HEADROOM, and be STAIR_HOLE_MARGIN wider than the
+	-- treads. Everything beyond that is floor the level above loses, and losing
+	-- it strands the player: a cell-sized hole left a 2 stud ledge down each
+	-- side and nothing but boundary wall ahead of the top step, so there was no
+	-- way to walk off the stairs and into the maze. Sized this way the top step
+	-- lands flush with the far edge of the hole and floor runs all the way
+	-- around it.
+	local holeAlong = math.min(runLen, runLen * (CFG.SLAB + CFG.STAIR_HEADROOM) / LEVEL_HEIGHT)
+	local holeWide = width + 2 * CFG.STAIR_HOLE_MARGIN
+	local holeCenter = runStart + outward * (runLen - holeAlong / 2)
+
 	return {
-		x = cE.X,
-		z = cE.Z,
-		sx = along and holeAlong or width,
-		sz = along and width or holeAlong,
+		x = holeCenter.X,
+		z = holeCenter.Z,
+		sx = along and holeAlong or holeWide,
+		sz = along and holeWide or holeAlong,
 	}
 end
 
@@ -746,10 +908,10 @@ local function buildLevel(buildingFolder, origin, level, entrySide, entryCell, s
 	}
 
 	local interior = buildWalls(folder, origin, baseY, g, style, door)
-	local used = tagPhantoms(interior, blocked, CFG.PHANTOM_PER_LEVEL, rng, ctx)
+	local used = tagPhantoms(interior, g, blocked, entryCell, cellB, CFG.PHANTOM_PER_LEVEL, rng, ctx)
 	tagMovingWalls(interior, blocked, used, level, rng, ctx)
 
-	local hole = buildStairs(folder, origin, baseY, exitSide, cellB, cellE, style)
+	local hole = buildStairs(folder, origin, baseY, exitSide, cellB, style)
 	buildLamps(folder, origin, baseY)
 
 	buildEnemySpawns(folder, origin, baseY, g, blocked, entryCell, style, rng, ctx)
@@ -1038,8 +1200,8 @@ local function buildRoof(parent, origin, hole, style, isExit, ctx)
 
 	-- Win state. The roof has no LevelTrigger of its own because there is no
 	-- level above it. This covers the whole deck rather than just the stair
-	-- hole: the top step stops 1.25 studs short of the hole's far edge, so
-	-- arrival is a small hop and a cell-sized trigger is missable. It reaches
+	-- hole: the deck is open, so a player can step off the top of the stairs in
+	-- any direction and a trigger sized to the opening is missable. It reaches
 	-- two studs below the deck as well, to catch a player still rising through
 	-- the shaft. inSameTower gates the award, so a roof nobody climbed to pays
 	-- nothing.
@@ -1203,20 +1365,6 @@ local function buildSlide(parent, startPos, endPos, section, building)
 	)
 	tagWithContext(pad, "SlideExit", section, building, CFG.LEVELS)
 
-	local rampLen = 60
-	local rampCF = CFrame.lookAt(
-		endPos + Vector3.new(0, -CFG.SLIDE_LANDING_Y / 2 - 2, 40),
-		endPos + Vector3.new(0, -CFG.SLIDE_LANDING_Y, 70)
-	)
-	makePart(
-		folder,
-		"LandingRamp",
-		rampCF,
-		Vector3.new(40, 2, rampLen),
-		Color3.fromRGB(120, 120, 128),
-		Enum.Material.Concrete
-	)
-
 	return folder
 end
 
@@ -1300,13 +1448,17 @@ function MazeGenerator.buildSection(root, sectionIndex, seed)
 	)
 	ground:SetAttribute("Section", sectionIndex)
 
-	local totalPlots = CFG.PLOT_COLS * CFG.PLOT_ROWS
+	-- Exit plots come from the last column only. A slide leaves the roof heading
+	-- east at Y ~185 and the facades it crosses stand 206 studs tall, so a slide
+	-- starting anywhere but the last column passes through one or two buildings
+	-- on its way out of the section.
 	local exitCount = (sectionIndex % 3 == 0) and 2 or 1
 	local exitPlots = {}
 	local pool = {}
-	for i = 1, totalPlots do
-		table.insert(pool, i)
+	for row = 0, CFG.PLOT_ROWS - 1 do
+		table.insert(pool, row * CFG.PLOT_COLS + CFG.PLOT_COLS)
 	end
+	exitCount = math.min(exitCount, #pool)
 	for _ = 1, exitCount do
 		local i = rng:NextInteger(1, #pool)
 		exitPlots[pool[i]] = true
@@ -1318,12 +1470,19 @@ function MazeGenerator.buildSection(root, sectionIndex, seed)
 			local index = row * CFG.PLOT_COLS + col + 1
 			local origin = sectionOrigin + Vector3.new(col * PLOT_SPAN_X, 0, row * PLOT_SPAN_Z)
 			local isExit = exitPlots[index] == true
-			local buildingFolder = buildBuilding(folder, origin, sectionIndex, index, isExit, seed + index * 104729)
+			-- Section index is in the building seed, not just the plot index, or
+			-- plot 4 of every section is the same building down to the wall. Both
+			-- multipliers are prime and far apart, so no (section, plot) pair
+			-- collides with another within any city anyone will build. Still a
+			-- pure function of (Seed, section, plot), which is what lets a lazily
+			-- built section come out identical to a pregenerated one.
+			local buildingSeed = seed + sectionIndex * 7919 + index * 104729
+			local buildingFolder = buildBuilding(folder, origin, sectionIndex, index, isExit, buildingSeed)
 
 			if isExit then
 				local start = origin + Vector3.new(FX + CFG.FACADE_OUTSET, ROOF_Y + 2, FZ / 2)
 				local nextOrigin = MazeGenerator.sectionOrigin(sectionIndex + 1)
-				local landing = nextOrigin + Vector3.new(-140, CFG.SLIDE_LANDING_Y, PLOT_SPAN_Z * 0.5)
+				local landing = nextOrigin + Vector3.new(CFG.SLIDE_LANDING_X, CFG.SLIDE_LANDING_Y, PLOT_SPAN_Z * 0.5)
 				local slide = buildSlide(folder, start, landing, sectionIndex, index)
 				slide.Name = "Slide_To_Section_" .. (sectionIndex + 1)
 				slide:SetAttribute("FromSection", sectionIndex)

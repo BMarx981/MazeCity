@@ -25,6 +25,12 @@ Config.World = {
 	-- and the maze looks unlit and papery.
 	LampBrightness = 0.6,
 	LampRange = 110,
+	-- Lamps per side of the per-floor grid, so 4 means 16 lamps at 50-stud
+	-- spacing. This is the one lighting knob that changes part count: 420 parts
+	-- per section between 3 and 4. Density matters more than range now that
+	-- shadows are on, because a lamp only lights what it can see and nine of
+	-- them cannot see into every wing of a 10x10 floor.
+	LampGrid = 4,
 	-- On. Off means light passes through walls and everything on the floor is
 	-- lit by every lamp at once, which clips pale surfaces like a player's skin
 	-- no matter what the exposure is set to. Costs shadow-casting lights per
@@ -32,6 +38,12 @@ Config.World = {
 	LampShadows = true,
 	MovingWallMinLevel = 4,
 	PhantomWallsPerLevel = 4,
+	-- Phantoms are placed where they measurably shorten the run to the stairs,
+	-- not at random, or the player learns they are never worth walking through.
+	-- This is the ceiling on how much of the route all of a floor's phantoms may
+	-- remove between them; raise it for a shortcut-hunting game, drop it toward
+	-- zero to go back to decorative phantoms.
+	PhantomMaxShortcut = 0.35,
 }
 
 -- ============================================================
