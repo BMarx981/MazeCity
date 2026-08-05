@@ -33,6 +33,7 @@ maze-city/
       MovingWallService.server.lua
       EnemyService.server.lua
       TraversalService.server.lua
+      PickupService.server.lua
     client/
       TimerGui.client.lua   -> StarterPlayer.StarterPlayerScripts (LocalScript)
 ```
@@ -79,6 +80,8 @@ These encode fixes for real bugs in an earlier version. Any change to `MazeGener
 
 6. **Geometry added after a baseline draws no random numbers.** `buildZipline` is a pure function of `entrySide`/`entryCell`, which the maze has already fixed, so adding it left every pre-existing part exactly where it was and the delta was countable: four instances per building. Drawing from the threaded `rng` instead would have shifted every subsequent draw and reshuffled the whole city for a feature that needs no randomness. Anything landing outside a deliberate world reshuffle has the same obligation: read what generation already decided, or draw from a derived sub-stream seeded off the per-building seed, but never from `rng` itself.
 
+7. **A collectible count is a function of the settings, not of the seed.** `buildCollectibles` places dead-end coins first, then main-path coins, then tops up from anywhere still open, so every level places exactly `DeadEndCoinsPerLevel + PathCoinsPerLevel` however few leaves its spanning tree happened to grow. Powerups land on fixed levels rather than on a per-level roll. Without both of those the part count stops being checkable: a section could differ from its neighbour for no reason anyone could confirm was the intended one. The sub-stream is `Random.new(buildingSeed + level * 31)`, which cannot collide because building seeds are at least 7919 apart.
+
 ## Runtime services
 
 | Service | Tags consumed | Notes |
@@ -88,7 +91,8 @@ These encode fixes for real bugs in an earlier version. Any change to `MazeGener
 | MovingWallService | `MovingWall` | Reads Mode (slide/rotate), Travel, TweenTime, DwellOpen/Closed, Phase attributes; all are required, and a wall missing any of them warns and stays static rather than falling back to a default. Checks player occupancy before closing; postpones instead of shoving. |
 | EnemyService | `EnemySpawn` | Type from marker attribute, overridable per section in MazeConfig. Rigs from `ServerStorage/Enemies/<TypeName>`, placeholder fallback. Enemies with no player inside `Config.EnemyActivationRange` stop pathfinding until one arrives. Respawn via `NeedsRespawn` attribute polling. |
 | TraversalService | `SlideEntrance`, `SlideBooster`, `SlideExit`, `BouncePad`, `ZipEntrance`, `ZipExit` | PlatformStand during rides, velocity boosters, safety release after SlideMaxSeconds. The zipline is the exception to "rides are physics": it anchors the rider and tweens them down the cable, because the descent is 195 studs and a rider who clips off a physics line lands wherever the simulation drops them. Every exit path, including the failures, goes through `endRide`, which is the only thing that unanchors. |
-| TimerGui (client) | `LevelTrigger`, `RoofTrigger`, `PhantomWall` | The one tag consumer that is not a server service. HUD and celebrations come off the `TimerUpdate` payload; the tags are read only for the compass arrow's target and the phantom pass-through sparkle. Hints, never authority: a section that has not replicated yet just means no arrow for a moment. |
+| PickupService | `Coin`, `Powerup` | Server owns the count in `leaderstats.Coins`; a taken pickup is hidden with `Transparency`/`CanTouch` and comes back on a timer, never destroyed. Powerup effects are restore closures, one active per player. Ghost sets `Unseen` on the character and Freeze sets `EnemyFreezeUntil` on `workspace`, both read by EnemyService. Fires the `PickupUpdate` RemoteEvent, which carries only events (the ding, which powerup started); the number itself rides replicated leaderstats, so a late client reads it correctly. |
+| TimerGui (client) | `LevelTrigger`, `RoofTrigger`, `PhantomWall`, `Coin` | The one tag consumer that is not a server service. HUD and celebrations come off the `TimerUpdate` payload; the tags are read only for the compass arrow's target, the phantom pass-through sparkle, and spinning the coins within `SpinRange`. Hints, never authority: a section that has not replicated yet just means no arrow for a moment. The coin spin is a local CFrame on an anchored part the server never moves again, so it stays on the machine that drew it. |
 
 Effects (sounds, particles, the compass billboard) attach at runtime to characters, enemy rigs in `workspace.LiveEnemies`, or the PlayerGui. Nothing is ever parented into `workspace.MazeCity`, which stays exactly as the generator built it.
 

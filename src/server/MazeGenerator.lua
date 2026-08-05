@@ -53,6 +53,22 @@ local CFG = {
 
 	ENEMY_SPAWNS_PER_LEVEL = 3,
 
+	COIN_DEAD_END_PER_LEVEL = 10,
+	COIN_PATH_PER_LEVEL = 3,
+	POWERUP_EVERY_N_LEVELS = 3,
+	ROOF_ARC_COINS = 6,
+	COIN_SIZE = 3.4,
+	COIN_THICKNESS = 0.45,
+	COIN_HEIGHT = 3.6, -- above the slab, so a coin sits at chest height on a walk past
+	POWERUP_SIZE = 4.4,
+	POWERUP_HEIGHT = 4.2,
+	-- The arc over a bounce pad. A pad at BouncePadPower 140 throws a character
+	-- about 50 studs up, so the top coin has to sit inside that and the radius
+	-- has to stay inside the width of a character's reach off a vertical launch.
+	ARC_RADIUS = 3.2,
+	ARC_BASE_HEIGHT = 11,
+	ARC_TOP_HEIGHT = 40,
+
 	PLOT_COLS = 3,
 	PLOT_ROWS = 2,
 	STREET = 90,
@@ -110,6 +126,15 @@ local SECTION_SPAN = CFG.PLOT_COLS * PLOT_SPAN_X + CFG.SECTION_GAP
 local SLAB_APRON = CFG.FACADE_OUTSET + CFG.FACADE_THICKNESS / 2
 local ROOF_Y = CFG.LEVELS * LEVEL_HEIGHT
 
+-- Zero is a meaningful setting for every collectible count (turn that kind off),
+-- and `or` cannot express it, so the new knobs go through this instead.
+local function setting(value, fallback)
+	if value == nil then
+		return fallback
+	end
+	return value
+end
+
 local function refreshFromConfig()
 	local w = Config.World or {}
 	CFG.LEVELS = w.Levels or CFG.LEVELS
@@ -122,6 +147,10 @@ local function refreshFromConfig()
 	CFG.MOVING_WALL_MIN_LEVEL = w.MovingWallMinLevel or CFG.MOVING_WALL_MIN_LEVEL
 	CFG.PHANTOM_PER_LEVEL = w.PhantomWallsPerLevel or CFG.PHANTOM_PER_LEVEL
 	CFG.PHANTOM_MAX_SHORTCUT = w.PhantomMaxShortcut or CFG.PHANTOM_MAX_SHORTCUT
+	CFG.COIN_DEAD_END_PER_LEVEL = setting(w.DeadEndCoinsPerLevel, CFG.COIN_DEAD_END_PER_LEVEL)
+	CFG.COIN_PATH_PER_LEVEL = setting(w.PathCoinsPerLevel, CFG.COIN_PATH_PER_LEVEL)
+	CFG.POWERUP_EVERY_N_LEVELS = setting(w.PowerupEveryNLevels, CFG.POWERUP_EVERY_N_LEVELS)
+	CFG.ROOF_ARC_COINS = setting(w.RoofArcCoins, CFG.ROOF_ARC_COINS)
 	ROOF_Y = CFG.LEVELS * LEVEL_HEIGHT
 end
 
@@ -825,6 +854,214 @@ local function buildLamps(parent, origin, baseY)
 	end
 end
 
+-- ============================================================
+-- Collectibles
+-- ============================================================
+-- Every draw in here comes from a sub-stream derived from the building seed,
+-- never from the threaded rng, per CLAUDE.md invariant 6. The maze is already
+-- carved by the time this runs, so coins have no business moving a wall: taking
+-- one number off `rng` would shift every draw after it and reshuffle the whole
+-- city for a feature that only ever reads what generation already decided.
+--
+-- The count is a pure function of the settings rather than of the seed, which is
+-- what keeps a part count usable as a determinism check: a fixed number of coins
+-- per level, and a powerup on fixed levels. Only where they land is random.
+
+local COIN_COLOR = Color3.fromRGB(255, 202, 66)
+
+-- One shape for every coin in the game: a Neon cylinder lying on its side, so
+-- the disc faces along X and a spin about Y sweeps the face past the player.
+-- TimerGui does that spin locally, on the coins near enough to be seen. Nothing
+-- on the server ever touches a coin's CFrame.
+local function makeCoin(parent, position, ctx, level)
+	local coin = makePart(
+		parent,
+		"Coin",
+		CFrame.new(position),
+		Vector3.new(CFG.COIN_THICKNESS, CFG.COIN_SIZE, CFG.COIN_SIZE),
+		COIN_COLOR,
+		Enum.Material.Neon
+	)
+	coin.Shape = Enum.PartType.Cylinder
+	coin.CanCollide = false
+	coin.CastShadow = false
+	tagWithContext(coin, "Coin", ctx.section, ctx.building, level)
+	return coin
+end
+
+-- A dead end is a leaf of the spanning tree: three walls out of four. Cells next
+-- to the sealed stairwell count too, and correctly so, since the seal is what
+-- made them dead ends.
+local function isDeadEnd(cell)
+	local walls = 0
+	for _, side in ipairs(SIDE_ORDER) do
+		if cell.walls[side] then
+			walls = walls + 1
+		end
+	end
+	return walls >= 3
+end
+
+-- The carved maze is a spanning tree, so there is exactly one route from the
+-- entry cell to the stairs and walking distances down from the stair cell finds
+-- it. Phantoms never enter this: they are tagged onto existing walls and leave
+-- `g` untouched, so the route measured here is the one a player who ignores
+-- shortcuts actually walks.
+local function mainPath(g, entryCell, stairCell)
+	local dist = cellDistances(g, entryCell, {})
+	local path = {}
+	if dist[stairCell.x][stairCell.z] == nil then
+		return path
+	end
+
+	local cur = stairCell
+	while not (cur.x == entryCell.x and cur.z == entryCell.z) do
+		table.insert(path, cur)
+		local stepped = false
+		for _, side in ipairs(SIDE_ORDER) do
+			local n = neighborCell(cur, side)
+			if inBounds(n) and not g[cur.x][cur.z].walls[side] and dist[n.x][n.z] == dist[cur.x][cur.z] - 1 then
+				cur = n
+				stepped = true
+				break
+			end
+		end
+		if not stepped then
+			break
+		end
+	end
+	return path
+end
+
+local function buildCollectibles(parent, origin, baseY, g, blocked, entryCell, stairCell, rng, ctx)
+	local folder = Instance.new("Folder")
+	folder.Name = "Collectibles"
+	folder.Parent = parent
+
+	local claimed = {}
+	local function eligible(c)
+		local key = c.x .. "_" .. c.z
+		return not claimed[key]
+			and not g[c.x][c.z].reserved
+			and not blocked[key]
+			and not (c.x == entryCell.x and c.z == entryCell.z)
+	end
+
+	local deadEnds = {}
+	for x = 1, CFG.MAZE_W do
+		for z = 1, CFG.MAZE_H do
+			local c = { x = x, z = z }
+			if eligible(c) and isDeadEnd(g[x][z]) then
+				table.insert(deadEnds, c)
+			end
+		end
+	end
+
+	local onPath = {}
+	for _, c in ipairs(mainPath(g, entryCell, stairCell)) do
+		if eligible(c) then
+			table.insert(onPath, c)
+		end
+	end
+
+	local function anywhere()
+		local pool = {}
+		for x = 1, CFG.MAZE_W do
+			for z = 1, CFG.MAZE_H do
+				local c = { x = x, z = z }
+				if eligible(c) then
+					table.insert(pool, c)
+				end
+			end
+		end
+		return pool
+	end
+
+	local function draw(pool)
+		if #pool == 0 then
+			return nil
+		end
+		local i = rng:NextInteger(1, #pool)
+		local c = pool[i]
+		table.remove(pool, i)
+		claimed[c.x .. "_" .. c.z] = true
+		return c
+	end
+
+	local function coinAt(c)
+		local center = cellCenter(c.x, c.z)
+		makeCoin(folder, origin + Vector3.new(center.X, baseY + CFG.COIN_HEIGHT, center.Z), ctx, ctx.level)
+	end
+
+	-- Dead ends first, then the route, then anywhere still open. The top-up is
+	-- what makes the total per level exact instead of a target: a floor whose
+	-- spanning tree happens to have few leaves, or whose route to the stairs is
+	-- short, would otherwise quietly place fewer coins and make the part count a
+	-- function of the seed rather than of the settings. Every floor pays the
+	-- same; only where it pays is drawn.
+	local placed = 0
+	local target = CFG.COIN_DEAD_END_PER_LEVEL + CFG.COIN_PATH_PER_LEVEL
+
+	for _ = 1, math.min(CFG.COIN_DEAD_END_PER_LEVEL, #deadEnds) do
+		coinAt(draw(deadEnds))
+		placed = placed + 1
+	end
+	for _ = 1, math.min(CFG.COIN_PATH_PER_LEVEL, #onPath) do
+		coinAt(draw(onPath))
+		placed = placed + 1
+	end
+	if placed < target then
+		local rest = anywhere()
+		for _ = 1, math.min(target - placed, #rest) do
+			coinAt(draw(rest))
+		end
+	end
+
+	-- A powerup goes in whatever dead end is left over, so the loudest thing on
+	-- the floor is also the thing furthest from the route. Only if the level has
+	-- run out of them does it fall back to open maze.
+	if CFG.POWERUP_EVERY_N_LEVELS > 0 and (ctx.level + 1) % CFG.POWERUP_EVERY_N_LEVELS == 0 then
+		local order = Config.Collectibles.PowerupOrder
+		local kind = order[rng:NextInteger(1, #order)]
+
+		local pool = deadEnds
+		if #pool == 0 then
+			pool = anywhere()
+		end
+
+		local c = draw(pool)
+		if c then
+			local center = cellCenter(c.x, c.z)
+			local profile = Config.getPowerupKind(kind)
+			local orb = makePart(
+				folder,
+				"Powerup",
+				CFrame.new(origin + Vector3.new(center.X, baseY + CFG.POWERUP_HEIGHT, center.Z)),
+				Vector3.new(CFG.POWERUP_SIZE, CFG.POWERUP_SIZE, CFG.POWERUP_SIZE),
+				profile.color,
+				Enum.Material.Neon
+			)
+			orb.Shape = Enum.PartType.Ball
+			orb.CanCollide = false
+			orb.CastShadow = false
+			orb:SetAttribute("Kind", kind)
+			tagWithContext(orb, "Powerup", ctx.section, ctx.building, ctx.level)
+
+			-- Three of these per tower against nine hundred and sixty lamps, so
+			-- the light is affordable and it is the only thing that makes an orb
+			-- findable from the far end of a corridor.
+			local glow = Instance.new("PointLight")
+			glow.Brightness = 3
+			glow.Range = 26
+			glow.Color = profile.color
+			glow.Shadows = false
+			glow.Parent = orb
+		end
+	end
+
+	return folder
+end
+
 local function buildEnemySpawns(parent, origin, baseY, g, blocked, entryCell, style, rng, ctx)
 	local folder = Instance.new("Folder")
 	folder.Name = "EnemySpawns"
@@ -928,6 +1165,11 @@ local function buildLevel(buildingFolder, origin, level, entrySide, entryCell, s
 	buildLamps(folder, origin, baseY)
 
 	buildEnemySpawns(folder, origin, baseY, g, blocked, entryCell, style, rng, ctx)
+	-- A sub-stream off the building seed rather than the threaded rng. The
+	-- closest two building seeds get is 7919 apart and level * 31 never reaches
+	-- 255 levels' worth of that, so no two levels in the city share a stream.
+	local coinRng = Random.new(ctx.seed + level * 31)
+	buildCollectibles(folder, origin, baseY, g, blocked, entryCell, cellB, coinRng, ctx)
 	buildLevelTrigger(folder, origin, baseY, entryCell, ctx)
 
 	return {
@@ -1235,17 +1477,43 @@ local function buildRoof(parent, origin, hole, style, isExit, ctx)
 	deck.Name = "Deck"
 	deck.Parent = folder
 
+	-- The pads launched the player at nothing. Each one now has a helix of coins
+	-- standing in its arc, tight enough around the launch axis that going up
+	-- through the middle collects the lot. Pure geometry off the pad position,
+	-- so it draws no random numbers and adds a fixed, countable number of parts.
+	local arcs = Instance.new("Folder")
+	arcs.Name = "CoinArcs"
+	arcs.Parent = deck
+
 	for i = 1, 3 do
+		local padCenter = Vector3.new(FX * (0.25 * i), ROOF_Y + 0.6, FZ * 0.3)
 		local pad = makePart(
 			deck,
 			"BouncePad",
-			CFrame.new(origin + Vector3.new(FX * (0.25 * i), ROOF_Y + 0.6, FZ * 0.3)),
+			CFrame.new(origin + padCenter),
 			Vector3.new(12, 1.2, 12),
 			Color3.fromRGB(255, 120, 200),
 			Enum.Material.Neon
 		)
 		pad:SetAttribute("Power", Config.BouncePadPower)
 		tagWithContext(pad, "BouncePad", sectionIndex, ctx.building, CFG.LEVELS)
+
+		for k = 0, CFG.ROOF_ARC_COINS - 1 do
+			local t = (CFG.ROOF_ARC_COINS > 1) and (k / (CFG.ROOF_ARC_COINS - 1)) or 0
+			local angle = t * math.pi * 2
+			local y = CFG.ARC_BASE_HEIGHT + (CFG.ARC_TOP_HEIGHT - CFG.ARC_BASE_HEIGHT) * t
+			makeCoin(
+				arcs,
+				origin
+					+ Vector3.new(
+						padCenter.X + math.cos(angle) * CFG.ARC_RADIUS,
+						ROOF_Y + y,
+						padCenter.Z + math.sin(angle) * CFG.ARC_RADIUS
+					),
+				ctx,
+				CFG.LEVELS
+			)
+		end
 	end
 
 	for i = 1, 4 do
@@ -1494,6 +1762,9 @@ local function buildBuilding(sectionFolder, origin, sectionIndex, buildingIndex,
 		building = buildingIndex,
 		towerName = towerName,
 		level = 0,
+		-- Carried so anything added after the maze baseline can derive its own
+		-- random stream instead of drawing from `rng` and moving the city.
+		seed = seed,
 	}
 
 	local entrySide = SIDE_ORDER[rng:NextInteger(1, 4)]

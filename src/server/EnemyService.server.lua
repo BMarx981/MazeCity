@@ -26,6 +26,10 @@ local REPLAN_DRIFT = 8
 -- what keeps pathfinding cost proportional to where players actually are.
 local DORMANT_POLL = 2
 
+-- Shorter than DORMANT_POLL: a frozen enemy is one a player is standing next to
+-- and watching, so the thaw has to look like it happened when it happened.
+local FREEZE_POLL = 0.3
+
 -- Placeholder rig geometry, in studs. The head is a 1.4 ball, so the eyes sit
 -- just proud of its front face; anything smaller stops reading as a face at
 -- corridor distance.
@@ -110,6 +114,22 @@ local function templateFor(enemyType)
 	return makePlaceholder(enemyType)
 end
 
+-- The Ghost powerup. PickupService sets Unseen on the character and clears it
+-- when the effect ends, so "invisible to enemies" costs one attribute read here
+-- and nothing anywhere else. It is deliberately not walk-through-walls: in a
+-- game with no combat, not being chased is the whole of what a ghost needs to
+-- be, and it cannot strand a player outside the maze.
+local function isVisible(char, hum)
+	return hum ~= nil and hum.Health > 0 and not char:GetAttribute("Unseen")
+end
+
+-- The Freeze powerup, stored as a deadline rather than a flag so two players
+-- freezing overlapping crowds extend the thaw instead of ending it early.
+local function frozen()
+	local until_ = workspace:GetAttribute("EnemyFreezeUntil")
+	return until_ ~= nil and os.clock() < until_
+end
+
 -- Deliberately ignores the floor band that nearestTarget applies: this only
 -- decides whether the enemy is worth running at all, and a player one floor
 -- below is about to arrive.
@@ -131,7 +151,7 @@ local function nearestTarget(root, leash)
 		local char = player.Character
 		local hrp = char and char:FindFirstChild("HumanoidRootPart")
 		local hum = char and char:FindFirstChildOfClass("Humanoid")
-		if hrp and hum and hum.Health > 0 then
+		if hrp and isVisible(char, hum) then
 			-- only chase within the same floor band
 			if math.abs(hrp.Position.Y - root.Position.Y) < 16 then
 				local d = (hrp.Position - root.Position).Magnitude
@@ -195,6 +215,12 @@ local function driveEnemy(model, humanoid, root, profile, marker)
 		if windingUp or os.clock() - lastAttack < profile.attackCooldown then
 			return
 		end
+		-- Both powerups have to hold here as well as in the chase loop, or an
+		-- enemy the player walked into while it was frozen, or while they were
+		-- unseen, still hits them and the powerup reads as broken.
+		if frozen() or not isVisible(char, targetHum) then
+			return
+		end
 		windingUp = true
 		lastAttack = os.clock()
 		flashRig(model, Config.Juice.EnemyTellSeconds)
@@ -219,7 +245,13 @@ local function driveEnemy(model, humanoid, root, profile, marker)
 		})
 
 		while model.Parent and humanoid.Health > 0 do
-			if not anyPlayerWithin(root, Config.EnemyActivationRange) then
+			if frozen() then
+				-- Stopped where it stands, and silent, because a growl coming
+				-- from something that cannot move is the wrong read entirely.
+				humanoid:MoveTo(root.Position)
+				growl.Playing = false
+				task.wait(FREEZE_POLL)
+			elseif not anyPlayerWithin(root, Config.EnemyActivationRange) then
 				-- A city holds thousands of these and almost all of them are out
 				-- of earshot. The growl is bound to the same activation gate as
 				-- the pathfinding rather than left looping everywhere.

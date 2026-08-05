@@ -44,6 +44,24 @@ Config.World = {
 	-- remove between them; raise it for a shortcut-hunting game, drop it toward
 	-- zero to go back to decorative phantoms.
 	PhantomMaxShortcut = 0.35,
+	-- Collectibles. A floor is 100 cells and exactly one of them mattered, so
+	-- every dead end was pure punishment. Coins are what turn a wrong turn into a
+	-- find: the dead-end ones pay for exploring, and the few on the route the
+	-- player is already walking are the tutorial, because a mechanic nobody trips
+	-- over in the first thirty seconds is a mechanic nobody learns. Coverage is
+	-- deliberately partial rather than one coin per dead end: a Neon coin is
+	-- visible from the corridor, so a passage either shows gold or does not, and
+	-- the choice to walk down it is an actual choice.
+	DeadEndCoinsPerLevel = 10,
+	PathCoinsPerLevel = 3,
+	-- One powerup every N levels rather than a per-level chance, so the part
+	-- count stays a pure function of these settings instead of the seed and a
+	-- double-build still verifies against a fixed number. Which kind, and which
+	-- cell, are drawn; whether the level has one at all is not.
+	PowerupEveryNLevels = 3,
+	-- Coins in the arc above each roof bounce pad, which until now launched the
+	-- player at nothing. Placed by pure geometry, drawing no random numbers.
+	RoofArcCoins = 6,
 }
 
 -- ============================================================
@@ -84,6 +102,65 @@ function Config.scoreFloor(level, elapsed)
 	local saved = math.max(0, Config.getParTime(level) - elapsed)
 	local raw = s.FloorClearBase + saved * s.SpeedBonusPerSecond
 	return math.floor(raw * (1 + level * s.LevelMultiplier))
+end
+
+-- ============================================================
+-- Collectibles
+-- ============================================================
+-- Coins are a second currency, not score: score measures how fast a floor was
+-- cleared and coins measure how much of it was looked at, so a player who is
+-- slow because they explored is not punished twice. Milestone P is what gives
+-- them somewhere to go.
+--
+-- A coin taken is gone for everyone and comes back on a timer, so a floor
+-- restarted after a death is worth walking again. PowerupKinds is read by
+-- PickupService for the effect and by MazeGenerator for the marker colour;
+-- PowerupOrder is what the generator draws from, because pairs() order over a
+-- table is not deterministic and every draw in generation has to be.
+
+Config.Collectibles = {
+	CoinValue = 1,
+	CoinRespawnSeconds = 25,
+	PowerupRespawnSeconds = 75,
+	-- Coins spin on the client only, and only within this range: it is a visual
+	-- on an anchored part, so it never leaves the machine that drew it and the
+	-- server's idea of where the coin is never moves.
+	SpinDegreesPerSecond = 150,
+	SpinRange = 80,
+	SpinRefreshSeconds = 0.5,
+	PowerupOrder = { "Speed", "Jump", "Ghost", "Freeze" },
+	PowerupKinds = {
+		Speed = {
+			label = "Fast feet",
+			duration = 12,
+			walkSpeedMultiplier = 1.45,
+			color = Color3.fromRGB(120, 235, 255),
+		},
+		Jump = {
+			label = "Big jump",
+			duration = 12,
+			jumpMultiplier = 1.4,
+			color = Color3.fromRGB(150, 255, 150),
+		},
+		-- Not invisibility to other players: enemies stop seeing you, which is
+		-- the only thing that matters in a game with no combat, and it cannot
+		-- strand anyone the way a walk-through-walls ghost could.
+		Ghost = {
+			label = "Unseen",
+			duration = 10,
+			color = Color3.fromRGB(220, 200, 255),
+			highlightColor = Color3.fromRGB(200, 180, 255),
+		},
+		Freeze = {
+			label = "Freeze!",
+			duration = 8,
+			color = Color3.fromRGB(255, 255, 255),
+		},
+	},
+}
+
+function Config.getPowerupKind(name)
+	return Config.Collectibles.PowerupKinds[name] or Config.Collectibles.PowerupKinds.Speed
 end
 
 -- ============================================================
@@ -196,10 +273,13 @@ Config.Sounds = {
 	BouncePad = "rbxasset://sounds/action_jump.mp3", -- boing on launching off a roof pad
 	EnemyGrowl = "rbxasset://sounds/bass.mp3", -- looping low drone, louder and higher the closer the enemy is
 	PhantomPass = "rbxasset://sounds/impact_water.mp3", -- soft bloop on phasing through a phantom wall
+	CoinPickup = "rbxasset://sounds/electronicpingshort.wav", -- the same ping, pitched well up so a coin never reads as a floor clear
+	PowerupPickup = "rbxasset://sounds/electronicpingshort.wav",
 	-- Topping out plays the ping once per entry: an ascending arpeggio built out
 	-- of the one chime, because nothing shipping in the client is a fanfare.
 	-- Each entry is { seconds after the banner, PlaybackSpeed }.
 	TowerClearArpeggio = { { 0, 1 }, { 0.12, 1.26 }, { 0.24, 1.5 }, { 0.42, 2 } },
+	PowerupArpeggio = { { 0, 1.1 }, { 0.08, 1.5 }, { 0.16, 1.9 } },
 }
 
 -- ============================================================
@@ -242,6 +322,18 @@ Config.Juice = {
 	PhantomSparkleTexture = "rbxasset://textures/particles/sparkles_main.dds",
 	PhantomSparkleColor = Color3.fromRGB(150, 235, 255),
 	PhantomSparkleCooldown = 1.5, -- per wall, so brushing along one is not a light show
+	CoinVolume = 0.4,
+	-- Coins picked up in quick succession ring a step higher each time and reset
+	-- once the streak lapses. It is the cheapest way to make a room full of coins
+	-- feel like a run rather than a list, and it costs one number of state.
+	CoinPitchBase = 1.5,
+	CoinPitchStep = 0.06,
+	CoinPitchMax = 2.3,
+	CoinStreakSeconds = 1.5,
+	CoinSparkleParticles = 16,
+	CoinSparkleColor = Color3.fromRGB(255, 214, 110),
+	PowerupVolume = 0.6,
+	PowerupBannerSeconds = 2,
 }
 
 -- ============================================================

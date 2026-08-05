@@ -106,6 +106,46 @@ scoreLabel.TextXAlignment = Enum.TextXAlignment.Right
 label(scoreChip, UDim2.new(0, 60, 1, 0), UDim2.new(0, 10, 0, 0), Enum.Font.Gotham, 12, Color3.fromRGB(150, 160, 175)).Text =
 	"SCORE"
 
+-- Coin chip, under the score. A gold disc rather than the word "COINS": the
+-- reason coins exist is that a floor should reward looking around, and the
+-- player being designed for is still learning to read.
+local coinChip = Instance.new("Frame")
+coinChip.Size = UDim2.new(0, 132, 0, 34)
+coinChip.Position = UDim2.new(1, -148, 0, 56)
+coinChip.BackgroundColor3 = Color3.fromRGB(16, 16, 20)
+coinChip.BackgroundTransparency = 0.25
+coinChip.BorderSizePixel = 0
+coinChip.Parent = gui
+rounded(coinChip, 8)
+
+local coinIcon = Instance.new("Frame")
+coinIcon.Size = UDim2.fromOffset(16, 16)
+coinIcon.Position = UDim2.new(0, 12, 0.5, -8)
+coinIcon.BackgroundColor3 = GOLD
+coinIcon.BorderSizePixel = 0
+coinIcon.Parent = coinChip
+rounded(coinIcon, 8)
+
+local coinLabel = label(coinChip, UDim2.new(1, -12, 1, 0), UDim2.new(0, 6, 0, 0), Enum.Font.GothamBold, 18, WHITE)
+coinLabel.Text = "0"
+coinLabel.TextXAlignment = Enum.TextXAlignment.Right
+
+-- Powerup chip, hidden until one is picked up. Nothing else on screen says how
+-- long an effect has left, and an effect that ends without warning reads as one
+-- that broke.
+local powerChip = Instance.new("Frame")
+powerChip.Size = UDim2.new(0, 178, 0, 34)
+powerChip.Position = UDim2.new(1, -194, 0, 96)
+powerChip.BackgroundColor3 = Color3.fromRGB(16, 16, 20)
+powerChip.BackgroundTransparency = 0.25
+powerChip.BorderSizePixel = 0
+powerChip.Visible = false
+powerChip.Parent = gui
+rounded(powerChip, 8)
+
+local powerLabel = label(powerChip, UDim2.new(1, -20, 1, 0), UDim2.new(0, 10, 0, 0), Enum.Font.GothamBold, 16, WHITE)
+powerLabel.TextXAlignment = Enum.TextXAlignment.Left
+
 -- Celebration banner
 local banner = Instance.new("Frame")
 banner.Size = UDim2.new(0, 460, 0, 108)
@@ -354,33 +394,41 @@ end)
 
 local sparkleCooldown = setmetatable({}, { __mode = "k" })
 
-local function sparkle()
+-- Shared by the phantom sparkle and the coin ding. It emits from the character
+-- rather than from the thing that was touched, because the thing that was
+-- touched lives in generated geometry and nothing is allowed to parent effects
+-- into that.
+local function emitBurst(color, count, seconds)
 	local char = player.Character
 	local root = char and char:FindFirstChild("HumanoidRootPart")
 	if not root then
 		return
 	end
 
-	local juice = Config.Juice
 	local attachment = Instance.new("Attachment")
 	attachment.Parent = root
 
 	local emitter = Instance.new("ParticleEmitter")
-	emitter.Texture = juice.PhantomSparkleTexture
-	emitter.Color = ColorSequence.new(juice.PhantomSparkleColor)
+	emitter.Texture = Config.Juice.PhantomSparkleTexture
+	emitter.Color = ColorSequence.new(color)
 	emitter.Transparency = NumberSequence.new({
 		NumberSequenceKeypoint.new(0, 0.1),
 		NumberSequenceKeypoint.new(1, 1),
 	})
 	emitter.Size = NumberSequence.new(0.9, 0.1)
-	emitter.Lifetime = NumberRange.new(juice.PhantomSparkleSeconds * 0.5, juice.PhantomSparkleSeconds)
+	emitter.Lifetime = NumberRange.new(seconds * 0.5, seconds)
 	emitter.Speed = NumberRange.new(3, 9)
 	emitter.SpreadAngle = Vector2.new(180, 180)
 	emitter.Rate = 0
 	emitter.Parent = attachment
-	emitter:Emit(juice.PhantomSparkleParticles)
+	emitter:Emit(count)
 
-	Debris:AddItem(attachment, juice.PhantomSparkleSeconds + 1)
+	Debris:AddItem(attachment, seconds + 1)
+end
+
+local function sparkle()
+	local juice = Config.Juice
+	emitBurst(juice.PhantomSparkleColor, juice.PhantomSparkleParticles, juice.PhantomSparkleSeconds)
 	playSound(Config.Sounds.PhantomPass, juice.PhantomSparkleVolume)
 end
 
@@ -406,6 +454,140 @@ for _, part in ipairs(CollectionService:GetTagged("PhantomWall")) do
 	bindPhantom(part)
 end
 CollectionService:GetInstanceAddedSignal("PhantomWall"):Connect(bindPhantom)
+
+-- ============================================================
+-- Coins and powerups
+-- ============================================================
+-- The count itself is the replicated leaderstats value, so a client that
+-- connects late reads the right number rather than starting at zero. The
+-- PickupUpdate remote carries only the things that are events: the ding, the
+-- sparkle, and which powerup just started.
+
+local pickupRemote = ReplicatedStorage:WaitForChild("PickupUpdate")
+
+task.spawn(function()
+	local stats = player:WaitForChild("leaderstats", 20)
+	local coins = stats and stats:WaitForChild("Coins", 20)
+	if not coins then
+		return
+	end
+	coinLabel.Text = string.format("%d", coins.Value)
+	coins.Changed:Connect(function(value)
+		coinLabel.Text = string.format("%d", value)
+	end)
+end)
+
+-- Coins spin on the client and only near the player: it is a visual on an
+-- anchored part that the server never moves again after generation, so the
+-- rotation stays on this machine and the coin's hitbox never leaves where the
+-- generator put it. The whole city's worth of coins is far too many to touch
+-- every frame, hence the nearby list, refreshed on a slow timer.
+local nearbyCoins = {}
+
+task.spawn(function()
+	local collectibles = Config.Collectibles
+	while true do
+		local char = player.Character
+		local root = char and char:FindFirstChild("HumanoidRootPart")
+		local list = {}
+		if root and collectibles.SpinDegreesPerSecond > 0 then
+			for _, coin in ipairs(CollectionService:GetTagged("Coin")) do
+				if coin.Transparency < 1 and (coin.Position - root.Position).Magnitude < collectibles.SpinRange then
+					table.insert(list, coin)
+				end
+			end
+		end
+		nearbyCoins = list
+		task.wait(collectibles.SpinRefreshSeconds)
+	end
+end)
+
+RunService.RenderStepped:Connect(function(dt)
+	local step = math.rad(Config.Collectibles.SpinDegreesPerSecond * dt)
+	for _, coin in ipairs(nearbyCoins) do
+		if coin.Parent then
+			coin.CFrame = coin.CFrame * CFrame.Angles(0, step, 0)
+		end
+	end
+end)
+
+-- Coins taken in quick succession ring a step higher each time, which is most
+-- of what makes a room full of them feel like a run rather than a list. The
+-- streak lapses on its own, so the pitch never creeps up over a whole floor.
+local streakPitch = Config.Juice.CoinPitchBase
+local streakAt = 0
+
+local function coinPickup()
+	local juice = Config.Juice
+	local now = os.clock()
+	if now - streakAt > juice.CoinStreakSeconds then
+		streakPitch = juice.CoinPitchBase
+	else
+		streakPitch = math.min(juice.CoinPitchMax, streakPitch + juice.CoinPitchStep)
+	end
+	streakAt = now
+
+	playSound(Config.Sounds.CoinPickup, juice.CoinVolume, streakPitch)
+	emitBurst(juice.CoinSparkleColor, juice.CoinSparkleParticles, juice.PhantomSparkleSeconds)
+	coinIcon.Size = UDim2.fromOffset(22, 22)
+	coinIcon.Position = UDim2.new(0, 9, 0.5, -11)
+	tween(coinIcon, 0.22, { Size = UDim2.fromOffset(16, 16), Position = UDim2.new(0, 12, 0.5, -8) })
+end
+
+local powerUntil = 0
+local powerName = nil
+
+local function powerupStarted(payload)
+	local juice = Config.Juice
+	local profile = Config.getPowerupKind(payload.powerup)
+
+	powerName = payload.powerup
+	powerUntil = os.clock() + payload.duration
+	powerChip.Visible = true
+
+	showBanner(payload.label or profile.label, "", profile.color, juice.PowerupBannerSeconds, false)
+	for _, note in ipairs(Config.Sounds.PowerupArpeggio) do
+		task.delay(note[1], function()
+			playSound(Config.Sounds.PowerupPickup, juice.PowerupVolume, note[2])
+		end)
+	end
+	emitBurst(profile.color, juice.CoinSparkleParticles * 2, juice.PhantomSparkleSeconds)
+end
+
+task.spawn(function()
+	while true do
+		if powerName then
+			local left = powerUntil - os.clock()
+			if left <= 0 then
+				powerName = nil
+				powerChip.Visible = false
+			else
+				local profile = Config.getPowerupKind(powerName)
+				powerLabel.Text = string.format("%s  %ds", profile.label, math.ceil(left))
+				powerLabel.TextColor3 = profile.color
+			end
+		end
+		task.wait(0.1)
+	end
+end)
+
+pickupRemote.OnClientEvent:Connect(function(payload)
+	if not payload then
+		return
+	end
+	if payload.kind == "coin" then
+		coinPickup()
+	elseif payload.kind == "powerup" then
+		powerupStarted(payload)
+	elseif payload.kind == "powerupEnded" then
+		-- The countdown above hides the chip on its own; this only matters when
+		-- the server ended an effect early, by handing out a different one.
+		if powerName == payload.powerup then
+			powerName = nil
+			powerChip.Visible = false
+		end
+	end
+end)
 
 -- ============================================================
 
