@@ -345,7 +345,7 @@ end
 -- Level interior
 -- ============================================================
 
-local function buildWalls(parent, origin, baseY, g, style)
+local function buildWalls(parent, origin, baseY, g, style, door)
 	local wallY = baseY + CFG.WALL_HEIGHT / 2
 	local interior = {}
 
@@ -394,18 +394,54 @@ local function buildWalls(parent, origin, baseY, g, style)
 		return pos, size
 	end
 
-	local function place(x, z, side, pos, size, boundary)
-		if boundary then
-			pos, size = fillApron(x, z, side, pos, size)
-		end
-		local p = makePart(
+	local function wallPart(name, pos, size)
+		return makePart(
 			parent,
-			string.format("Wall_%d_%d_%s", x, z, side),
+			name,
 			CFrame.new(origin + Vector3.new(pos.X, wallY, pos.Z)),
 			size,
 			style.wall,
 			style.material
 		)
+	end
+
+	-- Two panels flanking a DOOR_WIDTH gap centred on the cell, so the opening
+	-- lines up with the facade door rather than being the whole cell wide. The
+	-- run already carries its apron growth, so the panels are measured off the
+	-- grown extent and still reach the slab edge.
+	local function placeDoorway(x, z, side, pos, size)
+		local horizontal = (side == "north" or side == "south")
+		local run = horizontal and size.X or size.Z
+		local centre = horizontal and pos.X or pos.Z
+		local u0 = centre - run / 2
+		local u1 = centre + run / 2
+		local gap = cellCenter(x, z)
+		local gapU = horizontal and gap.X or gap.Z
+
+		local spans = {
+			{ name = "L", a = u0, b = gapU - CFG.DOOR_WIDTH / 2 },
+			{ name = "R", a = gapU + CFG.DOOR_WIDTH / 2, b = u1 },
+		}
+		for _, s in ipairs(spans) do
+			local len = s.b - s.a
+			if len > 0.1 then
+				local u = s.a + len / 2
+				local panelPos = horizontal and Vector3.new(u, 0, pos.Z) or Vector3.new(pos.X, 0, u)
+				local panelSize = horizontal and Vector3.new(len, size.Y, size.Z) or Vector3.new(size.X, size.Y, len)
+				wallPart(string.format("Wall_%d_%d_%s_%s", x, z, side, s.name), panelPos, panelSize)
+			end
+		end
+	end
+
+	local function place(x, z, side, pos, size, boundary)
+		if boundary then
+			pos, size = fillApron(x, z, side, pos, size)
+			if door and door.x == x and door.z == z and door.side == side then
+				placeDoorway(x, z, side, pos, size)
+				return
+			end
+		end
+		local p = wallPart(string.format("Wall_%d_%d_%s", x, z, side), pos, size)
 		if not boundary then
 			table.insert(interior, { part = p, x = x, z = z, side = side, size = size })
 		end
@@ -675,9 +711,12 @@ local function buildLevel(buildingFolder, origin, level, entrySide, entryCell, s
 	openBetween(g, cellB, exitSide)
 	openBetween(g, cellB, OPPOSITE[exitSide])
 
-	if level == 0 then
-		g[entryCell.x][entryCell.z].walls[entrySide] = false
-	end
+	-- Level 0's entry cell keeps its boundary wall. Dropping it opened the full
+	-- 25-stud cell to the apron, so the 16-stud front door led into an alcove
+	-- wider than itself; buildWalls splits this one wall around a door-width gap
+	-- instead, leaving the facade opening, the apron, and the maze opening the
+	-- same width and in line.
+	local door = (level == 0) and { x = entryCell.x, z = entryCell.z, side = entrySide } or nil
 
 	local folder = Instance.new("Folder")
 	folder.Name = "Level_" .. level
@@ -693,7 +732,7 @@ local function buildLevel(buildingFolder, origin, level, entrySide, entryCell, s
 		[cellB.x .. "_" .. cellB.z] = true,
 	}
 
-	local interior = buildWalls(folder, origin, baseY, g, style)
+	local interior = buildWalls(folder, origin, baseY, g, style, door)
 	local used = tagPhantoms(interior, blocked, CFG.PHANTOM_PER_LEVEL, rng, ctx)
 	tagMovingWalls(interior, blocked, used, level, rng, ctx)
 
