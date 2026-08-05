@@ -25,6 +25,11 @@ Config.World = {
 	-- and the maze looks unlit and papery.
 	LampBrightness = 0.6,
 	LampRange = 110,
+	-- On. Off means light passes through walls and everything on the floor is
+	-- lit by every lamp at once, which clips pale surfaces like a player's skin
+	-- no matter what the exposure is set to. Costs shadow-casting lights per
+	-- visible floor; turn off first if lighting ever shows up in a perf trace.
+	LampShadows = true,
 	MovingWallMinLevel = 4,
 	PhantomWallsPerLevel = 4,
 }

@@ -35,6 +35,7 @@ local CFG = {
 	-- gets flattened: a light falls off toward its range, so a short range means
 	-- whatever is under the fixture is lit far harder than the far wall.
 	LAMP_RANGE = 110,
+	LAMP_SHADOWS = true,
 
 	MOVING_WALL_MIN_LEVEL = 4,
 	MOVING_WALL_BASE = 2,
@@ -78,6 +79,9 @@ local function refreshFromConfig()
 	CFG.LEVELS = w.Levels or CFG.LEVELS
 	CFG.LAMP_BRIGHTNESS = w.LampBrightness or CFG.LAMP_BRIGHTNESS
 	CFG.LAMP_RANGE = w.LampRange or CFG.LAMP_RANGE
+	if w.LampShadows ~= nil then
+		CFG.LAMP_SHADOWS = w.LampShadows
+	end
 	CFG.MOVING_WALL_MIN_LEVEL = w.MovingWallMinLevel or CFG.MOVING_WALL_MIN_LEVEL
 	CFG.PHANTOM_PER_LEVEL = w.PhantomWallsPerLevel or CFG.PHANTOM_PER_LEVEL
 	ROOF_Y = CFG.LEVELS * LEVEL_HEIGHT
@@ -628,13 +632,19 @@ local function buildLamps(parent, origin, baseY)
 			-- PointLight, not SpotLight: a downward cone lights the floor and
 			-- leaves the wall faces in grazing light, which is what made the
 			-- maze unreadable. Omnidirectional light hits vertical surfaces.
-			-- Shadows stay off so walls cannot occlude their own lighting into
-			-- black corridors, and so the per-floor light budget stays cheap.
+			--
+			-- Shadows are the switch between two lighting models, not a quality
+			-- setting, which is why they are on. Off, light passes through
+			-- walls, so anything in the maze is lit by all LAMP_GRID^2 lamps at
+			-- once and pale surfaces clip regardless of exposure. On, a corridor
+			-- is lit by the one or two lamps that can see into it, which is what
+			-- stopped players glowing and gave the walls shape. The cost is
+			-- LAMP_GRID^2 shadow-casting lights per visible floor.
 			local lamp = Instance.new("PointLight")
 			lamp.Brightness = CFG.LAMP_BRIGHTNESS
 			lamp.Range = CFG.LAMP_RANGE
 			lamp.Color = Color3.fromRGB(255, 240, 208)
-			lamp.Shadows = false
+			lamp.Shadows = CFG.LAMP_SHADOWS
 			lamp.Parent = base
 		end
 	end
