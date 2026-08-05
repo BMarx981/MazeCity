@@ -1017,7 +1017,7 @@ local function buildRoof(parent, origin, hole, style, isExit, ctx)
 			Color3.fromRGB(255, 120, 200),
 			Enum.Material.Neon
 		)
-		pad:SetAttribute("Power", 140)
+		pad:SetAttribute("Power", Config.BouncePadPower)
 		tagWithContext(pad, "BouncePad", sectionIndex, ctx.building, CFG.LEVELS)
 	end
 
@@ -1133,7 +1133,7 @@ local function buildSlide(parent, startPos, endPos, section, building)
 			)
 			boost.Transparency = 1
 			boost.CanCollide = false
-			boost:SetAttribute("Speed", 105)
+			boost:SetAttribute("Speed", Config.SlideBoostSpeed)
 			boost:SetAttribute("DirX", (b - a).Unit.X)
 			boost:SetAttribute("DirY", (b - a).Unit.Y)
 			boost:SetAttribute("DirZ", (b - a).Unit.Z)

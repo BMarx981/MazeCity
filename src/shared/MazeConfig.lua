@@ -90,6 +90,8 @@ Config.SectionEnemyOverride = {
 Config.EnemyHealthBase = 90
 Config.EnemyHealthPerLevel = 14
 Config.EnemyRespawnSeconds = 25
+-- Enemies with no player inside this radius stop pathfinding entirely. Keep it
+-- above the largest leash above, or the leash is what stops mattering.
 Config.EnemyActivationRange = 220
 
 function Config.resolveEnemyType(sectionIndex, markerType)
@@ -121,8 +123,15 @@ Config.MovingWallRetrySeconds = 3
 -- Slides and roof toys
 -- ============================================================
 
+-- SlideEntrySpeed is the shove given on touching a SlideEntrance; the boosters
+-- along the run then hold the rider at SlideBoostSpeed. The generator stamps
+-- both BouncePadPower and SlideBoostSpeed onto the parts it makes, so changing
+-- them here only affects sections generated afterwards; the service-side
+-- fallbacks cover parts built before the change.
+Config.SlideEntrySpeed = 30
 Config.SlideBoostSpeed = 105
 Config.SlideMaxSeconds = 30 -- safety release if someone gets stuck
+Config.BouncePadPower = 140
 Config.BouncePadCooldown = 0.6
 
 return Config

@@ -31,16 +31,40 @@ local function spaceIsClear(cframe, size)
 	return #hits == 0
 end
 
-local function openCFrameFor(part, home)
-	local mode = part:GetAttribute("Mode") or "slide"
-	local travel = part:GetAttribute("Travel") or 25
+-- MazeGenerator stamps every one of these on each MovingWall it makes. The
+-- fallbacks that used to stand in for them turned a generator bug into a wall
+-- that cycled on plausible-looking numbers, so nothing ever looked wrong.
+local REQUIRED = { "Mode", "Travel", "TweenTime", "DwellOpen", "DwellClosed", "Phase" }
 
-	if mode == "rotate" then
+local function readSettings(part)
+	local settings = {}
+	for _, name in ipairs(REQUIRED) do
+		local value = part:GetAttribute(name)
+		if value == nil then
+			warn("MovingWallService: " .. part:GetFullName() .. " has no " .. name .. " attribute, leaving it static")
+			return nil
+		end
+		settings[name] = value
+	end
+
+	if settings.Mode ~= "rotate" then
+		settings.SlideAxis = part:GetAttribute("SlideAxis")
+		if settings.SlideAxis == nil then
+			warn("MovingWallService: " .. part:GetFullName() .. " has no SlideAxis attribute, leaving it static")
+			return nil
+		end
+	end
+
+	return settings
+end
+
+local function openCFrameFor(home, settings)
+	if settings.Mode == "rotate" then
 		return home * CFrame.Angles(0, math.rad(90), 0)
 	end
 
-	local axis = part:GetAttribute("SlideAxis") or "X"
-	local offset = (axis == "X") and Vector3.new(travel, 0, 0) or Vector3.new(0, 0, travel)
+	local travel = settings.Travel
+	local offset = (settings.SlideAxis == "X") and Vector3.new(travel, 0, 0) or Vector3.new(0, 0, travel)
 	return home * CFrame.new(offset)
 end
 
@@ -49,17 +73,21 @@ local function run(part)
 		return
 	end
 
+	local settings = readSettings(part)
+	if not settings then
+		return
+	end
+
 	local home = part.CFrame
-	local away = openCFrameFor(part, home)
-	local tweenTime = part:GetAttribute("TweenTime") or 6
-	local dwellOpen = part:GetAttribute("DwellOpen") or 10
-	local dwellClosed = part:GetAttribute("DwellClosed") or 14
-	local phase = part:GetAttribute("Phase") or 0
+	local away = openCFrameFor(home, settings)
+	local tweenTime = settings.TweenTime
+	local dwellOpen = settings.DwellOpen
+	local dwellClosed = settings.DwellClosed
 
 	local info = TweenInfo.new(tweenTime, Config.MovingWallEasing, Enum.EasingDirection.InOut)
 
 	task.spawn(function()
-		task.wait(phase)
+		task.wait(settings.Phase)
 		while part.Parent do
 			task.wait(dwellClosed)
 			if not part.Parent then

@@ -20,6 +20,12 @@ local Config = require(ReplicatedStorage:WaitForChild("MazeConfig"))
 local FOLLOW_WAYPOINTS = 2
 local REPLAN_DRIFT = 8
 
+-- Seconds a dormant enemy sleeps between checks for a player entering its
+-- activation range. Every floor of every generated building holds spawns, so
+-- most enemies in a city are permanently out of range; polling them cheaply is
+-- what keeps pathfinding cost proportional to where players actually are.
+local DORMANT_POLL = 2
+
 local enemyFolder = ServerStorage:FindFirstChild("Enemies")
 
 local liveFolder = workspace:FindFirstChild("LiveEnemies")
@@ -79,6 +85,21 @@ local function templateFor(enemyType)
 	return makePlaceholder(enemyType)
 end
 
+-- Deliberately ignores the floor band that nearestTarget applies: this only
+-- decides whether the enemy is worth running at all, and a player one floor
+-- below is about to arrive.
+local function anyPlayerWithin(root, range)
+	for _, player in ipairs(Players:GetPlayers()) do
+		local char = player.Character
+		local hrp = char and char:FindFirstChild("HumanoidRootPart")
+		local hum = char and char:FindFirstChildOfClass("Humanoid")
+		if hrp and hum and hum.Health > 0 and (hrp.Position - root.Position).Magnitude < range then
+			return true
+		end
+	end
+	return false
+end
+
 local function nearestTarget(root, leash)
 	local best, bestDist = nil, leash
 	for _, player in ipairs(Players:GetPlayers()) do
@@ -122,38 +143,42 @@ local function driveEnemy(model, humanoid, root, profile, marker)
 		})
 
 		while model.Parent and humanoid.Health > 0 do
-			local target = nearestTarget(root, profile.leash)
-			if not target then
-				task.wait(0.6)
+			if not anyPlayerWithin(root, Config.EnemyActivationRange) then
+				task.wait(DORMANT_POLL)
 			else
-				local aim = target.Position
-				local ok = pcall(function()
-					path:ComputeAsync(root.Position, aim)
-				end)
-
-				if ok and path.Status == Enum.PathStatus.Success then
-					local waypoints = path:GetWaypoints()
-					for i = 2, math.min(#waypoints, 1 + FOLLOW_WAYPOINTS) do
-						if not model.Parent or humanoid.Health <= 0 then
-							return
-						end
-						if waypoints[i].Action == Enum.PathWaypointAction.Jump then
-							humanoid.Jump = true
-						end
-						humanoid:MoveTo(waypoints[i].Position)
-						humanoid.MoveToFinished:Wait()
-						-- The plan is stale the moment the player rounds a
-						-- corner. Abandon it rather than finishing a walk to
-						-- where they used to be.
-						if (target.Position - aim).Magnitude > REPLAN_DRIFT then
-							break
-						end
-					end
+				local target = nearestTarget(root, profile.leash)
+				if not target then
+					task.wait(0.6)
 				else
-					humanoid:MoveTo(aim)
-					task.wait(0.25)
+					local aim = target.Position
+					local ok = pcall(function()
+						path:ComputeAsync(root.Position, aim)
+					end)
+
+					if ok and path.Status == Enum.PathStatus.Success then
+						local waypoints = path:GetWaypoints()
+						for i = 2, math.min(#waypoints, 1 + FOLLOW_WAYPOINTS) do
+							if not model.Parent or humanoid.Health <= 0 then
+								return
+							end
+							if waypoints[i].Action == Enum.PathWaypointAction.Jump then
+								humanoid.Jump = true
+							end
+							humanoid:MoveTo(waypoints[i].Position)
+							humanoid.MoveToFinished:Wait()
+							-- The plan is stale the moment the player rounds a
+							-- corner. Abandon it rather than finishing a walk to
+							-- where they used to be.
+							if (target.Position - aim).Magnitude > REPLAN_DRIFT then
+								break
+							end
+						end
+					else
+						humanoid:MoveTo(aim)
+						task.wait(0.25)
+					end
+					task.wait(0.1)
 				end
-				task.wait(0.1)
 			end
 		end
 	end)

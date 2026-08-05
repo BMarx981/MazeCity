@@ -49,7 +49,7 @@ local function bindEntrance(part)
 
 		riding[player] = os.clock()
 		humanoid.PlatformStand = true
-		root.AssemblyLinearVelocity = root.CFrame.LookVector * 30
+		root.AssemblyLinearVelocity = root.CFrame.LookVector * Config.SlideEntrySpeed
 
 		task.delay(Config.SlideMaxSeconds, function()
 			if riding[player] and os.clock() - riding[player] >= Config.SlideMaxSeconds - 0.1 then
@@ -109,7 +109,7 @@ local function bindBouncePad(part)
 		end
 		bounceCooldown[player] = os.clock()
 
-		local power = part:GetAttribute("Power") or 140
+		local power = part:GetAttribute("Power") or Config.BouncePadPower
 		root.AssemblyLinearVelocity = Vector3.new(root.AssemblyLinearVelocity.X, power, root.AssemblyLinearVelocity.Z)
 	end)
 end
