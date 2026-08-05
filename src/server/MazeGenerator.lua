@@ -357,7 +357,47 @@ local function buildWalls(parent, origin, baseY, g, style)
 	-- narrow from CELL to CELL - WALL_THICKNESS, which is still 23 studs.
 	local runLong = CFG.CELL + CFG.WALL_THICKNESS
 
+	-- The facade stands SLAB_APRON studs beyond the maze footprint, and the
+	-- slabs run out to meet it, so a boundary wall sized like an interior one
+	-- leaves a walkable ring corridor around every floor. On level 0 the front
+	-- door opens straight into that ring instead of into the maze. Growing each
+	-- boundary wall outward closes it and lands its outer face on the slab
+	-- edge, buried inside the facade, so no two faces end up coplanar. A wall
+	-- at either end of its run also grows lengthwise, otherwise the square
+	-- outside each maze corner stays hollow. No parts added or moved.
+	local APRON_FILL = SLAB_APRON - CFG.WALL_THICKNESS / 2
+
+	local function fillApron(x, z, side, pos, size)
+		local out = outwardVector(side)
+		pos = pos + out * (APRON_FILL / 2)
+		size = size + Vector3.new(math.abs(out.X), 0, math.abs(out.Z)) * APRON_FILL
+
+		local along = 0
+		if side == "north" or side == "south" then
+			if x == 1 then
+				along = -1
+			elseif x == CFG.MAZE_W then
+				along = 1
+			end
+			pos = pos + Vector3.new(along * APRON_FILL / 2, 0, 0)
+			size = size + Vector3.new(math.abs(along) * APRON_FILL, 0, 0)
+		else
+			if z == 1 then
+				along = -1
+			elseif z == CFG.MAZE_H then
+				along = 1
+			end
+			pos = pos + Vector3.new(0, 0, along * APRON_FILL / 2)
+			size = size + Vector3.new(0, 0, math.abs(along) * APRON_FILL)
+		end
+
+		return pos, size
+	end
+
 	local function place(x, z, side, pos, size, boundary)
+		if boundary then
+			pos, size = fillApron(x, z, side, pos, size)
+		end
 		local p = makePart(
 			parent,
 			string.format("Wall_%d_%d_%s", x, z, side),
@@ -945,23 +985,24 @@ local function buildRoof(parent, origin, hole, style, isExit, ctx)
 	end
 
 	-- Win state. The roof has no LevelTrigger of its own because there is no
-	-- level above it, so completion is detected by a trigger sitting over the
-	-- top stair hole, the one spot a climbing player must pass through. Mirrors
-	-- buildLevelTrigger's size and offset; hole is nil only if LEVELS is 0.
-	if hole then
-		local trigger = makePart(
-			folder,
-			"RoofTrigger",
-			CFrame.new(origin + Vector3.new(hole.x, ROOF_Y + 4, hole.z)),
-			Vector3.new(CFG.CELL - 3, 8, CFG.CELL - 3),
-			Color3.fromRGB(0, 200, 255),
-			Enum.Material.SmoothPlastic
-		)
-		trigger.Transparency = 1
-		trigger.CanCollide = false
-		trigger:SetAttribute("TowerName", towerName)
-		tagWithContext(trigger, "RoofTrigger", sectionIndex, ctx.building, CFG.LEVELS)
-	end
+	-- level above it. This covers the whole deck rather than just the stair
+	-- hole: the top step stops 1.25 studs short of the hole's far edge, so
+	-- arrival is a small hop and a cell-sized trigger is missable. It reaches
+	-- two studs below the deck as well, to catch a player still rising through
+	-- the shaft. inSameTower gates the award, so a roof nobody climbed to pays
+	-- nothing.
+	local arrival = makePart(
+		folder,
+		"RoofTrigger",
+		CFrame.new(origin + Vector3.new(FX / 2, ROOF_Y + 3, FZ / 2)),
+		Vector3.new(FX + 2 * O, 10, FZ + 2 * O),
+		Color3.fromRGB(0, 200, 255),
+		Enum.Material.SmoothPlastic
+	)
+	arrival.Transparency = 1
+	arrival.CanCollide = false
+	arrival:SetAttribute("TowerName", towerName)
+	tagWithContext(arrival, "RoofTrigger", sectionIndex, ctx.building, CFG.LEVELS)
 
 	local deck = Instance.new("Folder")
 	deck.Name = "Deck"

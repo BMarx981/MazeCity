@@ -144,12 +144,46 @@ local function enterFloor(player, trigger)
 	push(player, event)
 end
 
-local function enterRoof(player, trigger)
-	local s = state[player]
-	if not inSameTower(s, trigger) then
-		return
+local roofCache = {}
+
+local function findRoofTrigger(section, building)
+	local key = section .. ":" .. building
+	local cached = roofCache[key]
+	if cached and cached.Parent then
+		return cached
+	end
+	for _, part in ipairs(CollectionService:GetTagged("RoofTrigger")) do
+		if part:GetAttribute("Section") == section and part:GetAttribute("Building") == building then
+			roofCache[key] = part
+			return part
+		end
+	end
+	return nil
+end
+
+-- Roof arrival is polled rather than bound to Touched. It is the one event the
+-- whole climb pays off on, and a touch that does not land leaves the tower
+-- impossible to finish, so it gets the mechanism with no failure mode instead
+-- of the convenient one. The trigger is axis-aligned, so this is a plain
+-- extent test, and the loop it runs in is already ticking for the timer push.
+local function onRoof(player, s)
+	local roof = findRoofTrigger(s.section, s.building)
+	if not roof then
+		return false
+	end
+	local char = player.Character
+	local root = char and char:FindFirstChild("HumanoidRootPart")
+	if not root then
+		return false
 	end
 
+	local d = root.Position - roof.Position
+	local half = roof.Size * 0.5
+	return math.abs(d.X) <= half.X and math.abs(d.Y) <= half.Y and math.abs(d.Z) <= half.Z
+end
+
+local function completeTower(player)
+	local s = state[player]
 	local elapsed = os.clock() - s.startedAt
 	local gained = Config.scoreFloor(s.level, elapsed) + Config.Scoring.TowerBonus
 	award(player, gained)
@@ -162,8 +196,8 @@ local function enterRoof(player, trigger)
 		gained = gained,
 		tower = s.tower,
 	}
-	-- Clearing state both ends the floor timer and makes repeat Touched fires
-	-- on the same trigger no-ops, so the bonus can only be collected once.
+	-- Clearing state both ends the floor timer and takes the player out of the
+	-- poll, so the bonus can only be collected once.
 	state[player] = nil
 	push(player, event)
 end
@@ -261,8 +295,6 @@ bindTag("LevelTrigger", function(player, trigger)
 	enterFloor(player, trigger)
 end)
 
-bindTag("RoofTrigger", enterRoof)
-
 local function bindPlayer(player)
 	scoreValue(player)
 	player.CharacterAdded:Connect(function(char)
@@ -284,21 +316,26 @@ Players.PlayerRemoving:Connect(function(player)
 	home[player] = nil
 end)
 
-if Config.TimerEnabled then
-	local accumulator = 0
-	RunService.Heartbeat:Connect(function(dt)
-		accumulator = accumulator + dt
-		if accumulator < 0.25 then
-			return
-		end
-		accumulator = 0
+-- Always runs: this is where roof arrival is detected and where state for a
+-- departed player is dropped. Config.TimerEnabled only governs the live clock
+-- the client draws, not progression.
+local accumulator = 0
+RunService.Heartbeat:Connect(function(dt)
+	accumulator = accumulator + dt
+	if accumulator < 0.25 then
+		return
+	end
+	accumulator = 0
 
-		for player in pairs(state) do
-			if not player.Parent then
-				state[player] = nil
-			elseif not pendingRespawn[player] then
+	for player, s in pairs(state) do
+		if not player.Parent then
+			state[player] = nil
+		elseif not pendingRespawn[player] then
+			if onRoof(player, s) then
+				completeTower(player)
+			elseif Config.TimerEnabled then
 				push(player)
 			end
 		end
-	end)
-end
+	end
+end)
