@@ -58,6 +58,19 @@ local CFG = {
 	STREET = 90,
 	SECTION_GAP = 620,
 
+	-- Zipline off the roof. OUTSET is measured from the maze footprint edge, so
+	-- it has to clear the facade face at FACADE_OUTSET + FACADE_THICKNESS = 8 and
+	-- the plaza, which reaches 36, without running into the neighbouring plot's
+	-- facade at STREET + 8 = 98. Fifty puts it a little past the middle of the
+	-- street with room for the landing pad either side.
+	ZIP_OUTSET = 50,
+	ZIP_DECK_INSET = 8, -- how far inside the parapet the boarding pad sits
+	ZIP_END_MARGIN = 14, -- how far in from the facade corner the cable starts
+	ZIP_START_LIFT = 6, -- cable height above the roof slab
+	ZIP_END_Y = 4, -- cable height where it meets the street
+	ZIP_CABLE_THICKNESS = 0.6,
+	ZIP_PAD = 12,
+
 	STAIR_RISER = 0.75,
 	STAIR_WIDTH_FRAC = 0.48,
 	STAIR_RUN_CELLS = 1.8,
@@ -1369,6 +1382,95 @@ local function buildSlide(parent, startPos, endPos, section, building)
 end
 
 -- ============================================================
+-- Zipline from the roof to the plaza
+-- ============================================================
+-- Topping out was a dead end on the five buildings in six that get no section
+-- slide: the only ways down were ten floors of maze in reverse or a 195-stud
+-- drop. The cable runs along the entry-side facade at ZIP_OUTSET and lands on
+-- the street outside the door the player came in by, so the climb ends where it
+-- started.
+--
+-- It draws no random numbers, deliberately. It reads entrySide and entryCell,
+-- which the maze has already fixed, so every part that existed before this did
+-- keeps the exact position it had and the part-count delta is exactly three per
+-- building. Drawing from the threaded rng here would reshuffle every building
+-- in the city and retire the M4 baseline for a feature that does not need it.
+local function buildZipline(parent, origin, entrySide, entryCell, ctx)
+	local folder = Instance.new("Folder")
+	folder.Name = "Zipline"
+	folder.Parent = parent
+
+	local horizontal = (entrySide == "north" or entrySide == "south")
+	local span = horizontal and FX or FZ
+	local doorCenter = cellCenter(entryCell.x, entryCell.z)
+	local doorU = horizontal and doorCenter.X or doorCenter.Z
+
+	-- u runs along the entry-side facade, v out away from it. Boarding starts at
+	-- whichever end of that facade is farther from the door, so the run is never
+	-- short enough for the cable to read as a fire pole: the shortest it can get
+	-- is 111 studs of travel against 197 of drop.
+	local startU = (doorU > span / 2) and CFG.ZIP_END_MARGIN or (span - CFG.ZIP_END_MARGIN)
+
+	local function at(u, v, y)
+		if entrySide == "north" then
+			return origin + Vector3.new(u, y, -v)
+		elseif entrySide == "south" then
+			return origin + Vector3.new(u, y, FZ + v)
+		elseif entrySide == "west" then
+			return origin + Vector3.new(-v, y, u)
+		end
+		return origin + Vector3.new(FX + v, y, u)
+	end
+
+	local padPos = at(startU, -CFG.ZIP_DECK_INSET, ROOF_Y + 0.6)
+	local cableStart = at(startU, CFG.ZIP_OUTSET, ROOF_Y + CFG.ZIP_START_LIFT)
+	local cableEnd = at(doorU, CFG.ZIP_OUTSET, CFG.ZIP_END_Y)
+
+	-- One part, not a run of segments like the slide: a cable is a straight line
+	-- and has no boosters to hang along it.
+	local cable = makePart(
+		folder,
+		"ZipCable",
+		CFrame.lookAt((cableStart + cableEnd) / 2, cableEnd),
+		Vector3.new(CFG.ZIP_CABLE_THICKNESS, CFG.ZIP_CABLE_THICKNESS, (cableEnd - cableStart).Magnitude),
+		Color3.fromRGB(48, 50, 58),
+		Enum.Material.Metal
+	)
+	cable.CanCollide = false
+
+	local board = makePart(
+		folder,
+		"ZipEntrance",
+		CFrame.new(padPos),
+		Vector3.new(CFG.ZIP_PAD, 1.2, CFG.ZIP_PAD),
+		Color3.fromRGB(120, 220, 255),
+		Enum.Material.Neon
+	)
+	-- The rider is carried to the cable before the descent starts, because the
+	-- pad has to be inside the parapet to be stood on and the cable has to be
+	-- outside it to clear the facade. TraversalService reads both points.
+	board:SetAttribute("StartX", cableStart.X)
+	board:SetAttribute("StartY", cableStart.Y)
+	board:SetAttribute("StartZ", cableStart.Z)
+	board:SetAttribute("EndX", cableEnd.X)
+	board:SetAttribute("EndY", cableEnd.Y)
+	board:SetAttribute("EndZ", cableEnd.Z)
+	tagWithContext(board, "ZipEntrance", ctx.section, ctx.building, CFG.LEVELS)
+
+	local landing = makePart(
+		folder,
+		"ZipExit",
+		CFrame.new(cableEnd - Vector3.new(0, CFG.ZIP_END_Y - 0.6, 0)),
+		Vector3.new(CFG.ZIP_PAD + 8, 1.2, CFG.ZIP_PAD + 8),
+		Color3.fromRGB(120, 220, 255),
+		Enum.Material.Neon
+	)
+	tagWithContext(landing, "ZipExit", ctx.section, ctx.building, 0)
+
+	return folder
+end
+
+-- ============================================================
 -- Building
 -- ============================================================
 
@@ -1399,6 +1501,11 @@ local function buildBuilding(sectionFolder, origin, sectionIndex, buildingIndex,
 
 	buildFacade(folder, origin, style, entrySide, entryCell, ctx)
 
+	-- The level loop below reassigns both of these as it spirals up, so the
+	-- ground entry has to be kept if anything after the loop wants it. The
+	-- zipline does: it lands at the door the player came in by.
+	local groundEntrySide, groundEntryCell = entrySide, entryCell
+
 	local pendingHole = nil
 	for level = 0, CFG.LEVELS - 1 do
 		local levelHole = (level == 0) and nil or pendingHole
@@ -1413,6 +1520,7 @@ local function buildBuilding(sectionFolder, origin, sectionIndex, buildingIndex,
 	end
 
 	buildRoof(folder, origin, pendingHole, style, isExit, ctx)
+	buildZipline(folder, origin, groundEntrySide, groundEntryCell, ctx)
 	return folder, style
 end
 

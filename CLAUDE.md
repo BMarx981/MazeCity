@@ -2,7 +2,7 @@
 
 A Roblox tower-climbing maze game, built entirely from this repo via Rojo. There is no Studio plugin and no hand-placed geometry. The world generates server-side at startup and extends itself lazily as players progress.
 
-Players enter a building at street level, solve a maze on each of 10 floors against a per-floor timer, climb spiral stairwells to the roof, and ride a slide from designated exit buildings to the next section of the city. Higher floors have walls that slowly move. Enemy types vary by building style and can be overridden per section.
+Players enter a building at street level, solve a maze on each of 10 floors against a per-floor timer, climb spiral stairwells to the roof, and ride a slide from designated exit buildings to the next section of the city. Every roof, exit building or not, also has a zipline down to the plaza outside its own door, so topping out is never a dead end. Higher floors have walls that slowly move. Enemy types vary by building style and can be overridden per section.
 
 ## Core architectural rules
 
@@ -77,6 +77,8 @@ These encode fixes for real bugs in an earlier version. Any change to `MazeGener
 
 5. **Tags carry Section, Building, Level attributes.** Runtime services key everything off these three. Any new tagged part type must set them. `SlideEntrance` additionally carries `FromSection`/`ToSection`, which lazy generation depends on.
 
+6. **Geometry added after a baseline draws no random numbers.** `buildZipline` is a pure function of `entrySide`/`entryCell`, which the maze has already fixed, so adding it left every pre-existing part exactly where it was and the delta was countable: four instances per building. Drawing from the threaded `rng` instead would have shifted every subsequent draw and reshuffled the whole city for a feature that needs no randomness. Anything landing outside a deliberate world reshuffle has the same obligation: read what generation already decided, or draw from a derived sub-stream seeded off the per-building seed, but never from `rng` itself.
+
 ## Runtime services
 
 | Service | Tags consumed | Notes |
@@ -85,7 +87,7 @@ These encode fixes for real bugs in an earlier version. Any change to `MazeGener
 | TowerTimerService | `LevelTrigger`, `RoofTrigger`, `TowerStart` | Timer counts up from touching a floor's arrival trigger; `Config.getParTime` is a scoring target, not a deadline. Clearing a floor and topping out award `leaderstats.Score`. Death is the only failure: respawn configurable via `Config.DeathAction`, `restartLevel` (default) or `restartTower`. Pushes state, score, and celebration events to clients over the `TimerUpdate` RemoteEvent at 4 Hz. |
 | MovingWallService | `MovingWall` | Reads Mode (slide/rotate), Travel, TweenTime, DwellOpen/Closed, Phase attributes; all are required, and a wall missing any of them warns and stays static rather than falling back to a default. Checks player occupancy before closing; postpones instead of shoving. |
 | EnemyService | `EnemySpawn` | Type from marker attribute, overridable per section in MazeConfig. Rigs from `ServerStorage/Enemies/<TypeName>`, placeholder fallback. Enemies with no player inside `Config.EnemyActivationRange` stop pathfinding until one arrives. Respawn via `NeedsRespawn` attribute polling. |
-| TraversalService | `SlideEntrance`, `SlideBooster`, `SlideExit`, `BouncePad` | PlatformStand during rides, velocity boosters, safety release after SlideMaxSeconds. |
+| TraversalService | `SlideEntrance`, `SlideBooster`, `SlideExit`, `BouncePad`, `ZipEntrance`, `ZipExit` | PlatformStand during rides, velocity boosters, safety release after SlideMaxSeconds. The zipline is the exception to "rides are physics": it anchors the rider and tweens them down the cable, because the descent is 195 studs and a rider who clips off a physics line lands wherever the simulation drops them. Every exit path, including the failures, goes through `endRide`, which is the only thing that unanchors. |
 | TimerGui (client) | `LevelTrigger`, `RoofTrigger`, `PhantomWall` | The one tag consumer that is not a server service. HUD and celebrations come off the `TimerUpdate` payload; the tags are read only for the compass arrow's target and the phantom pass-through sparkle. Hints, never authority: a section that has not replicated yet just means no arrow for a moment. |
 
 Effects (sounds, particles, the compass billboard) attach at runtime to characters, enemy rigs in `workspace.LiveEnemies`, or the PlayerGui. Nothing is ever parented into `workspace.MazeCity`, which stays exactly as the generator built it.

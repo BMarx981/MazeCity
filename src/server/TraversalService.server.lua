@@ -1,10 +1,12 @@
 -- TraversalService (Script) -> ServerScriptService
--- Slide between sections, plus the roof deck bounce pads.
+-- Slide between sections, the roof zipline down to the plaza, and the roof deck
+-- bounce pads.
 
 local CollectionService = game:GetService("CollectionService")
 local Debris = game:GetService("Debris")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local TweenService = game:GetService("TweenService")
 
 local Config = require(ReplicatedStorage:WaitForChild("MazeConfig"))
 
@@ -60,6 +62,9 @@ local function playerFrom(hit)
 	return player, humanoid, root
 end
 
+-- Every exit from a ride goes through here, including the failure paths. The
+-- zipline anchors the rider, and an anchored player left in mid-air has no way
+-- out on their own, so releasing has to be the one thing that cannot be skipped.
 local function endRide(player, humanoid)
 	local ride = riding[player]
 	if not ride then
@@ -69,8 +74,15 @@ local function endRide(player, humanoid)
 	if ride.whoosh then
 		ride.whoosh:Destroy()
 	end
-	if humanoid then
-		humanoid.PlatformStand = false
+	if ride.tween then
+		ride.tween:Cancel()
+	end
+	if ride.root then
+		ride.root.Anchored = false
+	end
+	local hum = humanoid or ride.humanoid
+	if hum then
+		hum.PlatformStand = false
 	end
 end
 
@@ -165,11 +177,110 @@ local function bindBouncePad(part)
 	end)
 end
 
+-- The zipline is a tween along the cable rather than physics on a rope. The
+-- descent is 195 studs onto a street, and a rider who clips off a physics line
+-- halfway down lands wherever the simulation drops them, which on the edge plots
+-- is the void between section ground slabs. A tween cannot miss.
+local function rideZip(player, humanoid, root, cableStart, cableEnd)
+	local whoosh = Instance.new("Sound")
+	whoosh.SoundId = Config.Sounds.ZipWhoosh
+	whoosh.Volume = Config.Juice.ZipWhooshVolume
+	whoosh.Looped = true
+	whoosh.Parent = root
+	whoosh:Play()
+
+	local ride = { startedAt = os.clock(), whoosh = whoosh, root = root, humanoid = humanoid }
+	riding[player] = ride
+
+	humanoid.PlatformStand = true
+	root.Anchored = true
+
+	local heading = (cableEnd - cableStart).Unit
+	-- Two legs: the boarding hop from the deck pad out to the cable, which has to
+	-- happen outside the parapet or the line would run through the facade, then
+	-- the descent itself at a constant speed.
+	local board = TweenService:Create(
+		root,
+		TweenInfo.new(Config.ZipBoardSeconds, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+		{ CFrame = CFrame.lookAt(cableStart, cableStart + heading) }
+	)
+	ride.tween = board
+	board:Play()
+
+	board.Completed:Connect(function(state)
+		if riding[player] ~= ride or state ~= Enum.PlaybackState.Completed then
+			return
+		end
+		local seconds = (cableEnd - cableStart).Magnitude / Config.ZipSpeed
+		local descend = TweenService:Create(
+			root,
+			TweenInfo.new(seconds, Enum.EasingStyle.Linear),
+			{ CFrame = CFrame.lookAt(cableEnd, cableEnd + heading) }
+		)
+		ride.tween = descend
+		descend:Play()
+		descend.Completed:Connect(function()
+			if riding[player] == ride then
+				endRide(player, humanoid)
+			end
+		end)
+	end)
+
+	task.delay(Config.ZipMaxSeconds, function()
+		if riding[player] == ride then
+			endRide(player, humanoid)
+		end
+	end)
+end
+
+local function attrPoint(part, prefix)
+	local x = part:GetAttribute(prefix .. "X")
+	local y = part:GetAttribute(prefix .. "Y")
+	local z = part:GetAttribute(prefix .. "Z")
+	if x == nil or y == nil or z == nil then
+		return nil
+	end
+	return Vector3.new(x, y, z)
+end
+
+local function bindZipEntrance(part)
+	if not part:IsA("BasePart") then
+		return
+	end
+
+	local cableStart = attrPoint(part, "Start")
+	local cableEnd = attrPoint(part, "End")
+	if not cableStart or not cableEnd then
+		warn(
+			string.format(
+				"TraversalService: ZipEntrance %s is missing its Start/End attributes, so it stays inert",
+				part:GetFullName()
+			)
+		)
+		return
+	end
+
+	part.Touched:Connect(function(hit)
+		local player, humanoid, root = playerFrom(hit)
+		if not player or not humanoid or not root then
+			return
+		end
+		if riding[player] then
+			return
+		end
+		rideZip(player, humanoid, root, cableStart, cableEnd)
+	end)
+end
+
 local binders = {
 	SlideEntrance = bindEntrance,
 	SlideBooster = bindBooster,
 	SlideExit = bindExit,
 	BouncePad = bindBouncePad,
+	ZipEntrance = bindZipEntrance,
+	-- Landing on the pad releases the rider too. The descent tween normally gets
+	-- there first, so this is the belt to that braces.
+	ZipExit = bindExit,
 }
 
 for tag, binder in pairs(binders) do

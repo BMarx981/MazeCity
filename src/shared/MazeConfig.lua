@@ -168,6 +168,15 @@ Config.SlideMaxSeconds = 30 -- safety release if someone gets stuck
 Config.BouncePadPower = 140
 Config.BouncePadCooldown = 0.6
 
+-- The roof zipline down to the plaza. The ride is a tween along the cable
+-- rather than physics on a rope: the drop is 195 studs onto a street with a
+-- 380-stud void two plots away, and a rider who clips off the line mid-descent
+-- has no way back. Speed is studs per second along the cable; the boarding hop
+-- is the short move from the deck pad out to the cable itself.
+Config.ZipSpeed = 95
+Config.ZipBoardSeconds = 0.35
+Config.ZipMaxSeconds = 20 -- safety release, mirroring SlideMaxSeconds
+
 -- ============================================================
 -- Sound
 -- ============================================================
@@ -183,6 +192,7 @@ Config.Sounds = {
 	TowerClear = "rbxasset://sounds/electronicpingshort.wav", -- same ping, played as the arpeggio below, for topping out
 	Death = "rbxasset://sounds/uuhhh.mp3", -- the classic Roblox grunt, used as the death sting
 	SlideWhoosh = "rbxasset://sounds/action_falling.mp3", -- looping wind, held for the length of a slide ride
+	ZipWhoosh = "rbxasset://sounds/action_falling.mp3", -- the same wind on the roof zipline, separate so it can be swapped for a metallic zing
 	BouncePad = "rbxasset://sounds/action_jump.mp3", -- boing on launching off a roof pad
 	EnemyGrowl = "rbxasset://sounds/bass.mp3", -- looping low drone, louder and higher the closer the enemy is
 	PhantomPass = "rbxasset://sounds/impact_water.mp3", -- soft bloop on phasing through a phantom wall
@@ -211,6 +221,7 @@ Config.Juice = {
 	ConfettiTower = 130,
 	ConfettiSeconds = 2.2,
 	SlideWhooshVolume = 0.45,
+	ZipWhooshVolume = 0.5,
 	BouncePadVolume = 0.6,
 	BounceDustParticles = 26,
 	-- Particle textures ship with the client for the same reason the sounds do.
