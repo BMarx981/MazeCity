@@ -15,7 +15,10 @@ Config.World = {
 	Levels = 10,
 	PregenerateSections = 2,
 	LazyGeneration = true,
-	LampBrightness = 2.6,
+	-- Per-lamp, and lamps overlap: spacing is 62.5 studs against a range of 65,
+	-- and shadows are off so a wall face collects light from lamps on both
+	-- sides of it. Whatever this is set to, a wall reads at several times it.
+	LampBrightness = 1.2,
 	MovingWallMinLevel = 4,
 	PhantomWallsPerLevel = 4,
 }

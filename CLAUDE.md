@@ -50,6 +50,8 @@ selene src/                   # lint
 stylua src/                   # format
 ```
 
+The pinned rojo must match the Rojo Studio plugin's major line. Rojo changed its API encoding after 7.4, so a 7.7 plugin against a 7.4 server fails at connect with `attempt to index number with 'protocolVersion'`. If Studio shows that, bump the pin rather than downgrading the plugin. `rojo serve` also defaults to port 34872, so a server for another project on that port will quietly serve the wrong tree; `curl -s localhost:34872/api/rojo` names the project actually being served.
+
 Studio's role is reduced to being the runner: press Play, the server builds the city, test, stop. In edit mode the workspace is empty except whatever Rojo syncs. Do not save generated geometry into the place file; it is a build artifact. If a play session leaves anything behind, delete `workspace.MazeCity` and `workspace.LiveEnemies`.
 
 The one thing Studio is still needed for is content that is genuinely art: enemy rigs go in `ServerStorage/Enemies/<TypeName>` matching keys in `Config.EnemyProfiles`. Until they exist, `EnemyService` substitutes placeholder rigs, so the game is fully playable from a cold `rojo build` with zero Studio-side setup.
