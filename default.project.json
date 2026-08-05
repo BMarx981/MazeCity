@@ -32,8 +32,14 @@
         "Technology": "ShadowMap",
         "Ambient": [0.20, 0.20, 0.24],
         "OutdoorAmbient": [0.30, 0.30, 0.35],
-        "ExposureCompensation": 0,
+        "ExposureCompensation": -0.4,
         "Brightness": 2
+      },
+      "Bloom": {
+        "$className": "BloomEffect",
+        "$properties": {
+          "Enabled": false
+        }
       }
     }
   }
