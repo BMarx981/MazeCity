@@ -86,6 +86,9 @@ These encode fixes for real bugs in an earlier version. Any change to `MazeGener
 | MovingWallService | `MovingWall` | Reads Mode (slide/rotate), Travel, TweenTime, DwellOpen/Closed, Phase attributes; all are required, and a wall missing any of them warns and stays static rather than falling back to a default. Checks player occupancy before closing; postpones instead of shoving. |
 | EnemyService | `EnemySpawn` | Type from marker attribute, overridable per section in MazeConfig. Rigs from `ServerStorage/Enemies/<TypeName>`, placeholder fallback. Enemies with no player inside `Config.EnemyActivationRange` stop pathfinding until one arrives. Respawn via `NeedsRespawn` attribute polling. |
 | TraversalService | `SlideEntrance`, `SlideBooster`, `SlideExit`, `BouncePad` | PlatformStand during rides, velocity boosters, safety release after SlideMaxSeconds. |
+| TimerGui (client) | `LevelTrigger`, `RoofTrigger`, `PhantomWall` | The one tag consumer that is not a server service. HUD and celebrations come off the `TimerUpdate` payload; the tags are read only for the compass arrow's target and the phantom pass-through sparkle. Hints, never authority: a section that has not replicated yet just means no arrow for a moment. |
+
+Effects (sounds, particles, the compass billboard) attach at runtime to characters, enemy rigs in `workspace.LiveEnemies`, or the PlayerGui. Nothing is ever parented into `workspace.MazeCity`, which stays exactly as the generator built it.
 
 All gameplay tuning lives in `MazeConfig`. World-shape knobs meant to change between playtests (seed, levels, pregenerate count, lamp brightness, moving wall start level, phantom count) live in `Config.World`; structural geometry constants (cell size, wall height, plot grid) live in `MazeGenerator.CFG` because changing them invalidates the whole city. Do not scatter magic numbers into services.
 

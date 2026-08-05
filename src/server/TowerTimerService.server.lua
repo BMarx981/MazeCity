@@ -94,6 +94,11 @@ local function push(player, event)
 		payload.tower = s.tower
 		payload.par = s.par
 		payload.elapsed = os.clock() - s.startedAt
+		-- The compass arrow needs these to pick the LevelTrigger one floor up out
+		-- of every tagged trigger in the city; the tower name alone would not
+		-- survive a second section reusing a style letter.
+		payload.section = s.section
+		payload.building = s.building
 	end
 	remote:FireClient(player, payload)
 end

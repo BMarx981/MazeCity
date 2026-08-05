@@ -23,7 +23,7 @@ Config.World = {
 	-- more range and less brightness, not less brightness alone. Ambient, in
 	-- default.project.json, is flat fill with no falloff at all; too much of it
 	-- and the maze looks unlit and papery.
-	LampBrightness = 0.6,
+	LampBrightness = 0.8,
 	LampRange = 110,
 	-- Lamps per side of the per-floor grid, so 4 means 16 lamps at 50-stud
 	-- spacing. This is the one lighting knob that changes part count: 420 parts
@@ -93,17 +93,25 @@ end
 -- every EnemySpawn marker inherits it. Override per section here if you want
 -- a whole district to feel different regardless of building style.
 
--- Player WalkSpeed is 16. Anything below that can never close distance in a
--- corridor, which is why four of these used to be harmless. Sentry stays the
--- slow heavy hitter, but at 14 it still gains ground on a player who stops to
--- read a junction. Leashes are wide enough to cross most of a 250-stud floor.
+-- Player WalkSpeed is 16 and every walkSpeed here is below it, on purpose: a
+-- straight corridor is always an escape, so no chase is ever unwinnable and no
+-- enemy can corner a player who keeps moving. Threat is carried by the growl,
+-- the eyes, the windup flash and the chase itself, Pac-Man style, not by the
+-- numbers. The spread from 12 to 15 is what still makes the types feel
+-- different: a Charger is close enough to keep the pressure on, a Sentry is a
+-- thing to walk around. Damage is low enough that a bad corner costs progress
+-- toward the speed bonus rather than the floor. Leashes are wide enough to
+-- cross most of a 250-stud floor.
+--
+-- Milestone P adds a walk-speed upgrade, which moves the player's 16 baseline.
+-- Re-read this block when it lands.
 Config.EnemyProfiles = {
-	Drifter = { walkSpeed = 15, damage = 12, leash = 150, attackCooldown = 1.2, color = Color3.fromRGB(120, 160, 220) },
-	Stalker = { walkSpeed = 17, damage = 18, leash = 190, attackCooldown = 1.0, color = Color3.fromRGB(200, 150, 90) },
-	Sentry = { walkSpeed = 14, damage = 26, leash = 120, attackCooldown = 1.8, color = Color3.fromRGB(150, 150, 160) },
-	Swarmer = { walkSpeed = 19, damage = 8, leash = 170, attackCooldown = 0.6, color = Color3.fromRGB(110, 200, 170) },
-	Lurker = { walkSpeed = 16, damage = 22, leash = 135, attackCooldown = 1.4, color = Color3.fromRGB(210, 205, 185) },
-	Charger = { walkSpeed = 21, damage = 20, leash = 210, attackCooldown = 1.1, color = Color3.fromRGB(210, 100, 95) },
+	Drifter = { walkSpeed = 12.5, damage = 6, leash = 150, attackCooldown = 1.2, color = Color3.fromRGB(120, 160, 220) },
+	Stalker = { walkSpeed = 13.5, damage = 9, leash = 190, attackCooldown = 1.0, color = Color3.fromRGB(200, 150, 90) },
+	Sentry = { walkSpeed = 12, damage = 13, leash = 120, attackCooldown = 1.8, color = Color3.fromRGB(150, 150, 160) },
+	Swarmer = { walkSpeed = 14, damage = 4, leash = 170, attackCooldown = 0.6, color = Color3.fromRGB(110, 200, 170) },
+	Lurker = { walkSpeed = 13, damage = 11, leash = 135, attackCooldown = 1.4, color = Color3.fromRGB(210, 205, 185) },
+	Charger = { walkSpeed = 15, damage = 10, leash = 210, attackCooldown = 1.1, color = Color3.fromRGB(210, 100, 95) },
 }
 
 -- Section index -> enemy type that replaces whatever the building style picked.
@@ -159,5 +167,87 @@ Config.SlideBoostSpeed = 105
 Config.SlideMaxSeconds = 30 -- safety release if someone gets stuck
 Config.BouncePadPower = 140
 Config.BouncePadCooldown = 0.6
+
+-- ============================================================
+-- Sound
+-- ============================================================
+-- Every asset below is an rbxasset:// path, which ships inside the Roblox
+-- client rather than being fetched from the Creator Store: it cannot 404, costs
+-- nothing, and needs no ownership check, which matters because a bad audio ID
+-- fails silently and reads as a broken effect rather than a missing file. Swap
+-- any entry for an "rbxassetid://<id>" string once you have picked something
+-- you like; this table is the only place in the codebase that names a sound.
+
+Config.Sounds = {
+	FloorClear = "rbxasset://sounds/electronicpingshort.wav", -- bright ping on clearing a floor
+	TowerClear = "rbxasset://sounds/electronicpingshort.wav", -- same ping, played as the arpeggio below, for topping out
+	Death = "rbxasset://sounds/uuhhh.mp3", -- the classic Roblox grunt, used as the death sting
+	SlideWhoosh = "rbxasset://sounds/action_falling.mp3", -- looping wind, held for the length of a slide ride
+	BouncePad = "rbxasset://sounds/action_jump.mp3", -- boing on launching off a roof pad
+	EnemyGrowl = "rbxasset://sounds/bass.mp3", -- looping low drone, louder and higher the closer the enemy is
+	PhantomPass = "rbxasset://sounds/impact_water.mp3", -- soft bloop on phasing through a phantom wall
+	-- Topping out plays the ping once per entry: an ascending arpeggio built out
+	-- of the one chime, because nothing shipping in the client is a fanfare.
+	-- Each entry is { seconds after the banner, PlaybackSpeed }.
+	TowerClearArpeggio = { { 0, 1 }, { 0.12, 1.26 }, { 0.24, 1.5 }, { 0.42, 2 } },
+}
+
+-- ============================================================
+-- Juice
+-- ============================================================
+-- Presentation only. Nothing here changes what is reachable or how much a floor
+-- is worth, with one exception: EnemyTellSeconds delays contact damage, which is
+-- deliberate. An enemy that hits the instant it touches reads as random; one
+-- that flashes first reads as fair and gives a player who is already moving a
+-- window to get out of the way.
+
+Config.Juice = {
+	FloorClearVolume = 0.5,
+	TowerClearVolume = 0.7,
+	DeathVolume = 0.6,
+	-- Confetti is ScreenGui frames rather than particles, so it costs no
+	-- workspace instances and cannot be occluded by a wall the player is facing.
+	ConfettiFloor = 44,
+	ConfettiTower = 130,
+	ConfettiSeconds = 2.2,
+	SlideWhooshVolume = 0.45,
+	BouncePadVolume = 0.6,
+	BounceDustParticles = 26,
+	-- Particle textures ship with the client for the same reason the sounds do.
+	BounceDustTexture = "rbxasset://textures/particles/smoke_main.dds",
+	BounceDustColor = Color3.fromRGB(210, 205, 190),
+	EnemyGrowlVolume = 0.5,
+	EnemyGrowlRange = 90, -- studs past which the growl is inaudible
+	EnemyGrowlNearRange = 10, -- studs inside which it plays at full volume
+	EnemyGrowlPitchFar = 0.7,
+	EnemyGrowlPitchNear = 0.95,
+	EnemyTellSeconds = 0.3, -- warning flash before contact damage lands
+	EnemyTellColor = Color3.fromRGB(255, 90, 90),
+	EnemyTellReach = 7, -- damage only lands if the player is still this close when the flash ends
+	EnemyEyeColor = Color3.fromRGB(20, 20, 24),
+	PhantomSparkleVolume = 0.35,
+	PhantomSparkleSeconds = 0.7,
+	PhantomSparkleParticles = 28,
+	PhantomSparkleTexture = "rbxasset://textures/particles/sparkles_main.dds",
+	PhantomSparkleColor = Color3.fromRGB(150, 235, 255),
+	PhantomSparkleCooldown = 1.5, -- per wall, so brushing along one is not a light show
+}
+
+-- ============================================================
+-- Compass arrow
+-- ============================================================
+-- Client-only hint. By generation invariant 3 the stairs up from floor N arrive
+-- at floor N+1's LevelTrigger cell, so the arrow points at the LevelTrigger one
+-- level above the player's current floor, and at the RoofTrigger when there is
+-- no floor above. It points through walls on purpose: it says which way, never
+-- which turn.
+
+Config.Compass = {
+	Enabled = true,
+	Size = 64, -- pixels
+	HeightOffset = 3.2, -- studs above the player's head
+	Color = Color3.fromRGB(255, 220, 120),
+	RetargetSeconds = 1, -- how often the target part is re-resolved, for lazily built sections
+}
 
 return Config

@@ -31,7 +31,7 @@
       "$properties": {
         "Technology": "ShadowMap",
         "Ambient": [0.20, 0.20, 0.24],
-        "OutdoorAmbient": [0.30, 0.30, 0.35],
+        "OutdoorAmbient": [0.38, 0.38, 0.44],
         "ExposureCompensation": -0.4,
         "Brightness": 2
       },

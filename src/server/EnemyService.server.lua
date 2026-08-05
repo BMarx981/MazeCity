@@ -26,6 +26,14 @@ local REPLAN_DRIFT = 8
 -- what keeps pathfinding cost proportional to where players actually are.
 local DORMANT_POLL = 2
 
+-- Placeholder rig geometry, in studs. The head is a 1.4 ball, so the eyes sit
+-- just proud of its front face; anything smaller stops reading as a face at
+-- corridor distance.
+local EYE_SIZE = 0.34
+local EYE_SPREAD = 0.3
+local EYE_HEIGHT = 0.16
+local EYE_DEPTH = 0.6
+
 local enemyFolder = ServerStorage:FindFirstChild("Enemies")
 
 local liveFolder = workspace:FindFirstChild("LiveEnemies")
@@ -65,6 +73,23 @@ local function makePlaceholder(enemyType)
 	head.CFrame = root.CFrame * CFrame.new(0, 1.7, 0)
 	head.Parent = model
 	weld(root, head)
+
+	-- Two eyes are most of what "a real rig" was going to buy: a blank neon ball
+	-- is scenery, the same ball with eyes is looking at you. Front is -Z.
+	for _, side in ipairs({ -1, 1 }) do
+		local eye = Instance.new("Part")
+		eye.Name = side < 0 and "EyeLeft" or "EyeRight"
+		eye.Size = Vector3.new(EYE_SIZE, EYE_SIZE, EYE_SIZE)
+		eye.Shape = Enum.PartType.Ball
+		eye.Color = Config.Juice.EnemyEyeColor
+		eye.Material = Enum.Material.SmoothPlastic
+		eye.CanCollide = false
+		eye.CanQuery = false
+		eye.Massless = true
+		eye.CFrame = head.CFrame * CFrame.new(side * EYE_SPREAD, EYE_HEIGHT, -EYE_DEPTH)
+		eye.Parent = model
+		weld(head, eye)
+	end
 
 	local humanoid = Instance.new("Humanoid")
 	humanoid.RigType = Enum.HumanoidRigType.R6
@@ -119,20 +144,71 @@ local function nearestTarget(root, leash)
 	return best
 end
 
+-- Repaints every part of the rig for the length of the windup, then puts the
+-- original colours back. Reading the colours at flash time rather than at spawn
+-- means a custom rig with per-part colouring survives the round trip.
+local function flashRig(model, seconds)
+	local original = {}
+	for _, part in ipairs(model:GetDescendants()) do
+		if part:IsA("BasePart") then
+			original[part] = part.Color
+			part.Color = Config.Juice.EnemyTellColor
+		end
+	end
+	task.delay(seconds, function()
+		for part, color in pairs(original) do
+			if part.Parent then
+				part.Color = color
+			end
+		end
+	end)
+end
+
+local function makeGrowl(root)
+	local growl = Instance.new("Sound")
+	growl.Name = "Growl"
+	growl.SoundId = Config.Sounds.EnemyGrowl
+	growl.Volume = Config.Juice.EnemyGrowlVolume
+	growl.Looped = true
+	growl.RollOffMode = Enum.RollOffMode.Linear
+	growl.RollOffMinDistance = Config.Juice.EnemyGrowlNearRange
+	growl.RollOffMaxDistance = Config.Juice.EnemyGrowlRange
+	growl.PlaybackSpeed = Config.Juice.EnemyGrowlPitchFar
+	growl.Parent = root
+	return growl
+end
+
 local function driveEnemy(model, humanoid, root, profile, marker)
 	local lastAttack = 0
+	local windingUp = false
+	local growl = makeGrowl(root)
 
+	-- Damage is delayed by the length of the flash and only lands if the player
+	-- is still within reach when it ends, so a hit is something the player saw
+	-- coming and could still walk out of.
 	root.Touched:Connect(function(hit)
 		local char = hit:FindFirstAncestorOfClass("Model")
 		local targetHum = char and char:FindFirstChildOfClass("Humanoid")
 		if not targetHum or not Players:GetPlayerFromCharacter(char) then
 			return
 		end
-		if os.clock() - lastAttack < profile.attackCooldown then
+		if windingUp or os.clock() - lastAttack < profile.attackCooldown then
 			return
 		end
+		windingUp = true
 		lastAttack = os.clock()
-		targetHum:TakeDamage(profile.damage)
+		flashRig(model, Config.Juice.EnemyTellSeconds)
+
+		task.delay(Config.Juice.EnemyTellSeconds, function()
+			windingUp = false
+			local hrp = char:FindFirstChild("HumanoidRootPart")
+			if not hrp or targetHum.Health <= 0 or not root.Parent then
+				return
+			end
+			if (hrp.Position - root.Position).Magnitude <= Config.Juice.EnemyTellReach then
+				targetHum:TakeDamage(profile.damage)
+			end
+		end)
 	end)
 
 	task.spawn(function()
@@ -144,13 +220,25 @@ local function driveEnemy(model, humanoid, root, profile, marker)
 
 		while model.Parent and humanoid.Health > 0 do
 			if not anyPlayerWithin(root, Config.EnemyActivationRange) then
+				-- A city holds thousands of these and almost all of them are out
+				-- of earshot. The growl is bound to the same activation gate as
+				-- the pathfinding rather than left looping everywhere.
+				growl.Playing = false
 				task.wait(DORMANT_POLL)
 			else
 				local target = nearestTarget(root, profile.leash)
 				if not target then
+					growl.Playing = false
 					task.wait(0.6)
 				else
 					local aim = target.Position
+
+					growl.Playing = true
+					local closeness = 1 - math.clamp((aim - root.Position).Magnitude / profile.leash, 0, 1)
+					local j = Config.Juice
+					growl.PlaybackSpeed = j.EnemyGrowlPitchFar
+						+ (j.EnemyGrowlPitchNear - j.EnemyGrowlPitchFar) * closeness
+
 					local ok = pcall(function()
 						path:ComputeAsync(root.Position, aim)
 					end)
@@ -184,6 +272,7 @@ local function driveEnemy(model, humanoid, root, profile, marker)
 	end)
 
 	humanoid.Died:Connect(function()
+		growl:Stop()
 		task.delay(3, function()
 			model:Destroy()
 		end)

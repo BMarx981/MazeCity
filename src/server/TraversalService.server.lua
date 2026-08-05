@@ -2,6 +2,7 @@
 -- Slide between sections, plus the roof deck bounce pads.
 
 local CollectionService = game:GetService("CollectionService")
+local Debris = game:GetService("Debris")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
@@ -9,6 +10,41 @@ local Config = require(ReplicatedStorage:WaitForChild("MazeConfig"))
 
 local riding = {}
 local bounceCooldown = {}
+
+-- Effects hang off the rider's own character, never off the tagged part that
+-- triggered them: those parts live inside workspace.MazeCity, which is generator
+-- output and stays exactly as it was built.
+local function playOnce(parent, assetId, volume)
+	local sound = Instance.new("Sound")
+	sound.SoundId = assetId
+	sound.Volume = volume
+	sound.Parent = parent
+	sound:Play()
+	Debris:AddItem(sound, sound.TimeLength > 0 and sound.TimeLength + 1 or 5)
+end
+
+local function puffDust(root)
+	local attachment = Instance.new("Attachment")
+	attachment.Position = Vector3.new(0, -2.6, 0)
+	attachment.Parent = root
+
+	local emitter = Instance.new("ParticleEmitter")
+	emitter.Texture = Config.Juice.BounceDustTexture
+	emitter.Color = ColorSequence.new(Config.Juice.BounceDustColor)
+	emitter.Transparency = NumberSequence.new({
+		NumberSequenceKeypoint.new(0, 0.35),
+		NumberSequenceKeypoint.new(1, 1),
+	})
+	emitter.Size = NumberSequence.new(1.2, 3.4)
+	emitter.Lifetime = NumberRange.new(0.35, 0.6)
+	emitter.Speed = NumberRange.new(6, 12)
+	emitter.SpreadAngle = Vector2.new(180, 180)
+	emitter.Rate = 0
+	emitter.Parent = attachment
+	emitter:Emit(Config.Juice.BounceDustParticles)
+
+	Debris:AddItem(attachment, 2)
+end
 
 local function playerFrom(hit)
 	local char = hit:FindFirstAncestorOfClass("Model")
@@ -25,10 +61,14 @@ local function playerFrom(hit)
 end
 
 local function endRide(player, humanoid)
-	if not riding[player] then
+	local ride = riding[player]
+	if not ride then
 		return
 	end
 	riding[player] = nil
+	if ride.whoosh then
+		ride.whoosh:Destroy()
+	end
 	if humanoid then
 		humanoid.PlatformStand = false
 	end
@@ -47,12 +87,20 @@ local function bindEntrance(part)
 			return
 		end
 
-		riding[player] = os.clock()
+		local whoosh = Instance.new("Sound")
+		whoosh.SoundId = Config.Sounds.SlideWhoosh
+		whoosh.Volume = Config.Juice.SlideWhooshVolume
+		whoosh.Looped = true
+		whoosh.Parent = root
+		whoosh:Play()
+
+		riding[player] = { startedAt = os.clock(), whoosh = whoosh }
 		humanoid.PlatformStand = true
 		root.AssemblyLinearVelocity = root.CFrame.LookVector * Config.SlideEntrySpeed
 
 		task.delay(Config.SlideMaxSeconds, function()
-			if riding[player] and os.clock() - riding[player] >= Config.SlideMaxSeconds - 0.1 then
+			local ride = riding[player]
+			if ride and os.clock() - ride.startedAt >= Config.SlideMaxSeconds - 0.1 then
 				endRide(player, humanoid)
 			end
 		end)
@@ -111,6 +159,9 @@ local function bindBouncePad(part)
 
 		local power = part:GetAttribute("Power") or Config.BouncePadPower
 		root.AssemblyLinearVelocity = Vector3.new(root.AssemblyLinearVelocity.X, power, root.AssemblyLinearVelocity.Z)
+
+		playOnce(root, Config.Sounds.BouncePad, Config.Juice.BouncePadVolume)
+		puffDust(root)
 	end)
 end
 
@@ -129,6 +180,6 @@ for tag, binder in pairs(binders) do
 end
 
 Players.PlayerRemoving:Connect(function(player)
-	riding[player] = nil
+	endRide(player, nil)
 	bounceCooldown[player] = nil
 end)
