@@ -145,8 +145,18 @@ local function enterFloor(player, trigger)
 end
 
 local roofCache = {}
+local roofWarned = {}
 
+-- A miss here is silent by construction: the poll below just keeps returning
+-- false and the tower can never be finished. Warn once per tower so the cause
+-- is visible in Output instead of showing up as a timer that never stops. The
+-- usual cause is geometry left in the place file from a previous session, whose
+-- towers carry LevelTrigger tags but no RoofTrigger; delete workspace.MazeCity.
 local function findRoofTrigger(section, building)
+	if section == nil or building == nil then
+		return nil
+	end
+
 	local key = section .. ":" .. building
 	local cached = roofCache[key]
 	if cached and cached.Parent then
@@ -157,6 +167,18 @@ local function findRoofTrigger(section, building)
 			roofCache[key] = part
 			return part
 		end
+	end
+
+	if not roofWarned[key] then
+		roofWarned[key] = true
+		warn(
+			string.format(
+				"TowerTimerService: no RoofTrigger for section %s building %s (%d tagged in total), so this tower cannot be completed",
+				tostring(section),
+				tostring(building),
+				#CollectionService:GetTagged("RoofTrigger")
+			)
+		)
 	end
 	return nil
 end
@@ -293,6 +315,16 @@ bindTag("LevelTrigger", function(player, trigger)
 		end
 	end
 	enterFloor(player, trigger)
+end)
+
+-- Second path to the same completion. The poll is the one with no failure mode
+-- and normally gets there first, at which point state is already nil and this
+-- does nothing; it exists so a tower still finishes if the poll's lookup misses.
+bindTag("RoofTrigger", function(player, trigger)
+	local s = state[player]
+	if s and inSameTower(s, trigger) then
+		completeTower(player)
+	end
 end)
 
 local function bindPlayer(player)
