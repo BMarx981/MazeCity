@@ -321,11 +321,31 @@ compass.Enabled = false
 compass.ResetOnSpawn = false
 compass.Parent = player.PlayerGui
 
-local arrow =
-	label(compass, UDim2.fromScale(1, 1), UDim2.fromScale(0, 0), Enum.Font.GothamBlack, 1, Config.Compass.Color)
+-- White, not Compass.Color: a UIGradient multiplies against TextColor3 rather
+-- than replacing it, so tinting a gold label red gives a muddy orange that is
+-- neither colour. Leaving the label white makes the gradient below the only
+-- thing deciding what the arrow looks like, which is what its two config
+-- colours then actually mean.
+local arrow = label(compass, UDim2.fromScale(1, 1), UDim2.fromScale(0, 0), Enum.Font.GothamBlack, 1, WHITE)
 arrow.Text = "▲"
 arrow.TextScaled = true
 arrow.TextStrokeTransparency = 0.4
+
+-- The hot tip, drawn as a gradient down the one glyph rather than as a second
+-- clipped copy of it: ClipsDescendants is unreliable once a frame is rotated,
+-- and this arrow is rotated every frame. A gradient is applied in the label's
+-- own space before the rotation, so the red stays on the point wherever the
+-- point happens to be aiming, and it costs no extra instances.
+local tint = Instance.new("UIGradient")
+tint.Color = ColorSequence.new({
+	ColorSequenceKeypoint.new(0, Config.Compass.TipColor),
+	ColorSequenceKeypoint.new(Config.Compass.TipFraction, Config.Compass.Color),
+	ColorSequenceKeypoint.new(1, Config.Compass.Color),
+})
+-- 90 degrees turns the default left-to-right ramp into top-to-bottom, which puts
+-- keypoint 0 at the top of the label, where the point of the triangle is.
+tint.Rotation = 90
+tint.Parent = arrow
 
 local floorContext = nil
 local compassTarget = nil

@@ -515,6 +515,16 @@ Config.Compass = {
 	Size = 64, -- pixels
 	HeightOffset = 3.2, -- studs above the player's head
 	Color = Color3.fromRGB(255, 220, 120),
+	-- The point is a hotter colour than the body. A triangle in one flat colour
+	-- reads as a shape rather than as a direction: there is nothing on it for the
+	-- eye to land on, so it says "something is here" where it should say "that
+	-- way". Colouring only the tip is what makes it a pointer.
+	TipColor = Color3.fromRGB(255, 96, 72),
+	-- How far down the arrow the tip colour has faded back into Color, as a
+	-- fraction of the label. Small is a sharp hot point; past about 0.6 the whole
+	-- arrow just looks red and the tip stops being a tip. The glyph does not fill
+	-- its box, so this is a bigger number than the visible red fraction.
+	TipFraction = 0.42,
 	RetargetSeconds = 1, -- how often the target part is re-resolved, for lazily built sections
 }
 
