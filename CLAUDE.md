@@ -40,6 +40,8 @@ maze-city/
 
 Rojo infers class from suffix: `.server.lua` is a Script, `.client.lua` is a LocalScript, plain `.lua` is a ModuleScript. Keep that convention for new files.
 
+`default.project.json` maps the three `src/` folders wholesale rather than naming files one by one, so a new file ships by being in the right folder. It used to enumerate every script, and `PickupService` was written without being added: coins generated, nothing consumed the tag, and the symptom was a player running straight through them. A service that appears to do nothing is worth checking against the built place (`rojo build -o /tmp/check.rbxlx`) before it is debugged as a logic bug.
+
 ## Toolchain and workflow
 
 Install tools once: `rokit install`. Rokit reads the existing `aftman.toml` manifest, so no migration is needed. Aftman itself is archived upstream and its Homebrew formula was disabled in July 2026; do not try to install it.

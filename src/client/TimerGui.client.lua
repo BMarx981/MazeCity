@@ -277,7 +277,11 @@ local function playEvent(event)
 			2,
 			false
 		)
-		playSound(Config.Sounds.FloorClear, juice.FloorClearVolume)
+		for _, note in ipairs(Config.Sounds.FloorClearArpeggio) do
+			task.delay(note[1], function()
+				playSound(Config.Sounds.FloorClear, juice.FloorClearVolume, note[2])
+			end)
+		end
 		confetti(juice.ConfettiFloor)
 		pulseScore(1)
 	elseif event.kind == "tower" then

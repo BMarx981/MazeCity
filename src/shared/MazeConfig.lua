@@ -44,6 +44,11 @@ Config.World = {
 	-- remove between them; raise it for a shortcut-hunting game, drop it toward
 	-- zero to go back to decorative phantoms.
 	PhantomMaxShortcut = 0.35,
+	-- How see-through a phantom is, so 0.25 is a pane that is three quarters
+	-- there. A phantom the player cannot see is not a shortcut, it is a hole
+	-- they fall through by accident, which is why this is a knob and not a
+	-- constant buried in the generator.
+	PhantomTransparency = 0.25,
 	-- Collectibles. A floor is 100 cells and exactly one of them mattered, so
 	-- every dead end was pure punishment. Coins are what turn a wrong turn into a
 	-- find: the dead-end ones pay for exploring, and the few on the route the
@@ -265,7 +270,7 @@ Config.ZipMaxSeconds = 20 -- safety release, mirroring SlideMaxSeconds
 -- you like; this table is the only place in the codebase that names a sound.
 
 Config.Sounds = {
-	FloorClear = "rbxasset://sounds/electronicpingshort.wav", -- bright ping on clearing a floor
+	FloorClear = "rbxasset://sounds/electronicpingshort.wav", -- bright ping, played as the three-note rise below on clearing a floor
 	TowerClear = "rbxasset://sounds/electronicpingshort.wav", -- same ping, played as the arpeggio below, for topping out
 	Death = "rbxasset://sounds/uuhhh.mp3", -- the classic Roblox grunt, used as the death sting
 	SlideWhoosh = "rbxasset://sounds/action_falling.mp3", -- looping wind, held for the length of a slide ride
@@ -279,6 +284,10 @@ Config.Sounds = {
 	-- of the one chime, because nothing shipping in the client is a fanfare.
 	-- Each entry is { seconds after the banner, PlaybackSpeed }.
 	TowerClearArpeggio = { { 0, 1 }, { 0.12, 1.26 }, { 0.24, 1.5 }, { 0.42, 2 } },
+	-- Clearing a floor got the same treatment for the same reason: one ping is
+	-- an acknowledgement, three rising ones are a reward. Kept to three notes
+	-- ending below the tower's top note, so a floor never sounds like a roof.
+	FloorClearArpeggio = { { 0, 1 }, { 0.1, 1.26 }, { 0.2, 1.5 } },
 	PowerupArpeggio = { { 0, 1.1 }, { 0.08, 1.5 }, { 0.16, 1.9 } },
 }
 
@@ -346,6 +355,12 @@ Config.Juice = {
 -- which turn.
 
 Config.Compass = {
+	-- Stays on. The arrow is the difference between a hard floor and an unfair
+	-- one, and it is the only way to check a generated maze is solvable without
+	-- reading the grid, so it is a debugging tool as much as a player aid. If it
+	-- ever becomes something bought with coins, this is the switch to flip: the
+	-- gate belongs on the server telling the client whether the player owns it,
+	-- not on deleting the arrow.
 	Enabled = true,
 	Size = 64, -- pixels
 	HeightOffset = 3.2, -- studs above the player's head

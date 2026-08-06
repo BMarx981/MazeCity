@@ -33,6 +33,13 @@ local CFG = {
 	-- wrong direction. Capped, a shortcut is worth hunting for and the floor is
 	-- still a floor.
 	PHANTOM_MAX_SHORTCUT = 0.35,
+	-- ForceField was the wrong material: its shader is drawn as a faint energy
+	-- sheen rather than as the part, so a phantom read as an empty gap no matter
+	-- what Transparency said. Neon draws the slab itself, so the number here is
+	-- the number you see: 0.25 is a solid-looking pane you can still see the
+	-- corridor through.
+	PHANTOM_TRANSPARENCY = 0.25,
+	PHANTOM_COLOR = Color3.fromRGB(150, 235, 255),
 	-- Lamps sit on a LAMP_GRID square grid, so spacing is FX/(LAMP_GRID+1): 62.5
 	-- studs at 3, 50 at 4. Range stopped being the binding constraint once lamp
 	-- shadows went on, because a shadowed lamp only lights corridors it can
@@ -147,6 +154,7 @@ local function refreshFromConfig()
 	CFG.MOVING_WALL_MIN_LEVEL = w.MovingWallMinLevel or CFG.MOVING_WALL_MIN_LEVEL
 	CFG.PHANTOM_PER_LEVEL = w.PhantomWallsPerLevel or CFG.PHANTOM_PER_LEVEL
 	CFG.PHANTOM_MAX_SHORTCUT = w.PhantomMaxShortcut or CFG.PHANTOM_MAX_SHORTCUT
+	CFG.PHANTOM_TRANSPARENCY = setting(w.PhantomTransparency, CFG.PHANTOM_TRANSPARENCY)
 	CFG.COIN_DEAD_END_PER_LEVEL = setting(w.DeadEndCoinsPerLevel, CFG.COIN_DEAD_END_PER_LEVEL)
 	CFG.COIN_PATH_PER_LEVEL = setting(w.PathCoinsPerLevel, CFG.COIN_PATH_PER_LEVEL)
 	CFG.POWERUP_EVERY_N_LEVELS = setting(w.PowerupEveryNLevels, CFG.POWERUP_EVERY_N_LEVELS)
@@ -711,13 +719,18 @@ local function tagPhantoms(interior, g, blocked, entryCell, stairCell, count, rn
 		table.remove(pool, chosen.index)
 		opened[edgeKey(w.x, w.z, w.side)] = true
 
-		-- A phantom is a shortcut the player is meant to spot and choose. At the
-		-- old 0.12 it was 88% opaque and read as solid, so it got walked into
-		-- rather than through. Phantoms are never required: the carved maze is a
-		-- spanning tree, and making a wall passable only ever adds a connection.
+		-- A phantom is a shortcut the player is meant to spot and choose, so it
+		-- has to be visible as a thing first and see-through second. Two earlier
+		-- passes got that backwards: 0.12 opaque read as an ordinary wall and got
+		-- walked into, then ForceField at 0.62 read as no wall at all. Neon at
+		-- PHANTOM_TRANSPARENCY reads as a lit pane, which also makes it the
+		-- brightest thing in a dark corridor. Phantoms are never required: the
+		-- carved maze is a spanning tree, and making a wall passable only ever
+		-- adds a connection.
 		w.part.CanCollide = false
-		w.part.Transparency = 0.62
-		w.part.Material = Enum.Material.ForceField
+		w.part.Transparency = CFG.PHANTOM_TRANSPARENCY
+		w.part.Color = CFG.PHANTOM_COLOR
+		w.part.Material = Enum.Material.Neon
 		w.part.CastShadow = false
 		w.part.Name = "PhantomWall"
 		tagWithContext(w.part, "PhantomWall", ctx.section, ctx.building, ctx.level)

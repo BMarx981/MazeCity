@@ -3,21 +3,18 @@
   "tree": {
     "$className": "DataModel",
     "ReplicatedStorage": {
-      "MazeConfig": { "$path": "src/shared/MazeConfig.lua" }
+      "$className": "ReplicatedStorage",
+      "$path": "src/shared"
     },
     "ServerScriptService": {
-      "MazeGenerator": { "$path": "src/server/MazeGenerator.lua" },
-      "WorldBootstrap": { "$path": "src/server/WorldBootstrap.server.lua" },
-      "TowerTimerService": { "$path": "src/server/TowerTimerService.server.lua" },
-      "MovingWallService": { "$path": "src/server/MovingWallService.server.lua" },
-      "EnemyService": { "$path": "src/server/EnemyService.server.lua" },
-      "TraversalService": { "$path": "src/server/TraversalService.server.lua" }
+      "$className": "ServerScriptService",
+      "$path": "src/server"
     },
     "StarterPlayer": {
       "$className": "StarterPlayer",
       "StarterPlayerScripts": {
         "$className": "StarterPlayerScripts",
-        "TimerGui": { "$path": "src/client/TimerGui.client.lua" }
+        "$path": "src/client"
       }
     },
     "Workspace": {
