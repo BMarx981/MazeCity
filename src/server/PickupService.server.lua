@@ -133,11 +133,14 @@ local function applyPowerup(player, kindName)
 	end
 
 	if profile.walkSpeedMultiplier then
-		local base = humanoid.WalkSpeed
+		-- SaveService stamps BaseWalkSpeed on the character: multiplying and
+		-- restoring against it means a Fast Feet purchase made mid-boost is not
+		-- quietly undone when the boost ends.
+		local base = char:GetAttribute("BaseWalkSpeed") or humanoid.WalkSpeed
 		humanoid.WalkSpeed = base * profile.walkSpeedMultiplier
 		table.insert(undo, function()
 			if humanoid.Parent then
-				humanoid.WalkSpeed = base
+				humanoid.WalkSpeed = char:GetAttribute("BaseWalkSpeed") or base
 			end
 		end)
 	end
@@ -304,7 +307,10 @@ local function sweep(player)
 	end
 
 	sweepParams.FilterDescendantsInstances = { char }
-	local near = workspace:GetPartBoundsInRadius(root.Position, Config.Collectibles.PickupRadius, sweepParams)
+	-- MagnetBonus is the Coin Magnet upgrade, stamped on the player by
+	-- SaveService; zero studs until bought.
+	local radius = Config.Collectibles.PickupRadius + (player:GetAttribute("MagnetBonus") or 0)
+	local near = workspace:GetPartBoundsInRadius(root.Position, radius, sweepParams)
 
 	for _, part in ipairs(near) do
 		if not taken[part] then

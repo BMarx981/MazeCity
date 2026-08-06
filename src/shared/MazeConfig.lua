@@ -211,31 +211,99 @@ function Config.getPowerupKind(name)
 end
 
 -- ============================================================
+-- Shop and persistence
+-- ============================================================
+-- The shop is what coins are for. One stall per tower plaza, built by the
+-- generator as a pure function of the door position (invariant 6: no random
+-- numbers), bought from via ProximityPrompts that SaveService binds through the
+-- ShopItem tag. Upgrades are permanent, tiered, and paid for out of
+-- leaderstats.Coins; SaveService owns the profile they live in.
+--
+-- Costs are tuned against a floor paying 13 coins fully explored: the first
+-- tier of something lands inside the first tower, the last tier is a few
+-- towers of pocket money, and nothing is ever locked, only slower.
+
+Config.Shop = {
+	-- The baseline the upgrades move. These are Roblox's character defaults,
+	-- written down here because SaveService re-applies them on every spawn and
+	-- a magic 16 in a service is how the enemy tuning comment goes stale.
+	BaseWalkSpeed = 16,
+	BaseJumpPower = 50,
+	BaseJumpHeight = 7.2,
+	-- Pedestal order on the stall, left to right.
+	Order = { "Speed", "Jump", "Magnet" },
+	Upgrades = {
+		Speed = {
+			Label = "Fast Feet",
+			Costs = { 25, 60, 120 },
+			-- Absolute studs per second per tier, not a multiplier, so the top
+			-- tier is a known 20.5 the enemy band below is tuned against.
+			WalkSpeedPerTier = 1.5,
+			Color = Color3.fromRGB(120, 235, 255),
+		},
+		Jump = {
+			Label = "Moon Boots",
+			Costs = { 20, 50, 100 },
+			-- Fractional boost per tier, applied to whichever jump system the
+			-- character is using (JumpPower or JumpHeight).
+			JumpBoostPerTier = 0.15,
+			Color = Color3.fromRGB(190, 160, 255),
+		},
+		Magnet = {
+			Label = "Coin Magnet",
+			Costs = { 30, 70, 140 },
+			-- Studs added to PickupService's sweep radius per tier. The base
+			-- radius is Collectibles.PickupRadius; three tiers roughly doubles it,
+			-- which inhales a corridor of coins without vacuuming through walls
+			-- badly enough to feel like cheating.
+			RadiusPerTier = 2.5,
+			Color = Color3.fromRGB(255, 214, 110),
+		},
+	},
+	PromptDistance = 10,
+	PromptHoldSeconds = 0.25,
+}
+
+-- One DataStore profile per player: coins, upgrade tiers, furthest section
+-- reached. A profile that fails to load is never saved over, so a Studio
+-- session without API access (or a bad day at the datastore) degrades to
+-- session-only progress rather than wiping anything.
+Config.Persistence = {
+	DataStoreName = "MazeCityProfiles",
+	-- Version lives in the key, so a schema change starts clean without
+	-- touching old data.
+	KeyPrefix = "v1_p_",
+	AutosaveSeconds = 90,
+}
+
+-- ============================================================
 -- Enemies
 -- ============================================================
 -- Each building carries an EnemyType attribute derived from its style, and
 -- every EnemySpawn marker inherits it. Override per section here if you want
 -- a whole district to feel different regardless of building style.
 
--- Player WalkSpeed is 16 and every walkSpeed here is below it, on purpose: a
--- straight corridor is always an escape, so no chase is ever unwinnable and no
--- enemy can corner a player who keeps moving. Threat is carried by the growl,
--- the eyes, the windup flash and the chase itself, Pac-Man style, not by the
--- numbers. The spread from 12 to 15 is what still makes the types feel
--- different: a Charger is close enough to keep the pressure on, a Sentry is a
--- thing to walk around. Damage is low enough that a bad corner costs progress
--- toward the speed bonus rather than the floor. Leashes are wide enough to
--- cross most of a 250-stud floor.
+-- Every walkSpeed here is below the unupgraded player's 16, on purpose: a
+-- straight corridor is always an escape, even for a player who has never
+-- bought anything, so no chase is ever unwinnable and no enemy can corner a
+-- player who keeps moving. Threat is carried by the growl, the eyes, the
+-- windup flash and the chase itself, Pac-Man style, not by the numbers.
 --
--- Milestone P adds a walk-speed upgrade, which moves the player's 16 baseline.
--- Re-read this block when it lands.
+-- The Shop's Fast Feet upgrade moves the player baseline as high as 20.5, so
+-- the band sits deliberately high in the space under 16: a fresh player still
+-- escapes but feels the pressure, and an upgraded one walks away from
+-- everything with ease, which is exactly what they paid for. The spread is
+-- what makes the types feel different: a Charger is close enough to keep the
+-- pressure on, a Sentry is a thing to walk around. Damage is low enough that a
+-- bad corner costs progress toward the speed bonus rather than the floor.
+-- Leashes are wide enough to cross most of a 250-stud floor.
 Config.EnemyProfiles = {
-	Drifter = { walkSpeed = 12.5, damage = 6, leash = 150, attackCooldown = 1.2, color = Color3.fromRGB(120, 160, 220) },
-	Stalker = { walkSpeed = 13.5, damage = 9, leash = 190, attackCooldown = 1.0, color = Color3.fromRGB(200, 150, 90) },
-	Sentry = { walkSpeed = 12, damage = 13, leash = 120, attackCooldown = 1.8, color = Color3.fromRGB(150, 150, 160) },
-	Swarmer = { walkSpeed = 14, damage = 4, leash = 170, attackCooldown = 0.6, color = Color3.fromRGB(110, 200, 170) },
-	Lurker = { walkSpeed = 13, damage = 11, leash = 135, attackCooldown = 1.4, color = Color3.fromRGB(210, 205, 185) },
-	Charger = { walkSpeed = 15, damage = 10, leash = 210, attackCooldown = 1.1, color = Color3.fromRGB(210, 100, 95) },
+	Drifter = { walkSpeed = 13, damage = 6, leash = 150, attackCooldown = 1.2, color = Color3.fromRGB(120, 160, 220) },
+	Stalker = { walkSpeed = 14.5, damage = 9, leash = 190, attackCooldown = 1.0, color = Color3.fromRGB(200, 150, 90) },
+	Sentry = { walkSpeed = 12.5, damage = 13, leash = 120, attackCooldown = 1.8, color = Color3.fromRGB(150, 150, 160) },
+	Swarmer = { walkSpeed = 15, damage = 4, leash = 170, attackCooldown = 0.6, color = Color3.fromRGB(110, 200, 170) },
+	Lurker = { walkSpeed = 13.5, damage = 11, leash = 135, attackCooldown = 1.4, color = Color3.fromRGB(210, 205, 185) },
+	Charger = { walkSpeed = 15.5, damage = 10, leash = 210, attackCooldown = 1.1, color = Color3.fromRGB(210, 100, 95) },
 }
 
 -- Section index -> enemy type that replaces whatever the building style picked.
@@ -410,6 +478,10 @@ Config.Juice = {
 	CoinSparkleColor = Color3.fromRGB(255, 214, 110),
 	PowerupVolume = 0.6,
 	PowerupBannerSeconds = 2,
+	ShopBannerSeconds = 1.6,
+	-- A refused purchase gets the coin ping slowed down instead of a new asset:
+	-- same voice, falling instead of rising, which is the whole message.
+	ShopDeniedPitch = 0.6,
 	-- The Reveal trail. Markers are drawn client-side into their own workspace
 	-- folder, never into MazeCity, and one Highlight over the lot of them is what
 	-- makes the trail readable through a wall; adorning per marker would blow past

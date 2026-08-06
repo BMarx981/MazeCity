@@ -93,6 +93,15 @@ local CFG = {
 	ZIP_CABLE_THICKNESS = 0.6,
 	ZIP_PAD = 12,
 
+	-- Upgrade shop stall on the plaza. OFFSET runs along the facade from the
+	-- door centre, putting the stall beside the spawn pad (which reaches 11
+	-- either side of the door) without crowding it; OUT is measured from the
+	-- maze footprint edge like ZIP_OUTSET, and 20 keeps the stall inside the
+	-- plaza band (the facade face is at 8, the spawn pad ends at 36) and well
+	-- clear of the zipline landing at 50.
+	SHOP_OFFSET = 26,
+	SHOP_OUT = 20,
+
 	STAIR_RISER = 0.75,
 	STAIR_WIDTH_FRAC = 0.48,
 	STAIR_RUN_CELLS = 1.8,
@@ -1712,6 +1721,148 @@ end
 -- keeps the exact position it had and the part-count delta is exactly three per
 -- building. Drawing from the threaded rng here would reshuffle every building
 -- in the city and retire the M4 baseline for a feature that does not need it.
+-- ============================================================
+-- Upgrade shop
+-- ============================================================
+-- One stall per plaza, a pure function of the door position and Config.Shop
+-- (invariant 6: no random numbers, so adding it moved nothing that already
+-- existed). The stall sits on the opposite side of the door from the zipline's
+-- boarding corner, so the plaza reads as: spawn pad at the door, shop one way,
+-- zip landing straight out. Generation builds the pedestals, prompts and price
+-- boards; SaveService owns what a purchase does, discovered through the
+-- ShopItem tag like every other service.
+
+local function buildShop(parent, origin, style, entrySide, entryCell, ctx)
+	local folder = Instance.new("Folder")
+	folder.Name = "Shop"
+	folder.Parent = parent
+
+	local horizontal = (entrySide == "north" or entrySide == "south")
+	local span = horizontal and FX or FZ
+	local doorCenter = cellCenter(entryCell.x, entryCell.z)
+	local doorU = horizontal and doorCenter.X or doorCenter.Z
+
+	-- The zipline boards from whichever facade corner is farther from the door,
+	-- so the stall goes toward the nearer one.
+	local dir = (doorU > span / 2) and 1 or -1
+	local shopU = doorU + dir * CFG.SHOP_OFFSET
+
+	local function at(u, v, y)
+		if entrySide == "north" then
+			return origin + Vector3.new(u, y, -v)
+		elseif entrySide == "south" then
+			return origin + Vector3.new(u, y, FZ + v)
+		elseif entrySide == "west" then
+			return origin + Vector3.new(-v, y, u)
+		end
+		return origin + Vector3.new(FX + v, y, u)
+	end
+
+	local function sized(uLen, h, vLen)
+		if horizontal then
+			return Vector3.new(uLen, h, vLen)
+		end
+		return Vector3.new(vLen, h, uLen)
+	end
+
+	makePart(
+		folder,
+		"ShopBase",
+		CFrame.new(at(shopU, CFG.SHOP_OUT, 0.25)),
+		sized(16, 0.5, 9),
+		style.trim,
+		Enum.Material.SmoothPlastic
+	)
+	for _, side in ipairs({ -1, 1 }) do
+		makePart(
+			folder,
+			"ShopPost",
+			CFrame.new(at(shopU + side * 7, CFG.SHOP_OUT + 3.5, 4.75)),
+			sized(0.8, 8.5, 0.8),
+			style.skin,
+			style.material
+		)
+	end
+	local canopy = makePart(
+		folder,
+		"ShopCanopy",
+		CFrame.new(at(shopU, CFG.SHOP_OUT, 9.35)),
+		sized(18, 0.7, 11),
+		style.trim,
+		style.material
+	)
+
+	local sign = Instance.new("BillboardGui")
+	sign.Size = UDim2.new(0, 170, 0, 34)
+	sign.StudsOffset = Vector3.new(0, 3, 0)
+	sign.MaxDistance = 300
+	sign.Parent = canopy
+
+	local signLabel = Instance.new("TextLabel")
+	signLabel.Size = UDim2.new(1, 0, 1, 0)
+	signLabel.BackgroundColor3 = Color3.fromRGB(18, 18, 20)
+	signLabel.BackgroundTransparency = 0.25
+	signLabel.TextColor3 = Color3.fromRGB(255, 224, 130)
+	signLabel.Font = Enum.Font.GothamBold
+	signLabel.TextSize = 18
+	signLabel.Text = "UPGRADE SHOP"
+	signLabel.Parent = sign
+
+	for i, key in ipairs(Config.Shop.Order) do
+		local def = Config.Shop.Upgrades[key]
+		local u = shopU + (i - (#Config.Shop.Order + 1) / 2) * 5
+
+		local pedestal = makePart(
+			folder,
+			"ShopItem_" .. key,
+			CFrame.new(at(u, CFG.SHOP_OUT, 2)),
+			sized(2.4, 3, 2.4),
+			style.skin,
+			Enum.Material.SmoothPlastic
+		)
+
+		local orb = makePart(
+			folder,
+			"ShopOrb_" .. key,
+			CFrame.new(at(u, CFG.SHOP_OUT, 4.4)),
+			Vector3.new(1.6, 1.6, 1.6),
+			def.Color,
+			Enum.Material.Neon
+		)
+		orb.Shape = Enum.PartType.Ball
+		orb.CanCollide = false
+
+		local board = Instance.new("BillboardGui")
+		board.Size = UDim2.new(0, 130, 0, 40)
+		board.StudsOffset = Vector3.new(0, 4.4, 0)
+		board.MaxDistance = 90
+		board.Parent = pedestal
+
+		local boardLabel = Instance.new("TextLabel")
+		boardLabel.Size = UDim2.new(1, 0, 1, 0)
+		boardLabel.BackgroundColor3 = Color3.fromRGB(18, 18, 20)
+		boardLabel.BackgroundTransparency = 0.35
+		boardLabel.TextColor3 = def.Color
+		boardLabel.Font = Enum.Font.GothamBold
+		boardLabel.TextSize = 13
+		boardLabel.Text = def.Label .. "\n" .. table.concat(def.Costs, " / ")
+		boardLabel.Parent = board
+
+		local prompt = Instance.new("ProximityPrompt")
+		prompt.ActionText = "Buy"
+		prompt.ObjectText = def.Label
+		prompt.MaxActivationDistance = Config.Shop.PromptDistance
+		prompt.HoldDuration = Config.Shop.PromptHoldSeconds
+		prompt.RequiresLineOfSight = false
+		prompt.Parent = pedestal
+
+		pedestal:SetAttribute("Upgrade", key)
+		tagWithContext(pedestal, "ShopItem", ctx.section, ctx.building, 0)
+	end
+
+	return folder
+end
+
 local function buildZipline(parent, origin, entrySide, entryCell, ctx)
 	local folder = Instance.new("Folder")
 	folder.Name = "Zipline"
@@ -1820,6 +1971,7 @@ local function buildBuilding(sectionFolder, origin, sectionIndex, buildingIndex,
 	local entryCell = edgeCell(entrySide, rng:NextInteger(2, sideRunLength(entrySide) - 1))
 
 	buildFacade(folder, origin, style, entrySide, entryCell, ctx)
+	buildShop(folder, origin, style, entrySide, entryCell, ctx)
 
 	-- The level loop below reassigns both of these as it spirals up, so the
 	-- ground entry has to be kept if anything after the loop wants it. The

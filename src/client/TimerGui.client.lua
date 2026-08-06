@@ -747,6 +747,52 @@ pickupRemote.OnClientEvent:Connect(function(payload)
 end)
 
 -- ============================================================
+-- Shop
+-- ============================================================
+-- Purchase feedback only. The coins leaving the pocket ride leaderstats like
+-- every other coin movement, and the upgrade itself lands as attributes the
+-- server already applied; all the client owes the player is a banner saying
+-- what just happened, in the upgrade's own colour.
+
+local shopRemote = ReplicatedStorage:WaitForChild("ShopUpdate")
+
+shopRemote.OnClientEvent:Connect(function(payload)
+	if not payload then
+		return
+	end
+	local juice = Config.Juice
+	local def = Config.Shop.Upgrades[payload.upgrade]
+	local color = def and def.Color or Color3.fromRGB(255, 255, 255)
+
+	if payload.kind == "bought" then
+		showBanner(
+			string.format("%s %d/%d", payload.label, payload.tier, payload.maxTier),
+			string.format("-%d coins", payload.cost),
+			color,
+			juice.ShopBannerSeconds,
+			false
+		)
+		for _, note in ipairs(Config.Sounds.PowerupArpeggio) do
+			task.delay(note[1], function()
+				playSound(Config.Sounds.PowerupPickup, juice.PowerupVolume, note[2])
+			end)
+		end
+	elseif payload.kind == "poor" then
+		showBanner(
+			"Not enough coins",
+			string.format("%d more for %s", payload.need, payload.label),
+			color,
+			juice.ShopBannerSeconds,
+			false
+		)
+		playSound(Config.Sounds.CoinPickup, juice.CoinVolume, juice.ShopDeniedPitch)
+	elseif payload.kind == "maxed" then
+		showBanner(payload.label, "Maxed out!", color, juice.ShopBannerSeconds, false)
+		playSound(Config.Sounds.CoinPickup, juice.CoinVolume, juice.ShopDeniedPitch)
+	end
+end)
+
+-- ============================================================
 
 remote.OnClientEvent:Connect(function(payload)
 	if not payload then
