@@ -1036,9 +1036,9 @@ local function buildCollectibles(parent, origin, baseY, g, blocked, entryCell, r
 	-- the floor is also the thing furthest from the route. Only if the level has
 	-- run out of them does it fall back to open maze.
 	if CFG.POWERUP_EVERY_N_LEVELS > 0 and (ctx.level + 1) % CFG.POWERUP_EVERY_N_LEVELS == 0 then
-		local order = Config.Collectibles.PowerupOrder
-		local kind = order[rng:NextInteger(1, #order)]
-
+		-- No kind is drawn here any more. PickupService rolls one when the orb is
+		-- touched, so what an orb is worth is not a property of the city, and the
+		-- same orb is a different prize to the next player to reach it.
 		local pool = deadEnds
 		if #pool == 0 then
 			pool = anywhere()
@@ -1047,19 +1047,18 @@ local function buildCollectibles(parent, origin, baseY, g, blocked, entryCell, r
 		local c = draw(pool)
 		if c then
 			local center = cellCenter(c.x, c.z)
-			local profile = Config.getPowerupKind(kind)
+			local orbColor = Config.Collectibles.PowerupOrbColor
 			local orb = makePart(
 				folder,
 				"Powerup",
 				CFrame.new(origin + Vector3.new(center.X, baseY + CFG.POWERUP_HEIGHT, center.Z)),
 				Vector3.new(CFG.POWERUP_SIZE, CFG.POWERUP_SIZE, CFG.POWERUP_SIZE),
-				profile.color,
+				orbColor,
 				Enum.Material.Neon
 			)
 			orb.Shape = Enum.PartType.Ball
 			orb.CanCollide = false
 			orb.CastShadow = false
-			orb:SetAttribute("Kind", kind)
 			tagWithContext(orb, "Powerup", ctx.section, ctx.building, ctx.level)
 
 			-- Three of these per tower against nine hundred and sixty lamps, so
@@ -1068,7 +1067,7 @@ local function buildCollectibles(parent, origin, baseY, g, blocked, entryCell, r
 			local glow = Instance.new("PointLight")
 			glow.Brightness = 3
 			glow.Range = 26
-			glow.Color = profile.color
+			glow.Color = orbColor
 			glow.Shadows = false
 			glow.Parent = orb
 		end

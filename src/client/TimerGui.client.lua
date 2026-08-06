@@ -657,7 +657,7 @@ end)
 local streakPitch = Config.Juice.CoinPitchBase
 local streakAt = 0
 
-local function coinPickup()
+local function coinPickup(multiplier)
 	local juice = Config.Juice
 	local now = os.clock()
 	if now - streakAt > juice.CoinStreakSeconds then
@@ -667,8 +667,15 @@ local function coinPickup()
 	end
 	streakAt = now
 
+	-- A doubled coin has to sound and look like one, or the multiplier is a
+	-- number changing faster on a chip nobody is watching mid-corridor.
+	local boosted = (multiplier or 1) > 1
 	playSound(Config.Sounds.CoinPickup, juice.CoinVolume, streakPitch)
-	emitBurst(juice.CoinSparkleColor, juice.CoinSparkleParticles, juice.PhantomSparkleSeconds)
+	emitBurst(
+		juice.CoinSparkleColor,
+		boosted and juice.CoinSparkleParticles * 2 or juice.CoinSparkleParticles,
+		juice.PhantomSparkleSeconds
+	)
 	coinIcon.Size = UDim2.fromOffset(22, 22)
 	coinIcon.Position = UDim2.new(0, 9, 0.5, -11)
 	tween(coinIcon, 0.22, { Size = UDim2.fromOffset(16, 16), Position = UDim2.new(0, 12, 0.5, -8) })
@@ -685,7 +692,11 @@ local function powerupStarted(payload)
 	powerUntil = os.clock() + payload.duration
 	powerChip.Visible = true
 
-	showBanner(payload.label or profile.label, "", profile.color, juice.PowerupBannerSeconds, false)
+	-- A lump sum is the one outcome with something to say beyond its name, and it
+	-- lands before the leaderstats change has replicated, so the banner is what
+	-- tells the player what they just got.
+	local sub = payload.coins and string.format("+%d coins", payload.coins) or ""
+	showBanner(payload.label or profile.label, sub, profile.color, juice.PowerupBannerSeconds, false)
 	for _, note in ipairs(Config.Sounds.PowerupArpeggio) do
 		task.delay(note[1], function()
 			playSound(Config.Sounds.PowerupPickup, juice.PowerupVolume, note[2])
@@ -721,7 +732,7 @@ pickupRemote.OnClientEvent:Connect(function(payload)
 		return
 	end
 	if payload.kind == "coin" then
-		coinPickup()
+		coinPickup(payload.multiplier)
 	elseif payload.kind == "powerup" then
 		powerupStarted(payload)
 	elseif payload.kind == "powerupEnded" then

@@ -120,10 +120,12 @@ end
 -- them somewhere to go.
 --
 -- A coin taken is gone for everyone and comes back on a timer, so a floor
--- restarted after a death is worth walking again. PowerupKinds is read by
--- PickupService for the effect and by MazeGenerator for the marker colour;
--- PowerupOrder is what the generator draws from, because pairs() order over a
--- table is not deterministic and every draw in generation has to be.
+-- restarted after a death is worth walking again.
+--
+-- MazeGenerator no longer reads any of the powerup tables: it places an orb and
+-- stops there. PickupService rolls what the orb turns out to be when it is
+-- touched, which is why the roll list is an ordinary list here rather than a
+-- fixed-length one whose length generation depended on.
 
 Config.Collectibles = {
 	CoinValue = 1,
@@ -143,12 +145,20 @@ Config.Collectibles = {
 	-- radius around each player instead, and Touched stays as the instant path.
 	PickupRadius = 8,
 	PickupSweepSeconds = 0.07,
-	-- Four kinds, and the count is load-bearing: MazeGenerator draws one index out
-	-- of this list per powerup, so adding or removing an entry would shift every
-	-- subsequent random draw and reshuffle the city. Swapping an entry is free.
-	-- Jump was here and was dead weight, there being nothing in a maze to jump
-	-- onto or over; Reveal took its slot.
-	PowerupOrder = { "Speed", "Reveal", "Ghost", "Freeze" },
+	-- What an orb can turn out to be. Rolled by PickupService when the orb is
+	-- touched, not stamped by MazeGenerator when it is built, so an orb is a
+	-- mystery box: the same orb is a different thing to the second player to reach
+	-- it, and to the same player after it respawns. Nothing in generation reads
+	-- this list any more, which is why entries can now be added and removed freely
+	-- where the old generation-time draw made the length load-bearing.
+	--
+	-- Jump used to be here and was dead weight, there being nothing in a maze to
+	-- jump onto or over.
+	PowerupRoll = { "Speed", "Reveal", "CoinBoost", "Ghost", "Freeze" },
+	-- The one colour every orb wears, since the effect is unknown until it is
+	-- taken. Deliberately not any of the per-kind colours below: those are what
+	-- the banner and the HUD chip use once the roll has happened.
+	PowerupOrbColor = Color3.fromRGB(255, 250, 225),
 	PowerupKinds = {
 		Speed = {
 			label = "Fast feet",
@@ -165,6 +175,19 @@ Config.Collectibles = {
 			label = "Show the way",
 			duration = 10,
 			color = Color3.fromRGB(150, 255, 170),
+		},
+		-- Pays twice: a lump sum the moment it is taken, and double value on every
+		-- coin picked up while it runs. The lump is what makes it land as a prize
+		-- on its own, since a multiplier alone is worth nothing to a player who
+		-- has already cleared the floor out; the multiplier is what sends one who
+		-- has not back through the dead ends they skipped.
+		CoinBoost = {
+			label = "Coin rush!",
+			duration = 15,
+			coinGrantMin = 10,
+			coinGrantMax = 30,
+			coinMultiplier = 2,
+			color = Color3.fromRGB(255, 214, 110),
 		},
 		-- Not invisibility to other players: enemies stop seeing you, which is
 		-- the only thing that matters in a game with no combat, and it cannot

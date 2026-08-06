@@ -31,6 +31,19 @@ local taken = setmetatable({}, { __mode = "k" })
 -- One powerup at a time per player, so a second pickup cannot read an already
 -- boosted WalkSpeed as the value to restore later.
 local active = {}
+-- Coin multiplier per player, owned by whatever effect is in active[] and torn
+-- down by its restore closure. Kept out here rather than read back off the entry
+-- because the coin handler is the hottest path in this script and should not
+-- have to know what a powerup is.
+local coinBonus = {}
+
+-- What an orb turns out to be is decided here, at the moment it is touched,
+-- rather than by MazeGenerator when it was built. Runtime randomness, so it is
+-- deliberately not seeded off the world seed: two players taking the same orb
+-- should not get the same prize, and neither should the same player after it
+-- respawns. Generation determinism is untouched by this, because generation no
+-- longer draws for it at all.
+local roll = Random.new()
 
 -- Created here as well as in TowerTimerService because either script may see a
 -- given player first. Both do it synchronously inside their PlayerAdded
@@ -101,6 +114,23 @@ local function applyPowerup(player, kindName)
 	clearEffect(player)
 
 	local undo = {}
+	local granted = nil
+
+	-- Paid immediately and never taken back, so it is not in the undo list. A
+	-- multiplier on its own is worth nothing to a player who has already emptied
+	-- the floor; the lump is what makes this land as a prize wherever it is found.
+	if profile.coinGrantMin then
+		granted = roll:NextInteger(profile.coinGrantMin, profile.coinGrantMax)
+		local coins = statValue(player, "Coins")
+		coins.Value = coins.Value + granted
+	end
+
+	if profile.coinMultiplier then
+		coinBonus[player] = profile.coinMultiplier
+		table.insert(undo, function()
+			coinBonus[player] = nil
+		end)
+	end
 
 	if profile.walkSpeedMultiplier then
 		local base = humanoid.WalkSpeed
@@ -110,29 +140,6 @@ local function applyPowerup(player, kindName)
 				humanoid.WalkSpeed = base
 			end
 		end)
-	end
-
-	if profile.jumpMultiplier then
-		-- Humanoids express jump as power or as height depending on
-		-- UseJumpPower, and which one a place uses is a Studio-side setting, so
-		-- the multiplier is applied to whichever is live.
-		if humanoid.UseJumpPower then
-			local base = humanoid.JumpPower
-			humanoid.JumpPower = base * profile.jumpMultiplier
-			table.insert(undo, function()
-				if humanoid.Parent then
-					humanoid.JumpPower = base
-				end
-			end)
-		else
-			local base = humanoid.JumpHeight
-			humanoid.JumpHeight = base * profile.jumpMultiplier
-			table.insert(undo, function()
-				if humanoid.Parent then
-					humanoid.JumpHeight = base
-				end
-			end)
-		end
 	end
 
 	if kindName == "Ghost" then
@@ -184,7 +191,7 @@ local function applyPowerup(player, kindName)
 		end
 	end)
 
-	return true
+	return true, granted
 end
 
 -- ============================================================
@@ -234,15 +241,22 @@ local function bindTag(tag, handler)
 end
 
 bindTag("Coin", function(player, part)
+	local multiplier = coinBonus[player] or 1
 	local coins = statValue(player, "Coins")
-	coins.Value = coins.Value + Config.Collectibles.CoinValue
+	coins.Value = coins.Value + Config.Collectibles.CoinValue * multiplier
 	consume(part, Config.Collectibles.CoinRespawnSeconds)
-	remote:FireClient(player, { kind = "coin" })
+	remote:FireClient(player, { kind = "coin", multiplier = multiplier })
 end)
 
 bindTag("Powerup", function(player, part)
-	local kindName = part:GetAttribute("Kind") or "Speed"
-	if not applyPowerup(player, kindName) then
+	-- The orb carries no Kind. It is a mystery box, rolled here, so the same orb
+	-- is a different prize to the next player to reach it and to the same player
+	-- once it has respawned.
+	local pool = Config.Collectibles.PowerupRoll
+	local kindName = pool[roll:NextInteger(1, #pool)]
+
+	local ok, granted = applyPowerup(player, kindName)
+	if not ok then
 		return
 	end
 
@@ -253,6 +267,7 @@ bindTag("Powerup", function(player, part)
 		powerup = kindName,
 		label = profile.label,
 		duration = profile.duration,
+		coins = granted,
 	})
 end)
 
@@ -327,4 +342,5 @@ Players.PlayerAdded:Connect(bindPlayer)
 
 Players.PlayerRemoving:Connect(function(player)
 	active[player] = nil
+	coinBonus[player] = nil
 end)
