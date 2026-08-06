@@ -334,6 +334,21 @@ local function matches(part, section, building)
 	return part:GetAttribute("Section") == section and part:GetAttribute("Building") == building
 end
 
+-- A trigger's centre is not always the place it wants a player sent. The
+-- RoofTrigger covers the whole deck so that arriving anywhere on it counts,
+-- which puts its centre in the middle of the roof while the stairs come up at
+-- an edge, so on the top floor the arrow was pointing at open floor in the
+-- middle of the room and the storey read as having no staircase at all. Parts
+-- that know better carry an explicit arrival point.
+local function aimPoint(part)
+	local x = part:GetAttribute("ArrivalX")
+	local z = part:GetAttribute("ArrivalZ")
+	if x and z then
+		return Vector3.new(x, part:GetAttribute("ArrivalY") or part.Position.Y, z)
+	end
+	return part.Position
+end
+
 local function findTarget(context)
 	if not context then
 		return nil
@@ -372,7 +387,7 @@ RunService.RenderStepped:Connect(function()
 		return
 	end
 
-	local to = compassTarget.Position - root.Position
+	local to = aimPoint(compassTarget) - root.Position
 	local flat = Vector3.new(to.X, 0, to.Z)
 	local camFlat = Vector3.new(camera.CFrame.LookVector.X, 0, camera.CFrame.LookVector.Z)
 	local camRight = Vector3.new(camera.CFrame.RightVector.X, 0, camera.CFrame.RightVector.Z)

@@ -158,8 +158,8 @@ local function bindBouncePad(part)
 		return
 	end
 	part.Touched:Connect(function(hit)
-		local player, _, root = playerFrom(hit)
-		if not player or not root then
+		local player, humanoid, root = playerFrom(hit)
+		if not player or not humanoid or not root then
 			return
 		end
 
@@ -168,6 +168,19 @@ local function bindBouncePad(part)
 			return
 		end
 		bounceCooldown[player] = os.clock()
+
+		-- A Humanoid standing on something is in the Running state, and that
+		-- state's controller holds the character down: an upward velocity set
+		-- underneath it is cancelled within a frame. Touched only fires on the
+		-- transition into contact, so a player who walks onto a pad and stays
+		-- there never gets a second attempt, which is why the pads read as
+		-- decoration. Handing the state to Jumping releases the ground
+		-- controller first, and the velocity then survives.
+		--
+		-- The slide does not need this because its entrance sets PlatformStand,
+		-- which switches the controller off outright. A pad cannot: the player
+		-- has to keep control of their character all the way up and back down.
+		humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
 
 		local power = part:GetAttribute("Power") or Config.BouncePadPower
 		root.AssemblyLinearVelocity = Vector3.new(root.AssemblyLinearVelocity.X, power, root.AssemblyLinearVelocity.Z)

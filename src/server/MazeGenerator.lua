@@ -1486,6 +1486,18 @@ local function buildRoof(parent, origin, hole, style, isExit, ctx)
 	arrival.Transparency = 1
 	arrival.CanCollide = false
 	arrival:SetAttribute("TowerName", towerName)
+	-- Where the stairs actually come up, which is not where this part is. The
+	-- trigger deliberately covers the whole deck so that arriving anywhere on it
+	-- counts, which puts its centre in the middle of the roof while the stairwell
+	-- is out at an edge cell. Anything pointing a player at the way up has to aim
+	-- here instead: on every other floor that job is done by the next floor's
+	-- LevelTrigger, which already sits on the arrival cell, and the roof is the
+	-- one storey with no floor above it to carry one.
+	if hole then
+		arrival:SetAttribute("ArrivalX", origin.X + hole.x)
+		arrival:SetAttribute("ArrivalY", ROOF_Y + 3)
+		arrival:SetAttribute("ArrivalZ", origin.Z + hole.z)
+	end
 	tagWithContext(arrival, "RoofTrigger", sectionIndex, ctx.building, CFG.LEVELS)
 
 	local deck = Instance.new("Folder")
