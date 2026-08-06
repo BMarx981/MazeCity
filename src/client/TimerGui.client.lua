@@ -404,6 +404,127 @@ RunService.RenderStepped:Connect(function()
 end)
 
 -- ============================================================
+-- Reveal trail
+-- ============================================================
+-- The whole of the Reveal powerup, and it lives on the client for the same
+-- reason the compass does: it is a hint drawn for one player, so the server has
+-- no effect to apply and nothing to undo. The route is generator output, stamped
+-- on each LevelTrigger as integer offsets from that trigger's own position, so
+-- rebuilding it here is a lookup and an addition and needs no knowledge of cell
+-- size or plot origin.
+--
+-- Markers go in a folder of this client's own beside MazeCity, never inside it.
+-- One Highlight over the containing model is what makes them readable through a
+-- wall, which is the entire point of the powerup; adorning one per marker would
+-- run past the renderer's highlight budget on a long route.
+
+local revealModel = nil
+local revealDots = {}
+
+local function clearReveal()
+	revealDots = {}
+	if revealModel then
+		revealModel:Destroy()
+		revealModel = nil
+	end
+end
+
+local function currentTrigger()
+	if not floorContext then
+		return nil
+	end
+	for _, part in ipairs(CollectionService:GetTagged("LevelTrigger")) do
+		if
+			matches(part, floorContext.section, floorContext.building)
+			and part:GetAttribute("Level") == floorContext.level
+		then
+			return part
+		end
+	end
+	return nil
+end
+
+local function showReveal(color)
+	clearReveal()
+
+	local trigger = currentTrigger()
+	local route = trigger and trigger:GetAttribute("Route")
+	if not route or route == "" then
+		return
+	end
+
+	local juice = Config.Juice
+	local model = Instance.new("Model")
+	model.Name = "RouteHint"
+
+	-- The trigger is built 4 studs over its slab and the offsets are measured in
+	-- its plane, so the markers come back down from there to breadcrumb height.
+	local origin = trigger.Position
+	local dotY = origin.Y - 4 + juice.RouteDotHeight
+
+	for hop in string.gmatch(route, "[^;]+") do
+		local dx, dz = string.match(hop, "^(%-?%d+),(%-?%d+)$")
+		if dx then
+			local dot = Instance.new("Part")
+			dot.Name = "RouteDot"
+			dot.Shape = Enum.PartType.Ball
+			dot.Size = Vector3.new(juice.RouteDotSize, juice.RouteDotSize, juice.RouteDotSize)
+			dot.Position = Vector3.new(origin.X + tonumber(dx), dotY, origin.Z + tonumber(dz))
+			dot.Anchored = true
+			dot.CanCollide = false
+			dot.CanTouch = false
+			dot.CanQuery = false
+			dot.CastShadow = false
+			dot.Material = Enum.Material.Neon
+			dot.Color = color
+			dot.Transparency = juice.RouteDotFade
+			dot.Parent = model
+			table.insert(revealDots, dot)
+		end
+	end
+
+	if #revealDots == 0 then
+		model:Destroy()
+		return
+	end
+
+	local glow = Instance.new("Highlight")
+	glow.FillColor = color
+	glow.FillTransparency = 0.15
+	glow.OutlineColor = color
+	glow.OutlineTransparency = 0
+	glow.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+	glow.Adornee = model
+	glow.Parent = model
+
+	model.Parent = workspace
+	revealModel = model
+end
+
+-- The pulse runs from the player's end of the route towards the stairs. A trail
+-- that moves says "this way"; a trail that sits still only says "here", and the
+-- compass arrow already covers "here".
+RunService.RenderStepped:Connect(function()
+	local count = #revealDots
+	if count == 0 then
+		return
+	end
+
+	local juice = Config.Juice
+	local phase = (os.clock() % juice.RouteDotPulseSeconds) / juice.RouteDotPulseSeconds
+	for i, dot in ipairs(revealDots) do
+		if dot.Parent then
+			local ahead = ((i - 1) / count - phase) % 1
+			local swell = math.max(0, 1 - ahead * 6)
+			local size = juice.RouteDotSize * (1 + (juice.RouteDotPulseScale - 1) * swell)
+			dot.Size = Vector3.new(size, size, size)
+		end
+	end
+end)
+
+player.CharacterAdded:Connect(clearReveal)
+
+-- ============================================================
 -- Phantom wall sparkle
 -- ============================================================
 -- The one genuine discovery mechanic in the game, and until now walking through
@@ -571,6 +692,10 @@ local function powerupStarted(payload)
 		end)
 	end
 	emitBurst(profile.color, juice.CoinSparkleParticles * 2, juice.PhantomSparkleSeconds)
+
+	if payload.powerup == "Reveal" then
+		showReveal(profile.color)
+	end
 end
 
 task.spawn(function()
@@ -580,6 +705,7 @@ task.spawn(function()
 			if left <= 0 then
 				powerName = nil
 				powerChip.Visible = false
+				clearReveal()
 			else
 				local profile = Config.getPowerupKind(powerName)
 				powerLabel.Text = string.format("%s  %ds", profile.label, math.ceil(left))
@@ -604,6 +730,7 @@ pickupRemote.OnClientEvent:Connect(function(payload)
 		if powerName == payload.powerup then
 			powerName = nil
 			powerChip.Visible = false
+			clearReveal()
 		end
 	end
 end)
@@ -638,11 +765,16 @@ remote.OnClientEvent:Connect(function(payload)
 		then
 			floorContext = { section = payload.section, building = payload.building, level = payload.level }
 			compassTarget = findTarget(floorContext)
+			-- A route belongs to the floor it was read from, so climbing out from
+			-- under one mid-powerup drops it rather than leaving a trail glowing
+			-- through the slab below.
+			clearReveal()
 		end
 	else
 		holder.Visible = false
 		floorContext = nil
 		compassTarget = nil
+		clearReveal()
 	end
 
 	if payload.event then

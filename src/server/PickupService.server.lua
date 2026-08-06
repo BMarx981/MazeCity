@@ -203,7 +203,15 @@ local function playerFromHit(hit)
 	return Players:GetPlayerFromCharacter(char)
 end
 
+-- Kept alongside the Touched binding below so the proximity sweep can reach the
+-- same handler a touch would have reached. Both paths guard on taken[part], and
+-- neither yields between reading that guard and setting it, so a coin cannot be
+-- awarded twice however it was reached.
+local handlers = {}
+
 local function bindTag(tag, handler)
+	handlers[tag] = handler
+
 	local function bind(part)
 		if not part:IsA("BasePart") then
 			return
@@ -246,6 +254,62 @@ bindTag("Powerup", function(player, part)
 		label = profile.label,
 		duration = profile.duration,
 	})
+end)
+
+-- ============================================================
+-- Proximity sweep
+-- ============================================================
+-- Touched alone meant a coin had to be walked into almost exactly: the disc is
+-- 3.4 studs across and standing beside one did nothing, which reads as a broken
+-- coin rather than as a miss. The roof arcs were the sharp end of it, a coin at
+-- ARC_RADIUS 3.2 leaving about half a stud of clearance against a torso going
+-- straight up. So a radius around the player collects too, and Touched stays as
+-- the zero-latency path for the ones actually walked into.
+--
+-- Cost is one spatial query per living player per sweep rather than a distance
+-- test against every coin in the city, of which there are 990 per section. The
+-- query is answered by the engine's broadphase, so it does not care how much
+-- geometry is around; the handful of parts it comes back with are filtered by
+-- tag here.
+
+local COLLECTIBLE_TAGS = { "Coin", "Powerup" }
+
+local sweepParams = OverlapParams.new()
+sweepParams.FilterType = Enum.RaycastFilterType.Exclude
+
+local function sweep(player)
+	local char = player.Character
+	if not char then
+		return
+	end
+	local humanoid = char:FindFirstChildOfClass("Humanoid")
+	local root = char:FindFirstChild("HumanoidRootPart")
+	if not root or not humanoid or humanoid.Health <= 0 then
+		return
+	end
+
+	sweepParams.FilterDescendantsInstances = { char }
+	local near = workspace:GetPartBoundsInRadius(root.Position, Config.Collectibles.PickupRadius, sweepParams)
+
+	for _, part in ipairs(near) do
+		if not taken[part] then
+			for _, tag in ipairs(COLLECTIBLE_TAGS) do
+				if CollectionService:HasTag(part, tag) then
+					handlers[tag](player, part)
+					break
+				end
+			end
+		end
+	end
+end
+
+task.spawn(function()
+	while true do
+		for _, player in ipairs(Players:GetPlayers()) do
+			sweep(player)
+		end
+		task.wait(Config.Collectibles.PickupSweepSeconds)
+	end
 end)
 
 -- The counter itself is the replicated leaderstats value, which the client

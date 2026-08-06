@@ -6,20 +6,23 @@ local CollectionService = game:GetService("CollectionService")
 local Debris = game:GetService("Debris")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
 
 local Config = require(ReplicatedStorage:WaitForChild("MazeConfig"))
 
 local riding = {}
 local bounceCooldown = {}
+local bounceCombo = {}
 
 -- Effects hang off the rider's own character, never off the tagged part that
 -- triggered them: those parts live inside workspace.MazeCity, which is generator
 -- output and stays exactly as it was built.
-local function playOnce(parent, assetId, volume)
+local function playOnce(parent, assetId, volume, pitch)
 	local sound = Instance.new("Sound")
 	sound.SoundId = assetId
 	sound.Volume = volume
+	sound.PlaybackSpeed = pitch or 1
 	sound.Parent = parent
 	sound:Play()
 	Debris:AddItem(sound, sound.TimeLength > 0 and sound.TimeLength + 1 or 5)
@@ -163,29 +166,58 @@ local function bindBouncePad(part)
 			return
 		end
 
+		local now = os.clock()
 		local last = bounceCooldown[player] or 0
-		if os.clock() - last < Config.BouncePadCooldown then
+		if now - last < Config.BouncePadCooldown then
 			return
 		end
-		bounceCooldown[player] = os.clock()
+
+		local arriving = root.AssemblyLinearVelocity
+
+		-- A pad returns a share of the speed it was hit with, so bouncing in place
+		-- climbs on its own until the ceiling: land harder, go higher, which is the
+		-- one rule a trampoline has to teach and the one it can teach without a
+		-- word of text. A standing start has no downward speed and gets the base
+		-- launch, which is what the roof coin arc was sized against.
+		local base = part:GetAttribute("Power") or Config.BouncePadPower
+		local impact = math.max(0, -arriving.Y)
+		local power = math.min(Config.BouncePadMaxPower, base + impact * Config.BouncePadMomentumGain)
+
+		local combo = ((now - last < Config.BouncePadComboSeconds) and (bounceCombo[player] or 0) or 0) + 1
+		bounceCombo[player] = combo
+		bounceCooldown[player] = now
+
+		local horizontal = Config.BouncePadForwardKeep
+		local launch = Vector3.new(arriving.X * horizontal, power, arriving.Z * horizontal)
 
 		-- A Humanoid standing on something is in the Running state, and that
 		-- state's controller holds the character down: an upward velocity set
-		-- underneath it is cancelled within a frame. Touched only fires on the
-		-- transition into contact, so a player who walks onto a pad and stays
-		-- there never gets a second attempt, which is why the pads read as
-		-- decoration. Handing the state to Jumping releases the ground
-		-- controller first, and the velocity then survives.
+		-- underneath it is cancelled within a frame. Handing the state to Jumping
+		-- releases that controller. What it does not do is leave the velocity
+		-- alone: the Jumping state applies the humanoid's own jump on the next
+		-- physics step, which overwrote the pad's launch with a plain JumpPower and
+		-- is why the pads still read as an ordinary jump after the ground
+		-- controller was dealt with. So the pad sets its velocity twice, once now
+		-- and once after that step has been and gone, and drops the humanoid into
+		-- Freefall so nothing else is queued up behind it.
 		--
-		-- The slide does not need this because its entrance sets PlatformStand,
-		-- which switches the controller off outright. A pad cannot: the player
-		-- has to keep control of their character all the way up and back down.
+		-- The slide does not need any of this because its entrance sets
+		-- PlatformStand, which switches the controller off outright. A pad cannot:
+		-- the player has to keep control of their character all the way up and back
+		-- down, which is most of what makes a pad a toy and a slide a ride.
 		humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
+		root.AssemblyLinearVelocity = launch
 
-		local power = part:GetAttribute("Power") or Config.BouncePadPower
-		root.AssemblyLinearVelocity = Vector3.new(root.AssemblyLinearVelocity.X, power, root.AssemblyLinearVelocity.Z)
+		task.spawn(function()
+			RunService.Heartbeat:Wait()
+			if root.Parent and humanoid.Parent and humanoid.Health > 0 then
+				root.AssemblyLinearVelocity = launch
+				humanoid:ChangeState(Enum.HumanoidStateType.Freefall)
+			end
+		end)
 
-		playOnce(root, Config.Sounds.BouncePad, Config.Juice.BouncePadVolume)
+		local pitch = math.min(Config.BouncePadPitchMax, 1 + (combo - 1) * Config.BouncePadPitchStep)
+		playOnce(root, Config.Sounds.BouncePad, Config.Juice.BouncePadVolume, pitch)
 		puffDust(root)
 	end)
 end
@@ -209,13 +241,29 @@ local function rideZip(player, humanoid, root, cableStart, cableEnd)
 	root.Anchored = true
 
 	local heading = (cableEnd - cableStart).Unit
+	-- Face along the cable but stay upright. Aiming the root part down the heading
+	-- itself pitched the rider forward by the cable's own 40 to 58 degrees, so they
+	-- rode the thing head first and face down.
+	local flat = Vector3.new(heading.X, 0, heading.Z)
+	local facing = (flat.Magnitude > 0.01) and flat.Unit or Vector3.new(0, 0, -1)
+
+	-- Hang under the cable rather than on it. The root part is the middle of the
+	-- torso, so putting it at the cable's own position ran the line through the
+	-- rider's chest lengthwise, which is what read as being impaled. The offset is
+	-- applied at the top and not at the bottom, so it tapers away over the ride:
+	-- the cable ends four studs above the street and the landing pad is directly
+	-- under it, meaning the cable's own end point is already almost exactly where
+	-- a standing character's root belongs. Holding the offset all the way down
+	-- would instead finish the ride a stud inside the pavement.
+	local boardAt = cableStart - Vector3.new(0, Config.ZipHangOffset, 0)
+
 	-- Two legs: the boarding hop from the deck pad out to the cable, which has to
 	-- happen outside the parapet or the line would run through the facade, then
 	-- the descent itself at a constant speed.
 	local board = TweenService:Create(
 		root,
 		TweenInfo.new(Config.ZipBoardSeconds, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
-		{ CFrame = CFrame.lookAt(cableStart, cableStart + heading) }
+		{ CFrame = CFrame.lookAt(boardAt, boardAt + facing) }
 	)
 	ride.tween = board
 	board:Play()
@@ -228,7 +276,7 @@ local function rideZip(player, humanoid, root, cableStart, cableEnd)
 		local descend = TweenService:Create(
 			root,
 			TweenInfo.new(seconds, Enum.EasingStyle.Linear),
-			{ CFrame = CFrame.lookAt(cableEnd, cableEnd + heading) }
+			{ CFrame = CFrame.lookAt(cableEnd, cableEnd + facing) }
 		)
 		ride.tween = descend
 		descend:Play()
@@ -306,4 +354,5 @@ end
 Players.PlayerRemoving:Connect(function(player)
 	endRide(player, nil)
 	bounceCooldown[player] = nil
+	bounceCombo[player] = nil
 end)

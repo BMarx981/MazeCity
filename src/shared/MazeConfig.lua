@@ -135,7 +135,20 @@ Config.Collectibles = {
 	SpinDegreesPerSecond = 150,
 	SpinRange = 80,
 	SpinRefreshSeconds = 0.5,
-	PowerupOrder = { "Speed", "Jump", "Ghost", "Freeze" },
+	-- Touching a coin is not how a coin is collected any more. A 3.4-stud disc
+	-- reached by Touched alone had to be walked into almost exactly, which reads
+	-- as the coin being broken rather than as the player having missed; the roof
+	-- arcs were worse, since a coin at ARC_RADIUS 3.2 left about half a stud of
+	-- margin against a torso on a vertical launch. PickupService sweeps this
+	-- radius around each player instead, and Touched stays as the instant path.
+	PickupRadius = 8,
+	PickupSweepSeconds = 0.07,
+	-- Four kinds, and the count is load-bearing: MazeGenerator draws one index out
+	-- of this list per powerup, so adding or removing an entry would shift every
+	-- subsequent random draw and reshuffle the city. Swapping an entry is free.
+	-- Jump was here and was dead weight, there being nothing in a maze to jump
+	-- onto or over; Reveal took its slot.
+	PowerupOrder = { "Speed", "Reveal", "Ghost", "Freeze" },
 	PowerupKinds = {
 		Speed = {
 			label = "Fast feet",
@@ -143,11 +156,15 @@ Config.Collectibles = {
 			walkSpeedMultiplier = 1.45,
 			color = Color3.fromRGB(120, 235, 255),
 		},
-		Jump = {
-			label = "Big jump",
-			duration = 12,
-			jumpMultiplier = 1.4,
-			color = Color3.fromRGB(150, 255, 150),
+		-- The route to the stairs, lit as a trail of markers the player can follow.
+		-- The compass says which way; this says which turns, which is the whole
+		-- difference on a floor where the arrow points through four walls. Entirely
+		-- client-side: MazeGenerator stamps the route on each LevelTrigger and
+		-- TimerGui draws it, so PickupService has no effect to apply or undo.
+		Reveal = {
+			label = "Show the way",
+			duration = 10,
+			color = Color3.fromRGB(150, 255, 170),
 		},
 		-- Not invisibility to other players: enemies stop seeing you, which is
 		-- the only thing that matters in a game with no combat, and it cannot
@@ -249,8 +266,27 @@ Config.MovingWallRetrySeconds = 3
 Config.SlideEntrySpeed = 30
 Config.SlideBoostSpeed = 105
 Config.SlideMaxSeconds = 30 -- safety release if someone gets stuck
+-- BouncePadPower is the launch off a standing start: 140 against Roblox gravity
+-- is very close to 50 studs, which is what ARC_TOP_HEIGHT = 40 was sized inside.
+-- MomentumGain is what makes a pad a trampoline rather than a launcher. A pad
+-- returns this fraction of the speed you landed on it with, so bouncing in place
+-- climbs by itself and the player learns the rule in two bounces without being
+-- told it. MaxPower is the ceiling that keeps the climb from running away: 210
+-- tops out around 112 studs above the deck, high enough to read as ridiculous
+-- and low enough that a drift off the parapet is still a landing on the plaza.
 Config.BouncePadPower = 140
-Config.BouncePadCooldown = 0.6
+Config.BouncePadMomentumGain = 0.55
+Config.BouncePadMaxPower = 210
+-- Horizontal speed carried through a bounce. Above 1 so that running onto a pad
+-- throws a genuine arc instead of dropping the player back on the same square.
+Config.BouncePadForwardKeep = 1.35
+Config.BouncePadCooldown = 0.35
+-- Consecutive bounces without landing elsewhere ring the boing a step higher,
+-- the same trick the coin streak uses. Audio only; the height comes from the
+-- momentum rule above, so the sound is reporting the climb rather than faking it.
+Config.BouncePadComboSeconds = 2.5
+Config.BouncePadPitchStep = 0.07
+Config.BouncePadPitchMax = 1.6
 
 -- The roof zipline down to the plaza. The ride is a tween along the cable
 -- rather than physics on a rope: the drop is 195 studs onto a street with a
@@ -260,6 +296,12 @@ Config.BouncePadCooldown = 0.6
 Config.ZipSpeed = 95
 Config.ZipBoardSeconds = 0.35
 Config.ZipMaxSeconds = 20 -- safety release, mirroring SlideMaxSeconds
+-- How far under the cable the rider's root part hangs. The ride used to put the
+-- root exactly on the cable and aim it down the slope, so the line ran through
+-- the character lengthwise and the whole thing read as being impaled rather than
+-- as holding on. Five studs is a bit more than root-to-head, which puts the
+-- cable just above the hands.
+Config.ZipHangOffset = 5
 
 -- ============================================================
 -- Sound
@@ -345,6 +387,17 @@ Config.Juice = {
 	CoinSparkleColor = Color3.fromRGB(255, 214, 110),
 	PowerupVolume = 0.6,
 	PowerupBannerSeconds = 2,
+	-- The Reveal trail. Markers are drawn client-side into their own workspace
+	-- folder, never into MazeCity, and one Highlight over the lot of them is what
+	-- makes the trail readable through a wall; adorning per marker would blow past
+	-- the renderer's highlight budget on a long route. The pulse runs from the
+	-- player's end towards the stairs, because a trail that moves says "this way"
+	-- and a trail that sits there only says "here".
+	RouteDotSize = 1.6,
+	RouteDotHeight = 2.5, -- above the floor slab, low enough to read as breadcrumbs
+	RouteDotPulseSeconds = 1.4,
+	RouteDotPulseScale = 2.1,
+	RouteDotFade = 0.25,
 }
 
 -- ============================================================

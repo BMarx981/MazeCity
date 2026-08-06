@@ -948,7 +948,7 @@ local function mainPath(g, entryCell, stairCell)
 	return path
 end
 
-local function buildCollectibles(parent, origin, baseY, g, blocked, entryCell, stairCell, rng, ctx)
+local function buildCollectibles(parent, origin, baseY, g, blocked, entryCell, route, rng, ctx)
 	local folder = Instance.new("Folder")
 	folder.Name = "Collectibles"
 	folder.Parent = parent
@@ -973,7 +973,7 @@ local function buildCollectibles(parent, origin, baseY, g, blocked, entryCell, s
 	end
 
 	local onPath = {}
-	for _, c in ipairs(mainPath(g, entryCell, stairCell)) do
+	for _, c in ipairs(route) do
 		if eligible(c) then
 			table.insert(onPath, c)
 		end
@@ -1113,7 +1113,7 @@ local function buildEnemySpawns(parent, origin, baseY, g, blocked, entryCell, st
 	end
 end
 
-local function buildLevelTrigger(parent, origin, baseY, entryCell, ctx)
+local function buildLevelTrigger(parent, origin, baseY, entryCell, route, ctx)
 	local c = cellCenter(entryCell.x, entryCell.z)
 	local trigger = makePart(
 		parent,
@@ -1126,6 +1126,24 @@ local function buildLevelTrigger(parent, origin, baseY, entryCell, ctx)
 	trigger.Transparency = 1
 	trigger.CanCollide = false
 	trigger:SetAttribute("TowerName", ctx.towerName)
+
+	-- The walk from this cell to the stairs, which is what the Reveal powerup
+	-- draws. Stored as integer offsets from the trigger's own position rather than
+	-- as world points: the trigger sits on the entry cell centre, so a client can
+	-- rebuild every point by adding to a position it already has, without knowing
+	-- CELL or the plot origin, and offsets are three digits where world
+	-- coordinates run to five. mainPath is reversed on the way in so the string
+	-- reads in the direction a player walks it.
+	--
+	-- Costs no parts and draws no random numbers: mainPath is a pure walk of the
+	-- spanning tree carve() has already finished, per invariant 6.
+	local hops = {}
+	for i = #route, 1, -1 do
+		local rc = cellCenter(route[i].x, route[i].z)
+		table.insert(hops, string.format("%d,%d", math.round(rc.X - c.X), math.round(rc.Z - c.Z)))
+	end
+	trigger:SetAttribute("Route", table.concat(hops, ";"))
+
 	tagWithContext(trigger, "LevelTrigger", ctx.section, ctx.building, ctx.level)
 end
 
@@ -1184,8 +1202,13 @@ local function buildLevel(buildingFolder, origin, level, entrySide, entryCell, s
 	-- closest two building seeds get is 7919 apart and level * 31 never reaches
 	-- 255 levels' worth of that, so no two levels in the city share a stream.
 	local coinRng = Random.new(ctx.seed + level * 31)
-	buildCollectibles(folder, origin, baseY, g, blocked, entryCell, cellB, coinRng, ctx)
-	buildLevelTrigger(folder, origin, baseY, entryCell, ctx)
+	-- Computed once here and handed to both: the path coins stand on it and the
+	-- LevelTrigger carries it for the Reveal powerup. It is a pure function of the
+	-- carved grid, so lifting the call out of buildCollectibles moved no draw and
+	-- changed no coin's cell.
+	local route = mainPath(g, entryCell, cellB)
+	buildCollectibles(folder, origin, baseY, g, blocked, entryCell, route, coinRng, ctx)
+	buildLevelTrigger(folder, origin, baseY, entryCell, route, ctx)
 
 	return {
 		exitSide = exitSide,
