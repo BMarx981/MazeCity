@@ -25,6 +25,11 @@ local CFG = {
 
 	DOOR_WIDTH = 16,
 	DOOR_HEIGHT = 13,
+	-- Windows are laid out per face with no knowledge of the door, so on the
+	-- entry face a ground-floor pane can land across the opening. Any pane
+	-- reaching within this margin of the door rectangle is still placed, so the
+	-- part count per section is unchanged, but blanked: invisible and no touch.
+	DOOR_CLEARANCE = 3,
 
 	PHANTOM_PER_LEVEL = 4,
 	-- Most of the route a floor's phantoms are allowed to remove between them.
@@ -56,6 +61,17 @@ local CFG = {
 
 	MOVING_WALL_MIN_LEVEL = 4,
 	MOVING_WALL_BASE = 2,
+	-- A moving wall's cycle is: closed for DwellClosed, tween open, open for
+	-- DwellOpen, tween shut. Only the closed half is time the player can be
+	-- stuck, and arriving just as one shuts costs the full dwell plus a tween
+	-- before the gap is passable again. That sum, not either range on its own,
+	-- is the number to tune: it was 25s and is now 10. The open range stays
+	-- long enough that arriving at an open wall usually means walking through.
+	MOVING_WALL_TWEEN = { 3, 5 },
+	MOVING_WALL_DWELL_CLOSED = { 2.5, 5 },
+	MOVING_WALL_DWELL_OPEN = { 7, 14 },
+	-- Spread over the cycle so neighbouring walls are not in lockstep.
+	MOVING_WALL_PHASE_MAX = 12,
 
 	ENEMY_SPAWNS_PER_LEVEL = 3,
 
@@ -775,10 +791,10 @@ local function tagMovingWalls(interior, blocked, used, level, rng, ctx)
 		p:SetAttribute("Mode", mode)
 		p:SetAttribute("Travel", CFG.CELL)
 		p:SetAttribute("SlideAxis", (w.side == "north" or w.side == "south") and "X" or "Z")
-		p:SetAttribute("TweenTime", rng:NextNumber(4.5, 7.5))
-		p:SetAttribute("DwellOpen", rng:NextNumber(6, 14))
-		p:SetAttribute("DwellClosed", rng:NextNumber(8, 18))
-		p:SetAttribute("Phase", rng:NextNumber(0, 12))
+		p:SetAttribute("TweenTime", rng:NextNumber(CFG.MOVING_WALL_TWEEN[1], CFG.MOVING_WALL_TWEEN[2]))
+		p:SetAttribute("DwellOpen", rng:NextNumber(CFG.MOVING_WALL_DWELL_OPEN[1], CFG.MOVING_WALL_DWELL_OPEN[2]))
+		p:SetAttribute("DwellClosed", rng:NextNumber(CFG.MOVING_WALL_DWELL_CLOSED[1], CFG.MOVING_WALL_DWELL_CLOSED[2]))
+		p:SetAttribute("Phase", rng:NextNumber(0, CFG.MOVING_WALL_PHASE_MAX))
 		tagWithContext(p, "MovingWall", ctx.section, ctx.building, level)
 		used[p] = true
 	end
@@ -1230,10 +1246,13 @@ end
 -- Facade
 -- ============================================================
 
-local function buildWindows(parent, origin, style, side)
+local function buildWindows(parent, origin, style, side, doorU)
 	local O = CFG.FACADE_OUTSET + CFG.FACADE_THICKNESS
 	local horizontal = (side == "north" or side == "south")
 	local faceLen = horizontal and FX or FZ
+
+	local clearHalf = CFG.DOOR_WIDTH / 2 + CFG.DOOR_CLEARANCE
+	local clearTop = CFG.DOOR_HEIGHT + CFG.DOOR_CLEARANCE
 
 	local function place(u, y, lenU, height, thick)
 		local pos
@@ -1250,6 +1269,12 @@ local function buildWindows(parent, origin, style, side)
 		local w = makePart(parent, "Window", CFrame.new(origin + pos), size, style.glass, Enum.Material.Glass)
 		w.Reflectance = 0.28
 		w.CanCollide = false
+		if doorU and math.abs(u - doorU) < lenU / 2 + clearHalf and y - height / 2 < clearTop then
+			w.Transparency = 1
+			w.Reflectance = 0
+			w.CanTouch = false
+			w.CanQuery = false
+		end
 	end
 
 	if style.windows == "grid" then
@@ -1404,7 +1429,7 @@ local function buildFacade(parent, origin, style, entrySide, entryCell, ctx)
 			)
 		end
 
-		buildWindows(folder, origin, style, side)
+		buildWindows(folder, origin, style, side, side == entrySide and doorU or nil)
 	end
 
 	local plazaCenter
