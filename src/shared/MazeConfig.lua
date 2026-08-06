@@ -44,10 +44,12 @@ Config.World = {
 	-- remove between them; raise it for a shortcut-hunting game, drop it toward
 	-- zero to go back to decorative phantoms.
 	PhantomMaxShortcut = 0.35,
-	-- How see-through a phantom is, so 0.25 is a pane that is three quarters
-	-- there. A phantom the player cannot see is not a shortcut, it is a hole
-	-- they fall through by accident, which is why this is a knob and not a
-	-- constant buried in the generator.
+	-- A phantom is otherwise identical to the wall next to it, same colour, same
+	-- material, so this number is the entire difference between a shortcut and a
+	-- wall. 0.25 is a pane that is three quarters there. Too low and nobody ever
+	-- finds one; too high and it stops reading as a wall at all and becomes a
+	-- doorway the maze appears to be full of. Expect to tune this by eye in a
+	-- lit corridor and again in a dark one.
 	PhantomTransparency = 0.25,
 	-- Collectibles. A floor is 100 cells and exactly one of them mattered, so
 	-- every dead end was pure punishment. Coins are what turn a wrong turn into a

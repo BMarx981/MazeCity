@@ -33,13 +33,12 @@ local CFG = {
 	-- wrong direction. Capped, a shortcut is worth hunting for and the floor is
 	-- still a floor.
 	PHANTOM_MAX_SHORTCUT = 0.35,
-	-- ForceField was the wrong material: its shader is drawn as a faint energy
-	-- sheen rather than as the part, so a phantom read as an empty gap no matter
-	-- what Transparency said. Neon draws the slab itself, so the number here is
-	-- the number you see: 0.25 is a solid-looking pane you can still see the
-	-- corridor through.
+	-- A phantom is one of the floor's own walls, in the building's own colour and
+	-- material, and the single thing that marks it is that you can see through
+	-- it. Transparency is therefore the whole cue, which is what makes this a
+	-- config knob: too low and the shortcut is invisible, too high and it reads
+	-- as a doorway rather than as a wall worth testing.
 	PHANTOM_TRANSPARENCY = 0.25,
-	PHANTOM_COLOR = Color3.fromRGB(150, 235, 255),
 	-- Lamps sit on a LAMP_GRID square grid, so spacing is FX/(LAMP_GRID+1): 62.5
 	-- studs at 3, 50 at 4. Range stopped being the binding constraint once lamp
 	-- shadows went on, because a shadowed lamp only lights corridors it can
@@ -719,18 +718,21 @@ local function tagPhantoms(interior, g, blocked, entryCell, stairCell, count, rn
 		table.remove(pool, chosen.index)
 		opened[edgeKey(w.x, w.z, w.side)] = true
 
-		-- A phantom is a shortcut the player is meant to spot and choose, so it
-		-- has to be visible as a thing first and see-through second. Two earlier
-		-- passes got that backwards: 0.12 opaque read as an ordinary wall and got
-		-- walked into, then ForceField at 0.62 read as no wall at all. Neon at
-		-- PHANTOM_TRANSPARENCY reads as a lit pane, which also makes it the
-		-- brightest thing in a dark corridor. Phantoms are never required: the
-		-- carved maze is a spanning tree, and making a wall passable only ever
-		-- adds a connection.
+		-- A phantom keeps the wall's own colour and material and changes exactly
+		-- one thing: you can see through it. Earlier passes kept reaching for a
+		-- louder marker, ForceField and then cyan Neon, and a glowing panel in a
+		-- concrete maze reads as a piece of equipment rather than as a wall with
+		-- something different about it. Being almost a wall is the point; the
+		-- player is meant to notice the odd one out, not be signposted to it.
+		--
+		-- CastShadow stays off so light carries through as well as sight. A
+		-- see-through pane laying down a solid black shadow contradicts the only
+		-- cue there is, and the lit corridor behind it is a second, quieter hint
+		-- at what the wall is for. Phantoms are never required: the carved maze
+		-- is a spanning tree, and making a wall passable only ever adds a
+		-- connection.
 		w.part.CanCollide = false
 		w.part.Transparency = CFG.PHANTOM_TRANSPARENCY
-		w.part.Color = CFG.PHANTOM_COLOR
-		w.part.Material = Enum.Material.Neon
 		w.part.CastShadow = false
 		w.part.Name = "PhantomWall"
 		tagWithContext(w.part, "PhantomWall", ctx.section, ctx.building, ctx.level)
