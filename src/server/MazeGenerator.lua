@@ -4,11 +4,38 @@
 -- identical world. Never call math.random in this file.
 
 local CollectionService = game:GetService("CollectionService")
+local PhysicsService = game:GetService("PhysicsService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Config = require(ReplicatedStorage:WaitForChild("MazeConfig"))
 
 local MazeGenerator = {}
+
+-- The one collision group generation owns, and the whole of how the Wall Walker
+-- upgrade is kept from stranding anyone. Interior and boundary maze walls go in
+-- it; the facade, the slabs, the parapets, the stairs and everything on a roof
+-- deck do not. A player who is non-collidable against this group can cross any
+-- wall on a floor, land in the apron ring between the maze edge and the facade,
+-- which has slab under it, and get no further, because the facade is not in the
+-- group. Containment falls out of which function built the part rather than
+-- needing a test.
+--
+-- Registered here rather than in WallWalkService because assigning an
+-- unregistered CollisionGroup throws, and WorldBootstrap requires this module
+-- before it builds anything. The service registers it too, idempotently, in case
+-- it loads first.
+MazeGenerator.WALL_GROUP = "MazeWall"
+
+function MazeGenerator.ensureCollisionGroup(name)
+	for _, group in ipairs(PhysicsService:GetRegisteredCollisionGroups()) do
+		if group.name == name then
+			return
+		end
+	end
+	PhysicsService:RegisterCollisionGroup(name)
+end
+
+MazeGenerator.ensureCollisionGroup(MazeGenerator.WALL_GROUP)
 
 local CFG = {
 	MAZE_W = 10,
@@ -562,8 +589,13 @@ local function buildWalls(parent, origin, baseY, g, style, door)
 		return pos, size
 	end
 
+	-- Every wall on a floor goes through here, boundary and doorway panels
+	-- included, which is what makes one assignment enough to put the whole maze
+	-- in the group and nothing outside it. Interior walls are returned to the
+	-- caller and some become MovingWall or PhantomWall later; those are the same
+	-- parts, so a moving wall is phaseable too, which is the right answer.
 	local function wallPart(name, pos, size)
-		return makePart(
+		local part = makePart(
 			parent,
 			name,
 			CFrame.new(origin + Vector3.new(pos.X, wallY, pos.Z)),
@@ -571,6 +603,8 @@ local function buildWalls(parent, origin, baseY, g, style, door)
 			style.wall,
 			style.material
 		)
+		part.CollisionGroup = MazeGenerator.WALL_GROUP
+		return part
 	end
 
 	-- Two panels flanking a DOOR_WIDTH gap centred on the cell, so the opening

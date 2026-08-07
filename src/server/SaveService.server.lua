@@ -49,14 +49,10 @@ local function applyStats(player)
 	char:SetAttribute("BaseWalkSpeed", walk)
 	humanoid.WalkSpeed = walk
 
-	local jumpBoost = 1 + tier(data, "Jump") * shop.Upgrades.Jump.JumpBoostPerTier
-	if humanoid.UseJumpPower then
-		humanoid.JumpPower = shop.BaseJumpPower * jumpBoost
-	else
-		humanoid.JumpHeight = shop.BaseJumpHeight * jumpBoost
-	end
-
 	player:SetAttribute("MagnetBonus", tier(data, "Magnet") * shop.Upgrades.Magnet.RadiusPerTier)
+	-- The tier the walker reads for its meter. An attribute, the same channel
+	-- Ghost, Freeze and MagnetBonus already use to cross a service boundary.
+	player:SetAttribute("WallWalkTier", tier(data, "WallWalker"))
 end
 
 -- ============================================================

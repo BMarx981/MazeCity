@@ -225,14 +225,17 @@ end
 -- towers of pocket money, and nothing is ever locked, only slower.
 
 Config.Shop = {
-	-- The baseline the upgrades move. These are Roblox's character defaults,
-	-- written down here because SaveService re-applies them on every spawn and
-	-- a magic 16 in a service is how the enemy tuning comment goes stale.
+	-- The baseline the upgrades move. Roblox's character default, written down
+	-- here because SaveService re-applies it on every spawn and a magic 16 in a
+	-- service is how the enemy tuning comment goes stale. Jump used to have two
+	-- entries beside it and does not any more: nothing sets a character's jump,
+	-- because nothing in a maze is jumped onto or over.
 	BaseWalkSpeed = 16,
-	BaseJumpPower = 50,
-	BaseJumpHeight = 7.2,
-	-- Pedestal order on the stall, left to right.
-	Order = { "Speed", "Jump", "Magnet" },
+	-- Pedestal order on the stall, left to right. Changing a key here changes
+	-- which upgrade a generated pedestal sells, and nothing about where the
+	-- pedestal is: buildShop reads this list for the Upgrade attribute and the
+	-- board text, so the swap moves no geometry.
+	Order = { "Speed", "WallWalker", "Magnet" },
 	Upgrades = {
 		Speed = {
 			Label = "Fast Feet",
@@ -242,12 +245,18 @@ Config.Shop = {
 			WalkSpeedPerTier = 1.5,
 			Color = Color3.fromRGB(120, 235, 255),
 		},
-		Jump = {
-			Label = "Moon Boots",
-			Costs = { 20, 50, 100 },
-			-- Fractional boost per tier, applied to whichever jump system the
-			-- character is using (JumpPower or JumpHeight).
-			JumpBoostPerTier = 0.15,
+		-- Replaced Moon Boots, which bought nothing: a jump reaches no geometry a
+		-- maze contains, which is the same reason Jump came out of PowerupRoll
+		-- above. This is the shop's answer to a wall instead.
+		WallWalker = {
+			Label = "Wall Walker",
+			Costs = { 30, 75, 150 },
+			-- Seconds of phasing carried onto each floor, indexed by tier. A list
+			-- rather than a per-tier scalar like the other two, because the curve is
+			-- deliberately not linear: three seconds is one wall and a moment of
+			-- hesitation, ten is a route. It is also the whole balance of the
+			-- upgrade, a floor refilling it being the only other limit.
+			SecondsPerTier = { 3, 6, 10 },
 			Color = Color3.fromRGB(190, 160, 255),
 		},
 		Magnet = {
@@ -263,6 +272,33 @@ Config.Shop = {
 	},
 	PromptDistance = 10,
 	PromptHoldSeconds = 0.25,
+}
+
+-- The Wall Walker upgrade at runtime. The meter itself is Shop.Upgrades
+-- .WallWalker.SecondsPerTier, which is what a tier buys; these are how the phase
+-- behaves once it is running.
+Config.WallWalk = {
+	-- Grace after the meter empties while the player is still overlapping a wall.
+	-- Going solid inside geometry is how somebody gets stuck, so the phase holds
+	-- until they are clear of it. It is capped because the walls of a grid maze
+	-- all meet at the corners, so a player who never leaves one could otherwise
+	-- travel inside them indefinitely; past the cap they go solid and the engine
+	-- pushes them out, which is recoverable where being stuck is not.
+	GraceSeconds = 6,
+	-- Radius around the root part that counts as "still in a wall". Wall thickness
+	-- is 2, so this clears one comfortably. Erring large only ever extends the
+	-- grace, which is the safe direction.
+	ClearanceRadius = 2.5,
+	-- How often the meter is pushed to the client while phasing. The client draws
+	-- between pushes off the same numbers, so this is a correction rate and not a
+	-- frame rate.
+	PushSeconds = 0.15,
+	HighlightColor = Color3.fromRGB(190, 160, 255),
+	HighlightTransparency = 0.45,
+	-- Phasing is not free movement: a wall still slows you to a squeeze, which is
+	-- what stops the top tier being ten seconds of running in a straight line
+	-- through the whole floor.
+	WalkSpeedMultiplier = 0.75,
 }
 
 -- One DataStore profile per player: coins, upgrade tiers, furthest section
