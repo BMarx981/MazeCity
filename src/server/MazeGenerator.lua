@@ -118,6 +118,18 @@ local CFG = {
 	SHOP_OFFSET = 26,
 	SHOP_OUT = 20,
 
+	-- The egg roost, one per roof deck. Placed by pure geometry off the footprint
+	-- so it draws no random numbers (invariant 6) and cost a countable +5
+	-- instances per building rather than reshuffling the city. The middle of the
+	-- deck is the one part of it nothing else uses: the bounce pads sit at
+	-- Z = FZ * 0.3, the planters at 0.75, the sign at 0.92, and the stair hole is
+	-- always within about 25 studs of an edge because the stairwell is an edge
+	-- cell. It is also where a player stepping off the top of the stairs is
+	-- looking, which is the whole reason the summit is where an egg goes.
+	ROOST_Z_FRAC = 0.55,
+	ROOST_BASE = 3.4,
+	ROOST_EGG = 3.2,
+
 	STAIR_RISER = 0.75,
 	STAIR_WIDTH_FRAC = 0.48,
 	STAIR_RUN_CELLS = 1.8,
@@ -1491,6 +1503,68 @@ end
 -- Roof deck
 -- ============================================================
 
+-- The one piece of pet-system geometry, and the only reason it is geometry at
+-- all: nothing may be parented into workspace.MazeCity at runtime, so a prompt
+-- on the summit has to be built here or not exist. IncubatorService owns what
+-- the prompt does, discovered through the EggPedestal tag the way SaveService
+-- discovers ShopItem.
+--
+-- The egg on top is decoration, not the player's egg: the incubator is one slot
+-- per player and every roof in the city carries one of these, so a shared world
+-- egg would be showing six players someone else's. The client draws the real one
+-- over whichever roost its own player is standing at.
+local function buildEggRoost(parent, origin, style, ctx)
+	local center = Vector3.new(FX / 2, ROOF_Y, FZ * CFG.ROOST_Z_FRAC)
+
+	local pedestal = makePart(
+		parent,
+		"EggPedestal",
+		CFrame.new(origin + center + Vector3.new(0, CFG.ROOST_BASE / 2, 0)),
+		Vector3.new(5, CFG.ROOST_BASE, 5),
+		style.trim,
+		Enum.Material.Marble
+	)
+
+	local egg = makePart(
+		parent,
+		"RoostEgg",
+		CFrame.new(origin + center + Vector3.new(0, CFG.ROOST_BASE + CFG.ROOST_EGG * 0.55, 0)),
+		Vector3.new(CFG.ROOST_EGG * 0.8, CFG.ROOST_EGG, CFG.ROOST_EGG * 0.8),
+		Color3.fromRGB(240, 245, 250),
+		Enum.Material.Neon
+	)
+	egg.Shape = Enum.PartType.Ball
+	egg.CanCollide = false
+	egg.CastShadow = false
+
+	local board = Instance.new("BillboardGui")
+	board.Size = UDim2.new(0, 150, 0, 34)
+	board.StudsOffset = Vector3.new(0, 5.2, 0)
+	board.MaxDistance = 120
+	board.Parent = pedestal
+
+	local boardLabel = Instance.new("TextLabel")
+	boardLabel.Size = UDim2.new(1, 0, 1, 0)
+	boardLabel.BackgroundColor3 = Color3.fromRGB(18, 18, 20)
+	boardLabel.BackgroundTransparency = 0.35
+	boardLabel.TextColor3 = Color3.fromRGB(215, 235, 255)
+	boardLabel.Font = Enum.Font.GothamBold
+	boardLabel.TextSize = 15
+	boardLabel.Text = "EGG ROOST"
+	boardLabel.Parent = board
+
+	local prompt = Instance.new("ProximityPrompt")
+	prompt.ActionText = "Eggs"
+	prompt.ObjectText = "Egg Roost"
+	prompt.MaxActivationDistance = Config.Pets.PromptDistance
+	prompt.HoldDuration = Config.Pets.PromptHoldSeconds
+	prompt.RequiresLineOfSight = false
+	prompt.Parent = pedestal
+
+	tagWithContext(pedestal, "EggPedestal", ctx.section, ctx.building, CFG.LEVELS)
+	return pedestal
+end
+
 local function buildRoof(parent, origin, hole, style, isExit, ctx)
 	local folder = Instance.new("Folder")
 	folder.Name = "Roof"
@@ -1609,6 +1683,8 @@ local function buildRoof(parent, origin, hole, style, isExit, ctx)
 			Enum.Material.Grass
 		)
 	end
+
+	buildEggRoost(deck, origin, style, ctx)
 
 	local sign = makePart(
 		deck,

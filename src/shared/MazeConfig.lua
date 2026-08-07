@@ -278,6 +278,106 @@ Config.Persistence = {
 }
 
 -- ============================================================
+-- Pets and eggs
+-- ============================================================
+-- Tuning only. The pet and egg catalogues are content and live in
+-- ReplicatedStorage.PetCatalog and ReplicatedStorage.EggCatalog, because a
+-- catalogue grows by entries where this grows by edits, and this file is long
+-- enough already. Everything here is a number a playtest might move.
+
+Config.Pets = {
+	Enabled = true,
+	-- What one "maze" is, for hatching and for XP. "tower" counts a tower topped
+	-- out; "floor" counts a floor cleared. This is the number that silently
+	-- rescales every mazesRequired in EggCatalog, so it is not a knob to flip on
+	-- a whim: at "tower" the Summit Egg is two full climbs, at "floor" it is two
+	-- floors. TowerTimerService fires both kinds on the MazeProgress bindable, so
+	-- changing this needs no service edit, only a pass over the catalogue.
+	HatchUnit = "tower",
+	MaxEquipped = 1,
+	PetStorageCap = 25,
+	EggStorageCap = 5,
+	-- Granted once, on the first join that finds an empty profile. Without it a
+	-- new player has no way into the loop at all, since the only other sources
+	-- are the summit pedestal (which costs coins they have not earned) and a
+	-- seven day streak.
+	StarterEggId = "summit_common",
+	StreakEggId = "streak_seven",
+
+	-- XP for the pet that is equipped when the maze is finished. A tower is worth
+	-- eight floors rather than ten, so climbing is always better than farming the
+	-- same floor, and the firefly's first level costs exactly one tower.
+	XpPerFloor = 12,
+	XpPerTower = 100,
+
+	-- The follower. It is anchored and moved by CFrame rather than walked: a
+	-- pathfinding pet in a maze whose walls move is a pet permanently stuck
+	-- behind one, and a physics pet is one more thing to shove a player off a
+	-- roof. Lerp is the fraction of the remaining gap closed per second.
+	FollowDistance = 5.5,
+	FollowSide = 2.5,
+	FollowHeight = 3.2,
+	FollowLerp = 7,
+	-- Past this the pet stops easing and simply appears, which is what carries it
+	-- through a slide, a zipline and a death respawn without a special case each.
+	FollowTeleportRange = 60,
+	BobHeight = 0.45,
+	BobSeconds = 2.6,
+	SpinDegreesPerSecond = 45,
+
+	PromptDistance = 12,
+	PromptHoldSeconds = 0.25,
+
+	-- Daily reward. Coins and XP both scale with the streak, and day seven pays
+	-- the streak egg on top. StreakLength is where the streak wraps back to one,
+	-- so the egg is a weekly event rather than a one-off.
+	DailyStreakLength = 7,
+	DailyCoinBase = 25,
+	DailyCoinPerStreak = 15,
+	DailyXpBase = 60,
+	DailyXpPerStreak = 30,
+
+	NicknameMaxLength = 20,
+
+	-- Hatching at this rarity or better is announced to the whole server. Read
+	-- against RarityOrder, so raising it to "Legendary" narrows it without any
+	-- other edit.
+	BroadcastFrom = "Epic",
+	RarityOrder = { "Common", "Uncommon", "Rare", "Epic", "Legendary" },
+	RarityColors = {
+		Common = Color3.fromRGB(200, 205, 215),
+		Uncommon = Color3.fromRGB(120, 220, 140),
+		Rare = Color3.fromRGB(110, 175, 255),
+		Epic = Color3.fromRGB(200, 130, 255),
+		Legendary = Color3.fromRGB(255, 200, 90),
+	},
+
+	-- These are the first messages this game has ever accepted from a client, so
+	-- they get a budget. A player who exceeds it has their extra intents dropped
+	-- silently: every intent is idempotent or validated, so the cap is a cost
+	-- ceiling rather than a correctness measure.
+	IntentsPerSecond = 8,
+
+	-- Presentation.
+	HatchRevealSeconds = 2.6,
+	BroadcastSeconds = 4,
+	PanelWidth = 420,
+}
+
+function Config.rarityIndex(rarity)
+	for i, name in ipairs(Config.Pets.RarityOrder) do
+		if name == rarity then
+			return i
+		end
+	end
+	return 1
+end
+
+function Config.rarityColor(rarity)
+	return Config.Pets.RarityColors[rarity] or Config.Pets.RarityColors.Common
+end
+
+-- ============================================================
 -- Enemies
 -- ============================================================
 -- Each building carries an EnemyType attribute derived from its style, and

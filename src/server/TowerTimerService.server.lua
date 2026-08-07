@@ -9,6 +9,7 @@ local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local CollectionService = game:GetService("CollectionService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local ServerScriptService = game:GetService("ServerScriptService")
 
 local Config = require(ReplicatedStorage:WaitForChild("MazeConfig"))
 
@@ -17,6 +18,26 @@ if not remote then
 	remote = Instance.new("RemoteEvent")
 	remote.Name = "TimerUpdate"
 	remote.Parent = ReplicatedStorage
+end
+
+-- The only thing in this file that talks to another server script, and the
+-- project's first server-to-server channel. It exists because the pet system
+-- needs to know when a maze was finished and this is the one place that already
+-- knows: re-binding RoofTrigger somewhere else would duplicate the poll that
+-- exists precisely because a touch can miss.
+--
+-- Same shape as the RemoteEvents: one table, discriminated by `kind`. Both kinds
+-- are fired unconditionally, so which of them counts as "a maze" is a config
+-- choice on the listening side rather than a decision baked in here.
+--
+-- FindFirstChild-or-create on both ends, not WaitForChild: scripts in
+-- ServerScriptService start in arbitrary order, and a listener that ran first
+-- would wait forever on something it is allowed to make itself.
+local progress = ServerScriptService:FindFirstChild("MazeProgress")
+if not progress then
+	progress = Instance.new("BindableEvent")
+	progress.Name = "MazeProgress"
+	progress.Parent = ServerScriptService
 end
 
 local state = {}
@@ -143,6 +164,15 @@ local function enterFloor(player, trigger)
 		local gained = Config.scoreFloor(s.level, elapsed)
 		award(player, gained)
 		event = { kind = "floor", level = s.level, elapsed = elapsed, par = s.par, gained = gained }
+		progress:Fire({
+			kind = "floor",
+			player = player,
+			section = s.section,
+			building = s.building,
+			level = s.level,
+			elapsed = elapsed,
+			gained = gained,
+		})
 	end
 
 	startFloor(player, trigger)
@@ -224,9 +254,21 @@ local function completeTower(player)
 		tower = s.tower,
 	}
 	-- Clearing state both ends the floor timer and takes the player out of the
-	-- poll, so the bonus can only be collected once.
+	-- poll, so the bonus can only be collected once. It is also what makes this
+	-- the safe place to fire the bindable: a listener cannot be handed the same
+	-- tower twice however it was reached, poll or touch.
 	state[player] = nil
 	push(player, event)
+	progress:Fire({
+		kind = "tower",
+		player = player,
+		section = s.section,
+		building = s.building,
+		level = s.level,
+		elapsed = elapsed,
+		gained = gained,
+		tower = s.tower,
+	})
 end
 
 -- Where a death sends the player. Also the answer the death banner shows, so
