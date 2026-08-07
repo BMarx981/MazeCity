@@ -526,6 +526,24 @@ Config.Compass = {
 	-- arrow just looks red and the tip stops being a tip. The glyph does not fill
 	-- its box, so this is a bigger number than the visible red fraction.
 	TipFraction = 0.42,
+	-- The rounded back. A bare triangle reads as a shape rather than as a
+	-- pointer partly because both of its ends look like ends: it is as easy to
+	-- read the flat edge as the business end as it is to read the point. A
+	-- half-moon on the back is what a compass needle and a mouse cursor both
+	-- use to settle that, and it gives the hot tip above something to be the
+	-- opposite of.
+	-- Width of the half-moon as a fraction of Size, and where its flat edge sits
+	-- down the box, also as a fraction of Size. The client cuts the circle in
+	-- half rather than hiding the top half behind the triangle, so these two are
+	-- independent: the moon cannot grow or drift its way into showing a far side
+	-- the way it could when the glyph was what covered it. The glyph does not
+	-- fill its box (the same reason TipFraction is larger than it looks), so
+	-- BaseY is still an eyeball number for where the triangle's flat bottom
+	-- actually falls. Too small a BaseY tucks the moon up behind the glyph and
+	-- it shrinks; too large and it detaches downward. Err small: overlap is
+	-- invisible, a gap is not.
+	BaseDiameter = 0.28,
+	BaseY = 0.73,
 	RetargetSeconds = 1, -- how often the target part is re-resolved, for lazily built sections
 }
 

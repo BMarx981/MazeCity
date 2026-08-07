@@ -321,15 +321,68 @@ compass.Enabled = false
 compass.ResetOnSpawn = false
 compass.Parent = player.PlayerGui
 
+-- Triangle and rounded base are one assembly in a frame of their own, and it is
+-- the frame that gets rotated each frame, not the glyph. Rotating the two
+-- separately would need the same angle applied about two different centres to
+-- keep them joined.
+local needle = Instance.new("Frame")
+needle.Name = "Needle"
+needle.Size = UDim2.fromScale(1, 1)
+needle.BackgroundTransparency = 1
+needle.Parent = compass
+
+-- The half-moon back: a whole circle whose top half is erased by a transparency
+-- ramp, not merely covered by the triangle in front of it. Hiding it behind the
+-- glyph is what the first version did, and it only works while the circle is
+-- narrower than the triangle at every height they share, so being a little too
+-- high or a little too wide put the far side of the circle out in the open on
+-- both flanks. A cut half cannot do that at any size or position: the worst a
+-- wrong BaseY can now do is leave a gap or tuck the flat edge up behind the
+-- glyph. Clipping would be the other way to cut it, and per the note below
+-- ClipsDescendants is not dependable on something rotated every frame.
+local moon = Instance.new("Frame")
+moon.Name = "Base"
+moon.AnchorPoint = Vector2.new(0.5, 0.5)
+moon.Position = UDim2.fromScale(0.5, Config.Compass.BaseY)
+moon.Size = UDim2.fromScale(Config.Compass.BaseDiameter, Config.Compass.BaseDiameter)
+-- Flat Compass.Color rather than the white-plus-gradient the triangle uses: the
+-- gradient exists to put a hot tip on the point, and the base is the far end of
+-- that ramp, where the colour is Compass.Color anyway.
+moon.BackgroundColor3 = Config.Compass.Color
+moon.BorderSizePixel = 0
+moon.ZIndex = 1
+moon.Parent = needle
+
+local round = Instance.new("UICorner")
+round.CornerRadius = UDim.new(0.5, 0)
+round.Parent = moon
+
+-- The cut. Rotation 90 runs the ramp top to bottom, and the two keypoints five
+-- thousandths apart are a hard edge rather than a fade: a NumberSequence cannot
+-- hold two keypoints at the same time value, so this is as close to a step as it
+-- can be drawn. Colour is left alone; a UIGradient's default white multiplies
+-- against BackgroundColor3 and leaves it as it was.
+local cut = Instance.new("UIGradient")
+cut.Rotation = 90
+cut.Transparency = NumberSequence.new({
+	NumberSequenceKeypoint.new(0, 1),
+	NumberSequenceKeypoint.new(0.5, 1),
+	NumberSequenceKeypoint.new(0.505, 0),
+	NumberSequenceKeypoint.new(1, 0),
+})
+cut.Parent = moon
+
 -- White, not Compass.Color: a UIGradient multiplies against TextColor3 rather
 -- than replacing it, so tinting a gold label red gives a muddy orange that is
 -- neither colour. Leaving the label white makes the gradient below the only
 -- thing deciding what the arrow looks like, which is what its two config
 -- colours then actually mean.
-local arrow = label(compass, UDim2.fromScale(1, 1), UDim2.fromScale(0, 0), Enum.Font.GothamBlack, 1, WHITE)
+local arrow = label(needle, UDim2.fromScale(1, 1), UDim2.fromScale(0, 0), Enum.Font.GothamBlack, 1, WHITE)
 arrow.Text = "▲"
 arrow.TextScaled = true
 arrow.TextStrokeTransparency = 0.4
+-- Above the moon, so the glyph is what hides its top half.
+arrow.ZIndex = 2
 
 -- The hot tip, drawn as a gradient down the one glyph rather than as a second
 -- clipped copy of it: ClipsDescendants is unreliable once a frame is rotated,
@@ -419,7 +472,7 @@ RunService.RenderStepped:Connect(function()
 	compass.Adornee = root
 	-- Screen-space angle from camera-forward, so the arrow reads as a top-down
 	-- compass: straight up means walk the way you are looking.
-	arrow.Rotation = math.deg(math.atan2(camRight.Unit:Dot(flat.Unit), camFlat.Unit:Dot(flat.Unit)))
+	needle.Rotation = math.deg(math.atan2(camRight.Unit:Dot(flat.Unit), camFlat.Unit:Dot(flat.Unit)))
 	compass.Enabled = true
 end)
 
