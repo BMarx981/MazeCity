@@ -13,6 +13,7 @@
 -- is the only place an egg can be placed, not which one it was.
 
 local CollectionService = game:GetService("CollectionService")
+local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local ServerScriptService = game:GetService("ServerScriptService")
 
@@ -42,6 +43,21 @@ local progress = findOrCreate(ServerScriptService, "BindableEvent", "MazeProgres
 -- lands. The slack is what stops a legitimate placement being refused for
 -- having walked half a step.
 local ROOST_SLACK = 4
+
+-- A tower topped out with no egg in the slot is held as one credit rather than
+-- thrown away. Placing an egg means standing on a summit, and the only way onto
+-- a roof is up through that tower's ten floors: the zipline and the slide both
+-- run downward. So the climb that carried the player to the roost is a climb
+-- they made, and without crediting it the Summit Egg's "2 towers" is really
+-- three and the number in the catalogue is not the number of climbs.
+--
+-- Exactly one is held. It is spent by the next placement, or overwritten by the
+-- next summit, and it is never accumulated: two towers climbed before placing
+-- still buys one credit, because the egg was not in the slot for either of them.
+-- A summit that goes to an active incubator sets nothing, which is what stops a
+-- player hatching at a summit and then placing a second egg into the same
+-- climb's credit.
+local pendingSummit = {}
 
 local function deny(player, action, reason)
 	remote:FireClient(player, { kind = "denied", action = action, reason = reason })
@@ -159,6 +175,7 @@ progress.Event:Connect(function(payload)
 	-- PetService keeps the counters, including mazesCompleted. This service owns
 	-- exactly one thing: the egg in the slot.
 	if not data.incubator then
+		pendingSummit[player] = true
 		return
 	end
 
@@ -213,7 +230,33 @@ local function placeEgg(player, payload)
 		deny(player, "placeEgg", reason)
 		return
 	end
-	announce(player, { kind = "placed", eggId = data.incubator.eggId })
+
+	local eggId = data.incubator.eggId
+	local eggConfig = Inventory.eggConfig(eggId)
+	local required = eggConfig and eggConfig.mazesRequired or 0
+
+	if pendingSummit[player] then
+		pendingSummit[player] = nil
+		local credited, result = Inventory.addMazeProgress(data, 1)
+		-- A one-maze egg is finished the moment it is placed, and hatching it here
+		-- rather than on the next summit is the right answer: the player is already
+		-- standing on one. Nothing in the catalogue is a one-maze egg today, so
+		-- this branch is written for the day one is and not for a bug.
+		if credited and result.ready then
+			if resolveHatch(player, true) then
+				return
+			end
+			announce(player)
+			return
+		end
+	end
+
+	announce(player, {
+		kind = "placed",
+		eggId = eggId,
+		done = math.floor(data.incubator.mazesCompleted),
+		required = required,
+	})
 end
 
 local function buyEgg(player, payload)
@@ -325,4 +368,8 @@ Profiles.onReady(function(player, data)
 	if ok then
 		announce(player, { kind = "starter", eggId = Config.Pets.StarterEggId })
 	end
+end)
+
+Players.PlayerRemoving:Connect(function(player)
+	pendingSummit[player] = nil
 end)

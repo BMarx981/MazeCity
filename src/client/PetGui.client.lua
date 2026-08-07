@@ -879,6 +879,17 @@ player.CharacterAdded:Connect(clearHint)
 -- Server messages
 -- ============================================================
 
+-- "Climb to hatch it" is what this replaces, and it read as a lie to anyone who
+-- had just climbed: a roost is on a roof, so placing an egg always happens the
+-- moment a tower is finished. A count cannot be misread that way, and it is the
+-- only line in the UI that has to survive HatchUnit being flipped, hence the
+-- singular.
+local function remaining(done, required)
+	local left = math.max(0, required - done)
+	local unit = Config.Pets.HatchUnit == "tower" and "tower" or "floor"
+	return string.format("%d more %s to hatch", left, left == 1 and unit or unit .. "s")
+end
+
 local function playEvent(event)
 	if not event then
 		return
@@ -891,7 +902,7 @@ local function playEvent(event)
 		showBanner(event.pet.name .. " " .. what, "", Config.rarityColor(event.pet.rarity), 2)
 		playSound(Config.Sounds.PowerupPickup, Config.Juice.PowerupVolume, 1.4)
 	elseif event.kind == "placed" then
-		showBanner("Egg placed", "Climb to hatch it", GREEN, 2)
+		showBanner("Egg placed", remaining(event.done, event.required), GREEN, 2.5)
 	elseif event.kind == "bought" then
 		showBanner(event.name, string.format("-%d coins", event.cost), GOLD, 1.8)
 	elseif event.kind == "starter" then
@@ -909,10 +920,9 @@ local function playEvent(event)
 	elseif event.kind == "incubated" then
 		-- Fires alongside TimerGui's own tower celebration, so it is deliberately
 		-- short and quiet: the point is the count, not another fanfare.
-		local unit = Config.Pets.HatchUnit == "tower" and "towers" or "floors"
 		showBanner(
 			string.format("Egg  %d / %d", math.min(event.done, event.required), event.required),
-			string.format("%s to go", unit),
+			remaining(event.done, event.required),
 			GREEN,
 			1.5
 		)
