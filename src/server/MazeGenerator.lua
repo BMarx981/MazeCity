@@ -165,6 +165,12 @@ local CFG = {
 	-- Together these size the hole; the cell around it stays floor.
 	STAIR_HEADROOM = 6,
 	STAIR_HOLE_MARGIN = 1,
+	-- How far the stairs up have to be from the stairs the player just came up,
+	-- as a fraction of the footprint: at 0.5 on a 10x10 that is 5 cells, 125
+	-- studs. Unconstrained, a perpendicular exit near the shared corner put the
+	-- next flight a cell or two from the arrival, so a fifth of the possible
+	-- pairs let a floor be climbed without entering its maze at all.
+	STAIR_MIN_SEPARATION_FRAC = 0.5,
 
 	-- Level 0's slab would otherwise top out at Y = 0, exactly level with the
 	-- street Ground part, so the lobby floor read as more asphalt. Lifting it
@@ -370,6 +376,43 @@ local function sideRunLength(side)
 		return CFG.MAZE_W
 	end
 	return CFG.MAZE_H
+end
+
+-- Where this level's stairs go, given where the player arrives. Every index on
+-- the exit side is a candidate; the ones at least STAIR_MIN_SEPARATION_FRAC of
+-- the footprint from the arrival cell are the ones drawn from, so a climb
+-- crosses the floor instead of turning a corner. One draw either way, so this
+-- costs the stream nothing.
+--
+-- Straight-line distance, not path distance: the maze is carved after these
+-- cells are reserved, so at this point there are no corridors to measure along.
+--
+-- The filter can never empty on the shipped footprint (the tightest case, an
+-- arrival one cell from the corner the two sides share, still leaves four of
+-- the eight candidates), but MAZE_W and MAZE_H are constants somebody may
+-- shrink, and a floor with no stairs is not a recoverable state. Falling back
+-- to the farthest candidate keeps a small footprint building and merely stops
+-- honouring the fraction.
+local function pickExitIndex(exitSide, entryCell, rng)
+	local span = sideRunLength(exitSide)
+	local minSep = CFG.STAIR_MIN_SEPARATION_FRAC * math.max(CFG.MAZE_W, CFG.MAZE_H)
+	local far = {}
+	local best, bestSep = 2, -1
+	for i = 2, span - 1 do
+		local c = edgeCell(exitSide, i)
+		local dx, dz = c.x - entryCell.x, c.z - entryCell.z
+		local sep = math.sqrt(dx * dx + dz * dz)
+		if sep >= minSep then
+			far[#far + 1] = i
+		end
+		if sep > bestSep then
+			best, bestSep = i, sep
+		end
+	end
+	if #far == 0 then
+		return best
+	end
+	return far[rng:NextInteger(1, #far)]
 end
 
 -- ============================================================
@@ -1226,9 +1269,7 @@ local function buildLevel(buildingFolder, origin, level, entrySide, entryCell, s
 	ctx.level = level
 
 	local exitSide = rotateSide(entrySide, rng:NextNumber() < 0.5 and 1 or -1)
-	local span = sideRunLength(exitSide)
-	local exitIndex = rng:NextInteger(2, span - 1)
-	local cellE = edgeCell(exitSide, exitIndex)
+	local cellE = edgeCell(exitSide, pickExitIndex(exitSide, entryCell, rng))
 	local cellB = neighborCell(cellE, OPPOSITE[exitSide])
 
 	local g = newGrid({ cellE, cellB })

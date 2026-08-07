@@ -86,7 +86,7 @@ These encode fixes for real bugs in an earlier version. Any change to `MazeGener
 
 2. **Stair cells are reserved before carving.** Each level picks an exit cell plus the cell inward of it, passes both as `reserved` to `newGrid`, carves around them, then seals both and cuts exactly two openings: bottom stair cell to the maze, bottom to top stair cell. Never open or close walls of an already-carved maze elsewhere; the maze is a spanning tree and post-hoc edits orphan regions.
 
-3. **Perpendicular spiral.** `exitSide = rotateSide(entrySide, +/-1)`, never 0 or 2. The exit cell of level N is the entry cell of level N+1. This keeps stair holes and arrival triggers aligned across floors.
+3. **Perpendicular spiral, and the exit is half a floor from the entry.** `exitSide = rotateSide(entrySide, +/-1)`, never 0 or 2. The exit cell of level N is the entry cell of level N+1. This keeps stair holes and arrival triggers aligned across floors. Perpendicular alone still allowed the two to sit a cell or two apart near the corner the sides share, which is a floor climbed without entering its maze, so `pickExitIndex` draws only from the edge cells at least `STAIR_MIN_SEPARATION_FRAC` of the footprint from the arrival, in a straight line because nothing is carved yet. It is one draw either way, so the stream length per level is unchanged; the values are not, and changing the fraction reshuffles the city.
 
 4. **Sections are self-contained except slide targets.** A section references section N+1 only through `MazeGenerator.sectionOrigin(N + 1)`, which is pure math. Changing plot layout constants changes every slide target, which is fine as long as it changes them consistently; never hardcode a world position.
 
