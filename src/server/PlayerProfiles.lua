@@ -56,10 +56,14 @@ local function defaults()
 		furthestSection = 1,
 		pets = {},
 		eggs = {},
+		-- Worn gear is not here: a pet's `worn` map rides inside the pet row, so it
+		-- saves and loads with the pet that is wearing it.
+		accessories = {},
 		equipped = {},
 		maxEquipped = pets.MaxEquipped,
 		petStorageCap = pets.PetStorageCap,
 		eggStorageCap = pets.EggStorageCap,
+		accessoryStorageCap = Config.Accessories.AccessoryStorageCap,
 		incubator = nil,
 		daily = { lastClaimDayUtc = 0, streak = 0 },
 		stats = { mazesCompleted = 0, floorsCleared = 0, summitsReached = 0, eggsHatched = 0 },
@@ -147,10 +151,12 @@ local function adopt(data, result)
 	data.furthestSection = result.furthestSection or 1
 	data.pets = result.pets or {}
 	data.eggs = result.eggs or {}
+	data.accessories = result.accessories or {}
 	data.equipped = result.equipped or {}
 	data.maxEquipped = result.maxEquipped or pets.MaxEquipped
 	data.petStorageCap = result.petStorageCap or pets.PetStorageCap
 	data.eggStorageCap = result.eggStorageCap or pets.EggStorageCap
+	data.accessoryStorageCap = result.accessoryStorageCap or Config.Accessories.AccessoryStorageCap
 	data.incubator = result.incubator
 	data.daily = result.daily or { lastClaimDayUtc = 0, streak = 0 }
 	data.stats = result.stats or { mazesCompleted = 0, floorsCleared = 0, summitsReached = 0, eggsHatched = 0 }
@@ -214,10 +220,12 @@ function Profiles.save(player)
 		furthestSection = data.furthestSection,
 		pets = data.pets,
 		eggs = data.eggs,
+		accessories = data.accessories,
 		equipped = data.equipped,
 		maxEquipped = data.maxEquipped,
 		petStorageCap = data.petStorageCap,
 		eggStorageCap = data.eggStorageCap,
+		accessoryStorageCap = data.accessoryStorageCap,
 		incubator = data.incubator,
 		daily = data.daily,
 		stats = data.stats,

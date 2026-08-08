@@ -71,6 +71,70 @@ export type EggConfig = {
 	availableUntil: number?,
 }
 
+-- ============================================================
+-- Accessories
+-- ============================================================
+-- Gear worn by a pet. Catalogued in ReplicatedStorage.AccessoryCatalog, capped
+-- and priced by Config.Accessories, resolved into one totals table by
+-- PetInventory.wornEffects. See docs/PET_ACCESSORIES_PLAN.md.
+
+export type AccessorySlot = "Head" | "Neck" | "Back" | "Aura"
+
+-- Every effect names exactly one integration site. An effect with no site is
+-- not in this list, and an effect with two sites is two effects.
+export type AccessoryEffectType =
+	"WalkSpeed"
+	| "PickupRadius"
+	| "CoinMultiplier"
+	| "GlowRange"
+	| "WallWalkSeconds"
+	| "PetXp"
+	| "HatchProgress"
+	| "RouteVision"
+	| "PhantomSense"
+	| "ScoreBonus"
+	| "Armor"
+
+export type AccessoryEffect = {
+	type: AccessoryEffectType,
+	value: number,
+}
+
+-- Not the pet Placeholder: gear is worn, so proportion is the whole of whether
+-- a cape reads as a cape, and a size scalar cannot say that. `rate` is read
+-- only when shape is "Particle", which is what the Aura slot is made of.
+export type AccessoryPlaceholder = {
+	color: Color3,
+	shape: "Ball" | "Block" | "Cylinder" | "Particle",
+	size: Vector3,
+	rate: number?,
+}
+
+export type AccessoryConfig = {
+	id: string,
+	name: string,
+	slot: AccessorySlot,
+	rarity: Rarity,
+	model: string,
+	placeholder: AccessoryPlaceholder,
+	effects: { AccessoryEffect },
+	coinCost: number?,
+	availableUntil: number?,
+}
+
+export type AccessoryInstance = {
+	uid: string,
+	accessoryId: string,
+	locked: boolean,
+	acquiredAt: number,
+}
+
+-- `worn` maps a slot to an accessory uid, and the accessory stays in
+-- PlayerData.accessories while it is worn. That is the opposite of the
+-- egg-into-the-incubator move and for the opposite reason: an egg had to exist
+-- in exactly one place so it could not be placed twice, where gear has to stay
+-- listed so the UI can show it as worn by a named pet. What replaces the
+-- structural guarantee is Inventory.wearerOf, which every mutation calls.
 export type PetInstance = {
 	uid: string,
 	petId: string,
@@ -81,6 +145,7 @@ export type PetInstance = {
 	nickname: string?,
 	acquiredAt: number,
 	sourceEggId: string?,
+	worn: { [AccessorySlot]: string },
 }
 
 export type EggInstance = {
@@ -120,10 +185,12 @@ export type PlayerData = {
 	furthestSection: number,
 	pets: { [string]: PetInstance },
 	eggs: { [string]: EggInstance },
+	accessories: { [string]: AccessoryInstance },
 	equipped: { string },
 	maxEquipped: number,
 	petStorageCap: number,
 	eggStorageCap: number,
+	accessoryStorageCap: number,
 	incubator: IncubatorState?,
 	daily: DailyState,
 	stats: PlayerStats,

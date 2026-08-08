@@ -180,7 +180,9 @@ Prices are read against the economy the shop is already tuned to: a floor fully 
 | Wayfinder Halo | Epic | RouteVision 10, ScoreBonus +8% | 3400 |
 | Ember Trail | Legendary | GlowRange +14, WalkSpeed +1.0 | not for sale (event) |
 
-Twenty one items, every effect type carried by at least two of them, and one item with no effects at all so the cosmetic case is exercised from the first day rather than being discovered to be broken later.
+Twenty two items, every effect type carried by something, and one item with no effects at all so the cosmetic case is exercised from the first day rather than being discovered to be broken later.
+
+Two effects have exactly one source in this pass: `HatchProgress` (Warm Amulet) and `WallWalkSeconds` (Phase Pack). That is a content gap rather than a bug, and it is worth knowing before either is rebalanced, because retiring the one item that carries an effect retires the effect. The first draft of this table said every effect had two sources and counted twenty one items; both were miscounts against the table itself, corrected here after Set 1 counted them in code.
 
 ## Rendering
 
@@ -203,12 +205,23 @@ The lesson from PETS_PLAN reconciliation point 11 is that a system with one sour
 
 ### Set 1: Data layer and resolver
 
-- [ ] Types, `AccessoryCatalog`, `Config.Accessories` (slots, `AccessoryStorageCap = 40`, `Caps`, `SellFraction = 0.5`)
-- [ ] Profile fields, added to `defaults` and to `adopt` field by field. `KeyPrefix` does not move; an old profile is a player with no gear.
-- [ ] `PetInventory`: `accessoryConfig`, `grantAccessory`, `wearerOf`, `wear`, `unwear`, `sellAccessory`, `setAccessoryLocked`, `wornEffects`, plus pruning for a worn uid whose catalogue entry vanished
-- [ ] `Inventory.project` gains an `accessories` list and a `worn` map per pet
+**Done.**
+
+- [x] Types, `AccessoryCatalog`, `Config.Accessories` (slots, `AccessoryStorageCap = 40`, `Caps`, `SellFraction = 0.5`)
+- [x] Profile fields, added to `defaults` and to `adopt` field by field. `KeyPrefix` does not move; an old profile is a player with no gear.
+- [x] `PetInventory`: `accessoryConfig`, `grantAccessory`, `wearerOf`, `wear`, `unwear`, `sellAccessory`, `setAccessoryLocked`, `wornEffects`, plus `pruneWorn`, called from PetService's existing `onReady` beside `pruneEquipped`
+- [x] `Inventory.project` gains an `accessories` list and a `worn` map per pet
 
 Exit: gear granted from the command bar survives a rejoin, a stale id warns and skips, and nothing is visible in game.
+
+Four things the implementation settled, none of which the plan had an answer for:
+
+- **An item with no `coinCost` cannot be sold either.** The field was specified as "cannot be bought", and half of nothing is nothing, so a Legendary would have sold for zero coins. `sellAccessory` refuses it with `notforsale`. The consequence is that the two unsellable items are also the two that cannot be cleared from a full bag, which `locked` was already the answer to for everything else.
+- **Worn gear counts against the storage cap.** The alternative makes the cap mean a different number depending on how many pets a player owns, since gear only leaves the bag by being sold.
+- **`pruneWorn` also drops an item filed under a slot it no longer belongs to.** A rebalance that moves an item from Neck to Head leaves a live uid under the old key, which would otherwise score twice: once from the stale key and once when it is worn again. Same posture as a vanished entry, and the instance is never deleted either way.
+- **`wear` reads the wearer's slot from `wearerOf`, not from the catalogue.** Same reason: the item may be sitting under the slot key it had when it was last worn.
+
+Exercised outside Studio with a stub prelude and the real modules concatenated into one Luau chunk: 50 checks over the catalogue shape, the cap clamp, the benched-pet rule, the move-between-pets reply, the refusals and the projection. That harness is a scratchpad artifact, not a repo file, because there is no test runner in this project to put it in.
 
 ### Set 2: Wearing and rendering
 

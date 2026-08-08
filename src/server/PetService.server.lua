@@ -501,6 +501,9 @@ Profiles.onReady(function(player, data)
 	-- still names it, and an equipped pet that cannot be built is a follower that
 	-- never appears with no way to tell why.
 	Inventory.pruneEquipped(data)
+	-- Same posture for gear: a worn uid the catalogue no longer knows comes off
+	-- the pet, while the item itself stays in the bag in case the entry returns.
+	Inventory.pruneWorn(data)
 	reconcileFollowers(player)
 	pushState(player)
 end)

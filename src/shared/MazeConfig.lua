@@ -414,6 +414,51 @@ function Config.rarityColor(rarity)
 end
 
 -- ============================================================
+-- Pet accessories
+-- ============================================================
+-- Tuning only, and a sibling of Config.Pets rather than a block inside it: the
+-- caps below govern player stats the whole game is tuned against, not the pet
+-- system. The items themselves are content and live in
+-- ReplicatedStorage.AccessoryCatalog. See docs/PET_ACCESSORIES_PLAN.md.
+
+Config.Accessories = {
+	Enabled = true,
+	-- Four slots against one equipped pet is at most four items live, which is
+	-- what makes the caps below reachable but not trivially so. The list is
+	-- iterated rather than pairs() over a pet's worn map, so a slot key left in a
+	-- saved profile by an older build is ignored instead of scoring.
+	Slots = { "Head", "Neck", "Back", "Aura" },
+	AccessoryStorageCap = 40,
+	-- Half the coin cost, floored. An item with no coinCost has no sale price and
+	-- is refused rather than sold for nothing.
+	SellFraction = 0.5,
+
+	-- The ceiling on all gear combined, applied once in Inventory.wornEffects so
+	-- that no consumer clamps anything.
+	--
+	-- These are not decoration. Config.EnemyProfiles is tuned on the stated rule
+	-- that sustained enemy speed stays under the unupgraded player's 16 and that
+	-- Fast Feet's 20.5 leaves everything behind; gear at +2 puts the ceiling at
+	-- 22.5 and moves nothing structural. Uncapped, it eventually makes the par
+	-- times Config.getParTime shaves per floor a formality. Whoever raises
+	-- WalkSpeed owes the enemy tuning comment at the top of that section a
+	-- re-read.
+	Caps = {
+		WalkSpeed = 2,
+		PickupRadius = 5,
+		CoinMultiplier = 0.5,
+		GlowRange = 25,
+		WallWalkSeconds = 4,
+		PetXp = 0.35,
+		HatchProgress = 0.75,
+		RouteVision = 14,
+		PhantomSense = 30,
+		ScoreBonus = 0.15,
+		Armor = 0.4,
+	},
+}
+
+-- ============================================================
 -- Enemies
 -- ============================================================
 -- Each building carries an EnemyType attribute derived from its style, and
@@ -709,6 +754,82 @@ end
 function Config.getProfile(enemyType)
 	return Config.EnemyProfiles[enemyType] or Config.EnemyProfiles.Drifter
 end
+
+-- The knobs that govern the enemy system as a whole, as opposed to what any one
+-- type is. Per-type numbers move out of Config.EnemyProfiles and into
+-- ReplicatedStorage.EnemyDefinitions at phase E1, on the same split content
+-- already uses: a roster grows by entries where a system is tuned by edits.
+--
+-- Nothing reads this table yet. The flat Config.EnemyXxx keys above are still
+-- the live ones and are deliberately not duplicated here, because two names for
+-- one number is two numbers as soon as somebody edits the wrong one; they move
+-- in at E2 when the service that reads them is rewritten.
+Config.Enemies = {
+	-- The hard ceiling on sustained speed, applied at spawn so no definition row
+	-- can put an enemy past it. The player walks at 16 unupgraded, so this is the
+	-- promise that a straight corridor is always an escape.
+	--
+	-- It is a backstop and not the tuning. The live band after the last playtest
+	-- is 8.1 to 12.6, well under this, and that is where the roster belongs: a
+	-- type that has to be clamped is a type whose row is wrong. Burst moves stay
+	-- exempt, Charger's chargeSpeed included, because a telegraphed line the
+	-- player is shown in advance is a thing to sidestep rather than outrun.
+	MaxChaseSpeed = 15,
+
+	-- Global multipliers over every definition row, applied to a per-spawn copy
+	-- and never written back into the row itself.
+	--
+	-- All of them ship at 1. The brief wanted damage halved here, and that was
+	-- right when the rows still carried the brief's numbers; since then a
+	-- playtest doubled damage against a hit that is now both telegraphed and
+	-- escapable, and halving the result would quietly undo it. The kid tuning
+	-- lives in the rows, where a playtest can move one type without moving the
+	-- other eighteen. This table is what an Easy or a Hard mode would turn.
+	Difficulty = {
+		HealthMultiplier = 1,
+		DamageMultiplier = 1,
+		SpeedMultiplier = 1,
+		DetectionMultiplier = 1,
+		CooldownMultiplier = 1,
+		BudgetMultiplier = 1,
+	},
+
+	-- Live rigs, server wide and per building. Proximity already bounds this far
+	-- below either number; they exist so that four players spread across four
+	-- buildings cannot multiply into a frame budget nobody measured.
+	GlobalCap = 40,
+	PerBuildingCap = 12,
+
+	-- What a floor may spend on enemies, read by the spawn director at E5 once a
+	-- marker is a position rather than an enemy. Base is set to buy roughly the
+	-- three cheap enemies a floor holds today, so level 1 does not change feel on
+	-- the day the director lands and only the climb gets heavier.
+	FloorBudget = {
+		Base = 6,
+		PerLevel = 1.1,
+		Max = 18,
+	},
+
+	-- Update rates for the staggered groups. Movement decisions are cheap and
+	-- frequent, target selection is neither, and a path is the expensive one and
+	-- is spread over a window rather than a rate so that twenty five enemies do
+	-- not all recompute on the frame a player rounds a corner.
+	FastUpdateHz = 10,
+	TargetingHz = 3,
+	PathRecomputeMin = 0.7,
+	PathRecomputeMax = 1.5,
+
+	-- Stickiness is in studs and is subtracted from the current target's distance
+	-- score: the enemy already chasing you is treated as being this much closer
+	-- than it is. Without it an enemy between two players recomputes into a
+	-- different answer several times a second and commits to neither.
+	TargetRefreshInterval = 0.35,
+	TargetStickinessBonus = 12,
+
+	-- Studs of clearance kept outside a safe zone, so nothing camps the line a
+	-- player has to cross to get out of one.
+	SafeZoneMargin = 12,
+}
 
 -- ============================================================
 -- Moving walls

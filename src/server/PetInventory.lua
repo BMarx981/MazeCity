@@ -18,11 +18,13 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Config = require(ReplicatedStorage:WaitForChild("MazeConfig"))
 local PetCatalog = require(ReplicatedStorage:WaitForChild("PetCatalog"))
 local EggCatalog = require(ReplicatedStorage:WaitForChild("EggCatalog"))
+local AccessoryCatalog = require(ReplicatedStorage:WaitForChild("AccessoryCatalog"))
 
 local Inventory = {}
 
 Inventory.PetCatalog = PetCatalog
 Inventory.EggCatalog = EggCatalog
+Inventory.AccessoryCatalog = AccessoryCatalog
 
 -- Runtime randomness, deliberately not seeded off Config.World.Seed. Two players
 -- opening the same egg should not get the same pet, and neither should the same
@@ -42,6 +44,10 @@ end
 
 function Inventory.eggConfig(eggId)
 	return EggCatalog[eggId]
+end
+
+function Inventory.accessoryConfig(accessoryId)
+	return AccessoryCatalog[accessoryId]
 end
 
 local function count(map)
@@ -198,9 +204,30 @@ function Inventory.grantPet(data, petId, sourceEggId)
 		nickname = nil,
 		acquiredAt = os.time(),
 		sourceEggId = sourceEggId,
+		worn = {},
 	}
 	data.pets[pet.uid] = pet
 	return true, pet
+end
+
+function Inventory.grantAccessory(data, accessoryId)
+	local config = AccessoryCatalog[accessoryId]
+	if not config then
+		return false, "unknown"
+	end
+	if config.availableUntil and os.time() > config.availableUntil then
+		return false, "expired"
+	end
+	-- A worn item is still in this map, so it counts. Gear that vanished from the
+	-- bag the moment it went on a pet would make the cap mean something different
+	-- depending on how many pets a player owns.
+	if count(data.accessories) >= data.accessoryStorageCap then
+		return false, "gearfull"
+	end
+
+	local instance = { uid = uid(), accessoryId = accessoryId, locked = false, acquiredAt = os.time() }
+	data.accessories[instance.uid] = instance
+	return true, instance
 end
 
 -- ============================================================
@@ -382,12 +409,219 @@ function Inventory.setNickname(data, petUid, nickname)
 end
 
 -- ============================================================
+-- Accessories
+-- ============================================================
+-- Gear is owned by the player and worn by a pet. The instance lives in
+-- data.accessories for as long as it is owned; wearing it writes its uid into
+-- pet.worn[slot] and nothing else moves. See docs/PET_ACCESSORIES_PLAN.md.
+
+function Inventory.sellValue(config)
+	if not config or not config.coinCost then
+		return 0
+	end
+	return math.floor(config.coinCost * Config.Accessories.SellFraction)
+end
+
+-- The pet wearing this item, and the slot it sits in, or nil. One scan over the
+-- pets map, and it is what every mutation calls: with the item left listed in
+-- the bag there is no structural guarantee that it is on at most one pet, so
+-- this is the guarantee instead.
+function Inventory.wearerOf(data, accessoryUid)
+	for petUid, pet in pairs(data.pets) do
+		if pet.worn then
+			for slot, wornUid in pairs(pet.worn) do
+				if wornUid == accessoryUid then
+					return petUid, slot
+				end
+			end
+		end
+	end
+	return nil
+end
+
+-- Wearing an item that is already on another pet moves it, for the same reason
+-- equipping a second pet at MaxEquipped == 1 swaps rather than refusing: the
+-- player owns one of the thing and has said where they want it. The result
+-- names the pet that lost it, so it is never silent.
+function Inventory.wear(data, petUid, accessoryUid)
+	local pet = data.pets[petUid]
+	if not pet then
+		return false, "nopet"
+	end
+	local instance = data.accessories[accessoryUid]
+	if not instance then
+		return false, "noitem"
+	end
+	local config = AccessoryCatalog[instance.accessoryId]
+	if not config then
+		return false, "unknown"
+	end
+
+	local slot = config.slot
+	pet.worn = pet.worn or {}
+	if pet.worn[slot] == accessoryUid then
+		return true, { slot = slot, pet = pet, accessory = instance, config = config }
+	end
+
+	-- fromSlot rather than slot, because an item rebalanced into a different slot
+	-- since it was last worn is sitting under the old key and has to come off it.
+	local fromPetUid, fromSlot = Inventory.wearerOf(data, accessoryUid)
+	if fromPetUid then
+		data.pets[fromPetUid].worn[fromSlot] = nil
+	end
+
+	local displacedUid = pet.worn[slot]
+	pet.worn[slot] = accessoryUid
+	return true,
+		{
+			slot = slot,
+			pet = pet,
+			accessory = instance,
+			config = config,
+			-- nil when it came out of the bag rather than off another pet.
+			takenFrom = fromPetUid,
+			-- What this pet was already wearing in the slot, now back in the bag.
+			displacedUid = displacedUid,
+		}
+end
+
+function Inventory.unwear(data, petUid, slot)
+	local pet = data.pets[petUid]
+	if not pet then
+		return false, "nopet"
+	end
+	local wornUid = pet.worn and pet.worn[slot]
+	if not wornUid then
+		return false, "notworn"
+	end
+	pet.worn[slot] = nil
+	return true, wornUid
+end
+
+function Inventory.setAccessoryLocked(data, accessoryUid, locked)
+	local instance = data.accessories[accessoryUid]
+	if not instance then
+		return false, "noitem"
+	end
+	instance.locked = locked and true or false
+	return true, instance
+end
+
+-- Returns the coins owed. Refused on a locked item, on a worn one, and on
+-- anything with no coinCost: an item that was never for sale has no sale price,
+-- and paying zero coins for the only Legendary in the game is a mistake a
+-- player makes exactly once. An item whose catalogue entry has vanished cannot
+-- be priced either, and stays in the profile in case the entry comes back.
+function Inventory.sellAccessory(data, accessoryUid)
+	local instance = data.accessories[accessoryUid]
+	if not instance then
+		return false, "noitem"
+	end
+	if instance.locked then
+		return false, "locked"
+	end
+	if Inventory.wearerOf(data, accessoryUid) then
+		return false, "worn"
+	end
+	local config = AccessoryCatalog[instance.accessoryId]
+	if not config then
+		return false, "unknown"
+	end
+	if not config.coinCost then
+		return false, "notforsale"
+	end
+
+	data.accessories[accessoryUid] = nil
+	return true, { value = Inventory.sellValue(config), config = config }
+end
+
+-- The one resolver. Everything an accessory does reads this table or the
+-- attribute published from it, and no consumer anywhere reads AccessoryCatalog.
+--
+-- Summed over equipped pets only. Gear on a benched pet does nothing, because
+-- otherwise a full shelf in crowns is a permanent stat line, the pet slot stops
+-- being a choice, and the number moves when a pet is hatched rather than when
+-- anything is worn.
+--
+-- Additive effects sum. Multiplier effects sum their bonus fractions here and
+-- are applied once by their consumer as 1 + total, never chained: two 25% items
+-- are 50%, not 56.25%, which is the version a player can predict.
+function Inventory.wornEffects(data)
+	local totals = {}
+	for _, petUid in ipairs(data.equipped) do
+		local pet = data.pets[petUid]
+		if pet and pet.worn then
+			for _, slot in ipairs(Config.Accessories.Slots) do
+				local wornUid = pet.worn[slot]
+				local instance = wornUid and data.accessories[wornUid]
+				local config = instance and AccessoryCatalog[instance.accessoryId]
+				if config then
+					for _, effect in ipairs(config.effects) do
+						totals[effect.type] = (totals[effect.type] or 0) + effect.value
+					end
+				end
+			end
+		end
+	end
+
+	-- Clamped once, here, so no consumer has to know a cap exists.
+	for effectType, value in pairs(totals) do
+		local cap = Config.Accessories.Caps[effectType]
+		if cap and value > cap then
+			totals[effectType] = cap
+		end
+	end
+	return totals
+end
+
+-- A worn uid whose instance or catalogue entry has gone, or that is filed under
+-- a slot the item no longer belongs to, comes off the pet. The instance itself
+-- is never deleted here, which is the same posture resolvePet takes for a pet
+-- whose entry vanished: the row stays in case the entry comes back.
+function Inventory.pruneWorn(data)
+	local dropped = 0
+	for _, pet in pairs(data.pets) do
+		if pet.worn then
+			for slot, accessoryUid in pairs(pet.worn) do
+				local instance = data.accessories[accessoryUid]
+				local config = instance and AccessoryCatalog[instance.accessoryId]
+				if not config or config.slot ~= slot then
+					pet.worn[slot] = nil
+					dropped = dropped + 1
+				end
+			end
+		end
+	end
+	if dropped > 0 then
+		warn(string.format("PetInventory: removed %d worn accessory reference(s) with no catalogue entry", dropped))
+	end
+	return dropped
+end
+
+-- ============================================================
 -- Client projection
 -- ============================================================
 -- A read-only snapshot, never the profile table itself. Everything the UI needs
 -- is resolved here rather than on the client, so the client never has to agree
 -- with the server about what level a pet is; it just draws the number it was
 -- sent.
+
+-- Slot -> { uid, accessoryId, name, rarity }, for the worn chips on a pet row.
+local function wornOf(data, pet)
+	local worn = {}
+	if not pet.worn then
+		return worn
+	end
+	for _, slot in ipairs(Config.Accessories.Slots) do
+		local wornUid = pet.worn[slot]
+		local instance = wornUid and data.accessories[wornUid]
+		local config = instance and AccessoryCatalog[instance.accessoryId]
+		if config then
+			worn[slot] = { uid = wornUid, accessoryId = config.id, name = config.name, rarity = config.rarity }
+		end
+	end
+	return worn
+end
 
 function Inventory.project(data)
 	local pets = {}
@@ -409,6 +643,10 @@ function Inventory.project(data)
 				nickname = pet.nickname,
 				equipped = Inventory.isEquipped(data, petUid),
 				multiplier = Inventory.abilityMultiplier(petConfig, pet.stage),
+				-- Copied, and only the slots the catalogue still knows about, so a
+				-- stale reference the prune has not run over yet is not drawn as a
+				-- chip the client cannot name.
+				worn = wornOf(data, pet),
 			})
 		end
 	end
@@ -442,6 +680,39 @@ function Inventory.project(data)
 		return a.uid < b.uid
 	end)
 
+	local accessories = {}
+	for accessoryUid, instance in pairs(data.accessories) do
+		local config = AccessoryCatalog[instance.accessoryId]
+		if config then
+			local effects = {}
+			for i, effect in ipairs(config.effects) do
+				effects[i] = { type = effect.type, value = effect.value }
+			end
+			table.insert(accessories, {
+				uid = accessoryUid,
+				accessoryId = instance.accessoryId,
+				name = config.name,
+				slot = config.slot,
+				rarity = config.rarity,
+				effects = effects,
+				locked = instance.locked,
+				-- The pet uid wearing it, or nil. The client draws "on Firefly" from
+				-- this rather than scanning the pet list for itself.
+				wornBy = Inventory.wearerOf(data, accessoryUid),
+				sellValue = config.coinCost and Inventory.sellValue(config) or nil,
+			})
+		end
+	end
+	table.sort(accessories, function(a, b)
+		if a.slot ~= b.slot then
+			return a.slot < b.slot
+		end
+		if a.rarity ~= b.rarity then
+			return Config.rarityIndex(a.rarity) > Config.rarityIndex(b.rarity)
+		end
+		return a.uid < b.uid
+	end)
+
 	local incubator = nil
 	if data.incubator then
 		local eggConfig = EggCatalog[data.incubator.eggId]
@@ -461,6 +732,7 @@ function Inventory.project(data)
 	return {
 		pets = pets,
 		eggs = eggs,
+		accessories = accessories,
 		incubator = incubator,
 		-- Copied, not referenced. Everything else in here was built fresh above,
 		-- and a projection that hands out one live pointer into the profile is a
@@ -469,8 +741,10 @@ function Inventory.project(data)
 		maxEquipped = data.maxEquipped,
 		petCap = data.petStorageCap,
 		eggCap = data.eggStorageCap,
+		accessoryCap = data.accessoryStorageCap,
 		petCount = count(data.pets),
 		eggCount = count(data.eggs),
+		accessoryCount = count(data.accessories),
 		daily = table.clone(data.daily),
 		stats = table.clone(data.stats),
 	}
