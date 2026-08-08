@@ -28,6 +28,7 @@ local Config = require(ReplicatedStorage:WaitForChild("MazeConfig"))
 local MazeGenerator = require(ServerScriptService:WaitForChild("MazeGenerator"))
 
 local WALL_GROUP = MazeGenerator.WALL_GROUP
+local BLOCK_GROUP = MazeGenerator.ENEMY_BLOCK_GROUP
 local WALKER_GROUP = "WallWalker"
 local DEFAULT_GROUP = "Default"
 
@@ -37,7 +38,12 @@ local DEFAULT_GROUP = "Default"
 -- and CollisionGroupSetCollidable needs both ends to be real.
 MazeGenerator.ensureCollisionGroup(WALL_GROUP)
 MazeGenerator.ensureCollisionGroup(WALKER_GROUP)
+MazeGenerator.ensureCollisionGroup(BLOCK_GROUP)
 PhysicsService:CollisionGroupSetCollidable(WALL_GROUP, WALKER_GROUP, false)
+-- The enemy barrier is already absent to a Default character, and a phasing one
+-- has to be excused separately or the upgrade would be the one state in which a
+-- phantom wall and a stairwell mouth become solid.
+PhysicsService:CollisionGroupSetCollidable(BLOCK_GROUP, WALKER_GROUP, false)
 
 local function findOrCreate(parent, className, name)
 	local existing = parent:FindFirstChild(name)

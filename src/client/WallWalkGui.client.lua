@@ -55,7 +55,7 @@ title.Font = Enum.Font.GothamBold
 title.TextSize = 12
 title.TextColor3 = COLOR
 title.TextXAlignment = Enum.TextXAlignment.Left
-title.Text = "WALL WALKER  [Q]"
+title.Text = "HOLD [Q]"
 title.Parent = chip
 
 local track = Instance.new("Frame")
@@ -107,11 +107,14 @@ RunService.RenderStepped:Connect(function()
 		title.TextColor3 = GRACE
 	elseif left <= 0 then
 		fill.BackgroundColor3 = EMPTY
-		title.Text = "WALL WALKER  empty"
+		title.Text = "HOLD [Q]  empty"
 		title.TextColor3 = EMPTY
 	else
 		fill.BackgroundColor3 = COLOR
-		title.Text = string.format("WALL WALKER  %.1fs", left)
+		-- The key stays in the text rather than only in the label this loop
+		-- overwrote on its first frame: an owner never saw the static hint, so the
+		-- upgrade had a HUD chip and no discoverable way to fire it.
+		title.Text = string.format("HOLD [Q]  %.1fs", left)
 		title.TextColor3 = COLOR
 	end
 end)

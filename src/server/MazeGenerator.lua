@@ -26,6 +26,29 @@ local MazeGenerator = {}
 -- it loads first.
 MazeGenerator.WALL_GROUP = "MazeWall"
 
+-- The second group generation owns, and the mirror image of the first: solid to
+-- enemies and absent to everybody else. Two things go in it, and they are the
+-- same problem twice.
+--
+-- A phantom wall is a hole to an enemy, because it is a hole: the one thing that
+-- makes it a phantom is CanCollide false, and pathfinding reads exactly that. So
+-- a shortcut found by the player was also a shortcut the enemies had always been
+-- using, and the wall a player squeezed through was one they could be followed
+-- through. In this group a phantom is collidable again, which puts it back in the
+-- navmesh, and stays passable to a character because the group says so.
+--
+-- A stair flight is the same story upside down: it is walkable geometry, and
+-- collision groups do not reach the navmesh, so nothing short of an obstacle
+-- stops a planner routing an enemy up it. The barrier at the mouth of each flight
+-- is that obstacle. Enemies belong to a floor, and this is what makes that true by
+-- construction rather than by the floor band noticing afterwards and teleporting
+-- somebody home.
+--
+-- The defining rule is set here because it is what the group means. Every other
+-- rule belongs to whichever service owns the other end of it: WallWalkService
+-- excuses a phasing player, EnemyFactory asserts the one pair that collides.
+MazeGenerator.ENEMY_BLOCK_GROUP = "EnemyBlock"
+
 function MazeGenerator.ensureCollisionGroup(name)
 	for _, group in ipairs(PhysicsService:GetRegisteredCollisionGroups()) do
 		if group.name == name then
@@ -36,6 +59,10 @@ function MazeGenerator.ensureCollisionGroup(name)
 end
 
 MazeGenerator.ensureCollisionGroup(MazeGenerator.WALL_GROUP)
+MazeGenerator.ensureCollisionGroup(MazeGenerator.ENEMY_BLOCK_GROUP)
+PhysicsService:CollisionGroupSetCollidable(MazeGenerator.ENEMY_BLOCK_GROUP, "Default", false)
+PhysicsService:CollisionGroupSetCollidable(MazeGenerator.ENEMY_BLOCK_GROUP, MazeGenerator.ENEMY_BLOCK_GROUP, false)
+PhysicsService:CollisionGroupSetCollidable(MazeGenerator.ENEMY_BLOCK_GROUP, MazeGenerator.WALL_GROUP, false)
 
 local CFG = {
 	MAZE_W = 10,
@@ -858,7 +885,21 @@ local function tagPhantoms(interior, g, blocked, entryCell, stairCell, count, rn
 		-- at what the wall is for. Phantoms are never required: the carved maze
 		-- is a spanning tree, and making a wall passable only ever adds a
 		-- connection.
-		w.part.CanCollide = false
+		-- Collidable, in the group that only enemies collide with. It was CanCollide
+		-- false, which is the obvious way to make a wall passable and is also the
+		-- only thing the navmesh looks at, so every phantom in the city was a
+		-- doorway the enemies had been walking through since before anyone found
+		-- it. A player who squeezed through one could be followed through it.
+		--
+		-- Moving it out of WALL_GROUP is deliberate and costs nothing: that group's
+		-- only job is telling the Wall Walker what it may phase through and telling
+		-- WallWalkService what it must not go solid inside, and a phantom is
+		-- passable to a player in both states, so there is nothing to be stranded
+		-- in. It also means an enemy can no longer see through one, the sight ray
+		-- respecting CanCollide, which is the right read for something that looks
+		-- like a wall to everything except the player who noticed it.
+		w.part.CanCollide = true
+		w.part.CollisionGroup = MazeGenerator.ENEMY_BLOCK_GROUP
 		w.part.Transparency = CFG.PHANTOM_TRANSPARENCY
 		w.part.CastShadow = false
 		w.part.Name = "PhantomWall"
@@ -932,6 +973,39 @@ local function buildStairs(parent, origin, baseY, exitSide, cellB, style)
 			Enum.Material.Concrete
 		)
 	end
+
+	-- The barrier that keeps enemies off the flight, in the group only they collide
+	-- with. It stands in the one opening cut between the maze and the stair cell,
+	-- which is where the flight starts: buildLevel seals cellB and cellE and cuts
+	-- exactly two doors, one inward to the maze and one outward between the pair,
+	-- and runStart is the inward one. So a full-cell panel there is the whole of
+	-- the stairwell's mouth and there is no way around it.
+	--
+	-- Wall height, not enough-to-not-step-over, because the stuck handler makes an
+	-- enemy jump and a barrier it can hop is a barrier for as long as nothing goes
+	-- wrong. Placed exactly where a maze wall on that edge would be, in the same
+	-- span from baseY, so the navmesh sees the cell as closed the way it sees every
+	-- other sealed edge.
+	--
+	-- CanQuery is off so it stops bodies and paths without stopping rays: the
+	-- camera does not pop against a wall that is not there, and an enemy still sees
+	-- a player standing in the stairwell. Seeing them and being unable to follow is
+	-- the intended read.
+	local blockPos = runStart + outward * (CFG.WALL_THICKNESS / 2)
+	local block = makePart(
+		folder,
+		"StairBlock",
+		CFrame.new(origin + Vector3.new(blockPos.X, baseY + CFG.WALL_HEIGHT / 2, blockPos.Z)),
+		along and Vector3.new(CFG.WALL_THICKNESS, CFG.WALL_HEIGHT, CFG.CELL)
+			or Vector3.new(CFG.CELL, CFG.WALL_HEIGHT, CFG.WALL_THICKNESS),
+		style.trim,
+		Enum.Material.SmoothPlastic
+	)
+	block.Transparency = 1
+	block.CastShadow = false
+	block.CanQuery = false
+	block.CanTouch = false
+	block.CollisionGroup = MazeGenerator.ENEMY_BLOCK_GROUP
 
 	-- The opening in the floor above is sized to the stairs, not to the cell it
 	-- sits in. It only has to start far enough back that a climbing player still

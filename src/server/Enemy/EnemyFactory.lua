@@ -40,6 +40,12 @@ EnemyFactory.CollisionGroup = "Enemy"
 
 MazeGenerator.ensureCollisionGroup(EnemyFactory.CollisionGroup)
 PhysicsService:CollisionGroupSetCollidable(EnemyFactory.CollisionGroup, EnemyFactory.CollisionGroup, false)
+-- The one pair MazeGenerator.ENEMY_BLOCK_GROUP collides with, and the whole
+-- reason it exists: phantom walls and stairwell mouths are solid to an enemy and
+-- to nothing else. True is already the engine default, and it is written out
+-- because a default nobody stated is a default somebody will change: this line
+-- failing is a Charger walking up a staircase.
+PhysicsService:CollisionGroupSetCollidable(EnemyFactory.CollisionGroup, MazeGenerator.ENEMY_BLOCK_GROUP, true)
 
 -- Every sustained speed on a row, and the one burst speed that is exempt from the
 -- cap. Named rather than inferred from the field name, because "anything ending
