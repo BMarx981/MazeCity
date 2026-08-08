@@ -70,14 +70,31 @@
 -- ============================================================
 -- The six types the game ships (Drifter, Stalker, Sentry, Swarmer, Lurker,
 -- Charger) are live and their numbers are the playtested ones. The other
--- thirteen have rows and no behavior module yet, so spawning one gets the
--- baseline shade and Chaser-ish nothing until phase E4. Their stats are the
--- brief's, placed into the same bands as the six so that E4 is a module and a
--- silhouette rather than a rebalance.
+-- thirteen have rows and no behavior module yet, so spawning one gets its own
+-- silhouette and BaseBehavior, which chases and hits like a Drifter with that
+-- row's numbers, until phase E4. Their stats are the brief's, placed into the
+-- same bands as the six so that E4 is a module and a silhouette rather than a
+-- rebalance.
 --
--- health is plumbed and dormant everywhere: nothing in the game damages an
--- enemy, so MaxHealth is a number nothing reads. It is entered correctly anyway,
--- so that adding a weapon is adding a weapon.
+-- Whole fields are dormant too, and the list is worth keeping honest because a
+-- number nobody reads looks exactly like a number that is not working:
+--
+--   health, and Config.Enemies.HealthPerLevel with it. Nothing damages an enemy,
+--           so MaxHealth is set correctly and read by nobody.
+--   detection  the brief separates noticing a player (detection) from giving up on
+--           one (leash). The system uses leash for both, so an enemy notices from
+--           150 studs where its row says 55. Wiring it makes the whole roster
+--           easier, which is a tuning pass and not a refactor.
+--   memory  seconds it keeps hunting a lost player. A flat 3.5 for everybody,
+--           because that is the number that went through a playtest and Drifter's
+--           6 would quietly make the city more persistent.
+--   attackRange, turnSpeed, acceleration, aggroDelay, stunDuration, knockback
+--           entered from the brief, read by nothing. Each needs a mechanic that
+--           does not exist yet rather than a line of plumbing.
+--   spawnCost, role, spawnable  the spawn director's, at E5.
+--
+-- They are entered correctly anyway, so that adding the mechanic is adding the
+-- mechanic and not also a data pass.
 
 local EnemyTypes = require(script.Parent:WaitForChild("EnemyTypes"))
 
@@ -265,6 +282,11 @@ types.Swarmer = {
 	},
 	behaviorConfig = {
 		packRadius = 120,
+		-- How long a called Swarmer stays called: it hunts the position it was given
+		-- for this long, and holds the widened leash for the same span so it can pick
+		-- the player up for itself on the way over.
+		alertSeconds = 6,
+		alertLeashMultiplier = 1.6,
 	},
 }
 
@@ -317,6 +339,9 @@ types.Lurker = {
 	},
 	behaviorConfig = {
 		ambushRange = 34,
+		-- Seconds after losing a player before it is scenery again. Long enough that
+		-- backing off and walking straight back in does not meet a fresh ambush.
+		rehideSeconds = 6,
 	},
 }
 
@@ -371,13 +396,25 @@ types.Charger = {
 		eyeSpread = 0.34,
 		eyeDepth = 0.85,
 	},
-	-- The windup, rush duration and recovery are still locals in EnemyService and
-	-- are deliberately not copied here. They move into this block at E3, with the
-	-- behavior module that reads them; entered now they would be two numbers, and
-	-- the one the game uses would be the one nobody edited.
+	-- chargeWindup is the number to be careful with. It is the length of the
+	-- telegraph, so it is the whole difference between a move a player sidesteps and
+	-- a move that just hits them, and 0.45 is what went through a playtest. The
+	-- plan's kid-first default guessed 1.2 before anybody had played one.
+	--
+	-- damageMultiplier is dormant: a charge lands its hit through the same melee
+	-- flow as everything else, so nothing reads this yet.
 	behaviorConfig = {
 		chargeRange = 95,
+		-- Closer than this and there is no room to show the telegraph before the
+		-- rush arrives, so it chases instead.
+		chargeMinRange = 18,
 		chargeCooldown = 4.5,
+		chargeWindup = 0.45,
+		chargeSeconds = 1.6,
+		chargeRecover = 0.8,
+		-- Below this it has hit something, which ends the rush early and is the
+		-- recovery beat rather than a failure.
+		chargeStallSpeed = 4,
 		damageMultiplier = 1.6,
 	},
 }

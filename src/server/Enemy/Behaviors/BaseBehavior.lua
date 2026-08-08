@@ -1,21 +1,33 @@
 -- BaseBehavior (ModuleScript) -> ServerScriptService.Enemy.Behaviors.BaseBehavior
 -- The interface every behavior module implements, as a working set of no-ops.
 --
--- This one is not a stub. It is the contract itself, and it is filled in now
--- rather than at E3 because fourteen modules are about to be written against
--- it and an interface discovered fourteen times is fourteen slightly different
--- interfaces. The concrete behaviors arrive at E3 (the six the game ships) and
--- E4 (the rest of the roster).
---
 -- A behavior is a table of hooks over the controller, not a subclass of it: the
 -- controller stays the only thing that touches the Humanoid, so dormancy, the
--- freeze deadline and the attack tell are written once and cannot be forgotten
--- by a module that only meant to change how something walks.
+-- freeze deadline, the stun and the attack tell are written once and cannot be
+-- forgotten by a module that only meant to change how something walks.
 --
--- Every hook returning nothing means "the controller decides". tryAttack is the
--- exception and returns a boolean, because a behavior that handles its own
--- attack (a charge, a projectile, a shockwave) has to be able to say so and
--- suppress the default melee rather than land two hits.
+-- The hook set was written at E0 from the brief and revised at E2 against the
+-- five behaviors the game actually ships. Four hooks were added and one changed
+-- meaning, and both are worth knowing about:
+--
+--   update now returns a claim. A Charger mid-rush owns its ticks outright and
+--   must be able to say so, or the controller reacquires a target and walks it
+--   off the line the player was shown. Truthy means "this tick is mine, stop".
+--
+--   filterTarget, onTargetAcquired, onTargetLost, onChase and onIdle are new.
+--   They exist because target selection has three points a type needs to reach
+--   into and only three: whether a candidate counts at all (a Lurker is scenery
+--   until you are close), what happens on the transition (a Swarmer calls its
+--   pack), and what to do with the target once picked (a Charger charges it).
+--
+-- Where the hooks fall in a tick is fixed and is the controller's business:
+-- freeze, stun and off-floor gates, then update, then target selection wrapped
+-- in filterTarget and the two transition hooks, then onChase or onIdle. The
+-- order matters and is asserted in the E2 harness rather than left to memory.
+--
+-- Every hook returning nothing means "the controller decides". The three that
+-- return a value say so in their comment; a behavior that returns nothing from
+-- one of those gets the default, which is always the shipped behavior.
 
 local BaseBehavior = {}
 
@@ -25,8 +37,40 @@ function BaseBehavior.onStateEntered(_controller, _state) end
 
 function BaseBehavior.onStateExited(_controller, _state) end
 
-function BaseBehavior.update(_controller, _dt) end
+-- Runs before target selection. Return truthy to claim the whole tick: no
+-- targeting, no movement, no attack. For a move that owns the rig for a fixed
+-- span and must not be interrupted by an ordinary chase decision.
+function BaseBehavior.update(_controller, _dt)
+	return false
+end
 
+-- The target the controller picked, or nil. Return it, or nil to refuse it.
+-- Called every tick, so a type that hides again has somewhere to say so.
+function BaseBehavior.filterTarget(_controller, target)
+	return target
+end
+
+function BaseBehavior.onTargetAcquired(_controller, _target) end
+
+function BaseBehavior.onTargetLost(_controller) end
+
+-- Runs with a live target. Return truthy to claim the rest of the tick, attack
+-- check and stuck check included: a Charger that has just started its windup is
+-- eighteen studs away and neither of those has anything to say about it.
+function BaseBehavior.onChase(_controller, _target)
+	return false
+end
+
+-- Runs with nothing to chase and nowhere to walk back to. Return truthy to
+-- claim it; unclaimed, the controller halts the rig where it stands, which is
+-- what a type that holds a post wants.
+function BaseBehavior.onIdle(_controller)
+	return false
+end
+
+-- Return truthy to suppress the controller's melee. A behavior that lands its
+-- own hit (a charge, a projectile, a shockwave) has to be able to say so rather
+-- than land two.
 function BaseBehavior.tryAttack(_controller, _character)
 	return false
 end

@@ -1,29 +1,142 @@
 -- EnemyTargeting (ModuleScript) -> ServerScriptService.Enemy.EnemyTargeting
--- Who an enemy is allowed to chase, and which of them it picks.
+-- Who an enemy is allowed to chase, which of them it picks, and the two sight
+-- questions every behavior asks: can I see it, and is it looking at me.
 --
--- Filled in at phase E2. Four filters are contracts the rest of the game
--- already depends on and are not open for reinterpretation: a character with
--- Unseen set is not a candidate at all (the Ghost powerup), a player more than
--- Config.EnemyFloorBand off the enemy's own Y is on another floor, leash is
--- measured from the spawn marker and never from the enemy, and a player inside
--- a safe zone cannot be acquired.
+-- Four filters are contracts the rest of the game already depends on and are not
+-- open for reinterpretation. A character with Unseen set is not a candidate at
+-- all, which is the whole of the Ghost powerup. A player more than
+-- Config.Enemies.FloorBand off the enemy's own Y is on another floor. Leash is
+-- measured from the spawn marker and never from the enemy: measuring from the
+-- enemy let a chase drag the whole floor along behind the player one enemy at a
+-- time and meant leaving somewhere never actually shook anything off. From the
+-- marker, an enemy owns a patch of maze and the player can leave it.
 --
--- Stickiness exists because a score recomputed three times a second off raw
--- distance makes an enemy standing between two players oscillate instead of
--- committing to either.
+-- The fourth is the safe zone and it is the one that is not here yet. It lands
+-- in isEligible at E5 with the runtime zones themselves; there is nowhere else
+-- it could go, which is why the stub said so.
+--
+-- Stickiness is two mechanisms and they answer different questions. The retain
+-- multiplier widens the leash once a target is held, so a player standing on the
+-- boundary is not picked up and dropped several times a second. The bonus is in
+-- studs and is subtracted from the held target's score, so an enemy standing
+-- between two players commits to one instead of recomputing into the other one
+-- three times a second. One player can only ever exercise the first.
+
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local Config = require(ReplicatedStorage:WaitForChild("MazeConfig"))
 
 local EnemyTargeting = {}
 
-function EnemyTargeting.isEligible(_controller, _character)
-	error("EnemyTargeting.isEligible is not implemented until phase E2")
+-- One shared RaycastParams rewritten per call. Safe for the same reason
+-- PickupService's taken guard is: nothing between writing the filter and firing
+-- the ray yields, so no other enemy's tick can interleave and read a filter
+-- meant for somebody else. RespectCanCollide keeps coins and triggers, which are
+-- all CanCollide false, out of the answer.
+local losParams = RaycastParams.new()
+losParams.FilterType = Enum.RaycastFilterType.Exclude
+losParams.RespectCanCollide = true
+
+-- Every enemy is excluded, not just the one asking, so an enemy standing behind
+-- another one can still see you. They do not collide with each other either, and
+-- a crowd that blinds itself is a crowd that stands still.
+function EnemyTargeting.hasLineOfSight(from, toPart)
+	local filter = { toPart.Parent }
+	-- Looked up rather than held, and each one guarded, because a nil in this list
+	-- is a hole in an array the engine reads by length: it would drop whichever
+	-- folder came after it out of the filter and the ray would start hitting pets.
+	local enemies = workspace:FindFirstChild("LiveEnemies")
+	if enemies then
+		table.insert(filter, enemies)
+	end
+	local pets = workspace:FindFirstChild("LivePets")
+	if pets then
+		table.insert(filter, pets)
+	end
+	losParams.FilterDescendantsInstances = filter
+
+	local hit = workspace:Raycast(from, toPart.Position - from, losParams)
+	return hit == nil
 end
 
-function EnemyTargeting.score(_controller, _character)
-	error("EnemyTargeting.score is not implemented until phase E2")
+-- Whether the player is facing the enemy. Server side and off the character's
+-- own CFrame, deliberately: a client-reported look direction is a remote to
+-- validate and a thing to spoof, and the answer is only ever used to make an
+-- enemy slower or stiller, never faster than its row allows.
+function EnemyTargeting.isWatched(controller, hrp)
+	local toEnemy = controller.root.Position - hrp.Position
+	if toEnemy.Magnitude < 1 then
+		return true
+	end
+	return hrp.CFrame.LookVector:Dot(toEnemy.Unit) > 0.45
 end
 
-function EnemyTargeting.pick(_controller)
-	error("EnemyTargeting.pick is not implemented until phase E2")
+-- The Ghost powerup. PickupService sets Unseen on the character and clears it
+-- when the effect ends, so "invisible to enemies" costs one attribute read here
+-- and nothing anywhere else. It is deliberately not walk-through-walls: in a
+-- game with no combat, not being chased is the whole of what a ghost needs to
+-- be, and it cannot strand a player outside the maze.
+function EnemyTargeting.isCharacterVisible(character, humanoid)
+	return humanoid ~= nil and humanoid.Health > 0 and not character:GetAttribute("Unseen")
+end
+
+-- Studs from the marker this enemy will chase to. leashMultiplier is how a
+-- behavior widens its own reach for a while; a Swarmer that has been called by
+-- one of its own is the only thing that sets it today.
+function EnemyTargeting.leashFor(controller)
+	local leash = controller.stats.leash
+	if controller.target then
+		leash = leash * Config.Enemies.TargetRetain
+	end
+	return leash * (controller.leashMultiplier or 1)
+end
+
+function EnemyTargeting.isEligible(controller, character)
+	local hrp = character:FindFirstChild("HumanoidRootPart")
+	local humanoid = character:FindFirstChildOfClass("Humanoid")
+	if not hrp or not humanoid then
+		return false
+	end
+	if not EnemyTargeting.isCharacterVisible(character, humanoid) then
+		return false
+	end
+	if math.abs(hrp.Position.Y - controller.homeY) >= Config.Enemies.FloorBand then
+		return false
+	end
+	return (hrp.Position - controller.home).Magnitude <= EnemyTargeting.leashFor(controller)
+end
+
+-- Lower is better. Distance from the marker, so the enemy prefers the player
+-- deepest into the patch of maze it owns rather than the one nearest its feet,
+-- which is the same reason the leash is measured from there.
+function EnemyTargeting.score(controller, character)
+	local hrp = character:FindFirstChild("HumanoidRootPart")
+	if not hrp then
+		return math.huge
+	end
+	local distance = (hrp.Position - controller.home).Magnitude
+	if controller.target and controller.target.Parent == character then
+		distance = distance - Config.Enemies.TargetStickinessBonus
+	end
+	return distance
+end
+
+-- Returns the HumanoidRootPart, which is what the rest of the system carries a
+-- target as: it is the thing whose Position is live without a second lookup, and
+-- its Parent is the character when the growl or the attack needs it.
+function EnemyTargeting.pick(controller)
+	local best, bestScore = nil, math.huge
+	for _, player in ipairs(Players:GetPlayers()) do
+		local character = player.Character
+		if character and EnemyTargeting.isEligible(controller, character) then
+			local score = EnemyTargeting.score(controller, character)
+			if score < bestScore then
+				best, bestScore = character:FindFirstChild("HumanoidRootPart"), score
+			end
+		end
+	end
+	return best
 end
 
 return EnemyTargeting

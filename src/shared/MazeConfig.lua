@@ -483,35 +483,6 @@ Config.SectionEnemyOverride = {
 	-- [2] = "Charger",
 }
 
--- Enemies scale up as players climb. The base a level is added to is per type
--- and lives on its EnemyDefinitions row, since a Swarmer and a Brute have no
--- business starting from the same number.
-Config.EnemyHealthPerLevel = 14
--- How long a marker whose enemy died stays empty. Nothing in the game damages
--- an enemy yet, so this is reachable only through the Died path; it is kept
--- because that path is real rather than as a hook for a weapon that may never
--- arrive.
-Config.EnemyRespawnSeconds = 25
-
--- A rig exists only while somebody is near enough to meet it. Generation places
--- 3 markers on each of 10 levels in each of 6 buildings, so a section is 180
--- enemies and the old service built every one of them at world build time and
--- kept it forever: 360 live Humanoids before anyone had climbed a floor, and
--- another 180 per lazily generated section. Gating the pathfinding rather than
--- the rig left the whole cost standing, and a server spending its frame on
--- hundreds of idle Humanoid state machines is what made the survivors move like
--- they were underwater.
---
--- Spawn and despawn differ so a player pacing the boundary does not thrash the
--- rig. Despawn is measured from the enemy rather than its marker, so one that
--- chased somebody across the floor is not deleted out from under them.
-Config.EnemySpawnRange = 190
-Config.EnemyDespawnRange = 260
--- Y slack that still counts as the same floor, for both target selection and
--- noticing that an enemy has fallen down a stairwell and has to walk home.
--- LEVEL_HEIGHT is 20.5, so this is comfortably inside one storey.
-Config.EnemyFloorBand = 16
-
 -- Deliberately does not check that the name it returns is a real type. That is
 -- EnemyDefinitions.get's job and it warns when it falls back, so a typo in the
 -- override table above now says so instead of being quietly skipped in favour of
@@ -524,10 +495,9 @@ end
 -- The knobs that govern the enemy system as a whole, as opposed to what any one
 -- type is. Per-type numbers live on the ReplicatedStorage.EnemyDefinitions rows.
 --
--- The flat Config.EnemyXxx keys above are the ones the current service still
--- reads directly and are deliberately not duplicated here, because two names for
--- one number is two numbers as soon as somebody edits the wrong one. They move
--- in at phase E2, with the service that reads them.
+-- The flat Config.EnemyXxx keys moved in here at E2, with the service that reads
+-- them. There was a window where both existed and it was deliberately kept shut:
+-- two names for one number is two numbers as soon as somebody edits the wrong one.
 Config.Enemies = {
 	-- The hard ceiling on sustained speed, applied by EnemyFactory to every stat
 	-- copy so no definition row can put an enemy past it. The player walks at 16
@@ -565,11 +535,43 @@ Config.Enemies = {
 		BudgetMultiplier = 1,
 	},
 
-	-- Live rigs, server wide and per building. Proximity already bounds this far
-	-- below either number; they exist so that four players spread across four
-	-- buildings cannot multiply into a frame budget nobody measured.
+	-- Live rigs, server wide and per building, enforced by EnemyService's scan.
+	--
+	-- They are closer to biting than the note here used to claim. SpawnRange is 190
+	-- studs measured in three dimensions and LEVEL_HEIGHT is 20.5, so a player
+	-- halfway up a tower is in range of markers nine floors above and below them as
+	-- well as the neighbouring buildings: the reachable set is well past 40. That is
+	-- the intended sound of a tower with things in it, and the cap is what stops it
+	-- also being the frame budget.
 	GlobalCap = 40,
 	PerBuildingCap = 12,
+
+	-- A rig exists only while somebody is near enough to meet it. Generation places
+	-- 3 markers on each of 10 levels in each of 6 buildings, so a section is 180
+	-- enemies and the old service built every one of them at world build time and
+	-- kept it forever: 360 live Humanoids before anyone had climbed a floor, and
+	-- another 180 per lazily generated section. Gating the pathfinding rather than
+	-- the rig left the whole cost standing, and a server spending its frame on
+	-- hundreds of idle Humanoid state machines is what made the survivors move like
+	-- they were underwater.
+	--
+	-- Spawn and despawn differ so a player pacing the boundary does not thrash the
+	-- rig. Despawn is measured from the enemy rather than its marker, so one that
+	-- chased somebody across the floor is not deleted out from under them.
+	SpawnRange = 190,
+	DespawnRange = 260,
+	-- Y slack that still counts as the same floor, for both target selection and
+	-- noticing that an enemy has fallen down a stairwell and has to walk home.
+	-- LEVEL_HEIGHT is 20.5, so this is comfortably inside one storey.
+	FloorBand = 16,
+	-- How long a marker whose enemy died stays empty. Nothing in the game damages an
+	-- enemy yet, so this is reachable only through the Died path; it is kept because
+	-- that path is real rather than as a hook for a weapon that may never arrive.
+	RespawnSeconds = 25,
+	-- Enemies scale up as players climb. The base a level is added to is per type
+	-- and lives on its EnemyDefinitions row, since a Swarmer and a Brute have no
+	-- business starting from the same number. Dormant with health itself.
+	HealthPerLevel = 14,
 
 	-- What a floor may spend on enemies, read by the spawn director at E5 once a
 	-- marker is a position rather than an enemy. Base is set to buy roughly the
@@ -581,20 +583,33 @@ Config.Enemies = {
 		Max = 18,
 	},
 
-	-- Update rates for the staggered groups. Movement decisions are cheap and
-	-- frequent, target selection is neither, and a path is the expensive one and
-	-- is spread over a window rather than a rate so that twenty five enemies do
-	-- not all recompute on the frame a player rounds a corner.
-	FastUpdateHz = 10,
-	TargetingHz = 3,
-	PathRecomputeMin = 0.7,
-	PathRecomputeMax = 1.5,
+	-- How often a controller thinks, and how often the scan decides which markers
+	-- should be holding a rig at all.
+	--
+	-- This replaces the FastUpdateHz / TargetingHz / PathRecompute pair the plan
+	-- asked for at E0, and the reason is worth keeping. Those three described three
+	-- rates for a loop that turned out to be one loop: 0.12 is the tick that went
+	-- through a playtest, and splitting target selection down to 3 Hz would have made
+	-- every enemy in the city up to a third of a second slower to notice anybody in
+	-- exchange for skipping a four-element loop over the player list. The frame
+	-- spike the staggered groups exist to prevent is handled instead by each
+	-- controller starting its thread at a random offset inside one interval, which
+	-- costs one wait and changes no timing at all.
+	ThinkInterval = 0.12,
+	ScanInterval = 0.5,
+	-- How stale a plan may get before it is recomputed. A drift test in
+	-- EnemyPathfinding covers the player rounding a corner and Path.Blocked covers a
+	-- moving wall; this is the backstop under both, and it is not jittered because a
+	-- stale plan is a wall walked into.
+	PathReplanSeconds = 0.7,
 
-	-- Stickiness is in studs and is subtracted from the current target's distance
-	-- score: the enemy already chasing you is treated as being this much closer
-	-- than it is. Without it an enemy between two players recomputes into a
-	-- different answer several times a second and commits to neither.
-	TargetRefreshInterval = 0.35,
+	-- Two stickiness mechanisms answering different questions. The multiplier widens
+	-- the leash once a target is held, so a player standing on the boundary is not
+	-- picked up and dropped several times a second. The bonus is in studs and is
+	-- subtracted from the held target's score, so an enemy between two players
+	-- commits to one instead of recomputing into the other one every tick. A single
+	-- player only ever exercises the first.
+	TargetRetain = 1.25,
 	TargetStickinessBonus = 12,
 
 	-- Studs of clearance kept outside a safe zone, so nothing camps the line a

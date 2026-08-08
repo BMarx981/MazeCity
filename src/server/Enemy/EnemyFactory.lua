@@ -15,8 +15,10 @@
 -- Nothing writes back into the row: a multiplier applied in place is applied
 -- again to the next enemy of that type, and again to the one after that.
 --
--- It does not register anything with EnemyService. There is no registry until
--- phase E2; the caller owns what it is handed.
+-- It does not register anything and does not start anything. It hands back a rig,
+-- its joint data and its stats; EnemyService wraps those in an EnemyController and
+-- puts that in EnemyRegistry. Keeping the two apart is what lets the bestiary
+-- portraits and a debug spawn build a rig without one of them coming to life.
 
 local PhysicsService = game:GetService("PhysicsService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -100,7 +102,7 @@ function EnemyFactory.runtimeStats(typeName, level)
 	-- The per-type base scales with the climb. Nothing in the game damages an
 	-- enemy, so this is a number nothing reads; it is computed correctly anyway so
 	-- that adding a weapon is adding a weapon.
-	stats.health = (row.health + (level or 0) * Config.EnemyHealthPerLevel) * difficulty.HealthMultiplier
+	stats.health = (row.health + (level or 0) * Config.Enemies.HealthPerLevel) * difficulty.HealthMultiplier
 	stats.behaviorConfig = row.behaviorConfig or NO_BEHAVIOR_CONFIG
 	stats.enemyType = typeName
 
