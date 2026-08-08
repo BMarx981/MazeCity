@@ -431,6 +431,12 @@ end
 -- player to 20.5, so an upgraded one leaves everything behind, which is what
 -- they paid for.
 --
+-- Every speed below, chargeSpeed included, then came down a further 10% off a
+-- playtest that read as a hair too hard. The tenths are what that pass left
+-- behind and are not significant in themselves: the spread between the types is
+-- what matters, so a future pass should scale the set rather than round these
+-- to something tidier one at a time.
+--
 -- What replaces raw speed is the `behavior` field, which selects a rule in
 -- EnemyService. Six types that differ only by a stud of speed are one enemy
 -- with six colours; six types that each do a different thing are a roster. Now
@@ -461,7 +467,7 @@ Config.EnemyProfiles = {
 	-- baseline every other entry below is a delta against, so it has none.
 	Drifter = {
 		behavior = "Patrol",
-		walkSpeed = 11,
+		walkSpeed = 9.9,
 		damage = 12,
 		leash = 150,
 		attackCooldown = 1.4,
@@ -472,8 +478,8 @@ Config.EnemyProfiles = {
 	-- they turn away. The one that makes a corridor behind you worth checking.
 	Stalker = {
 		behavior = "Stalk",
-		walkSpeed = 9,
-		unwatchedSpeed = 15,
+		walkSpeed = 8.1,
+		unwatchedSpeed = 13.5,
 		damage = 14,
 		leash = 190,
 		attackCooldown = 1.2,
@@ -508,7 +514,7 @@ Config.EnemyProfiles = {
 	-- is the most expensive contact in the game.
 	Sentry = {
 		behavior = "Guard",
-		walkSpeed = 12,
+		walkSpeed = 10.8,
 		damage = 20,
 		leash = 70,
 		attackCooldown = 1.8,
@@ -544,7 +550,7 @@ Config.EnemyProfiles = {
 	-- within packRadius on the same floor, so a bad room produces a crowd.
 	Swarmer = {
 		behavior = "Pack",
-		walkSpeed = 13,
+		walkSpeed = 11.7,
 		packRadius = 120,
 		damage = 6,
 		leash = 170,
@@ -579,7 +585,7 @@ Config.EnemyProfiles = {
 	-- the floor, which is exactly what makes learning it worth something.
 	Lurker = {
 		behavior = "Ambush",
-		walkSpeed = 14,
+		walkSpeed = 12.6,
 		ambushRange = 34,
 		damage = 16,
 		leash = 120,
@@ -616,8 +622,8 @@ Config.EnemyProfiles = {
 	-- and only along a line they were shown in advance.
 	Charger = {
 		behavior = "Charge",
-		walkSpeed = 10,
-		chargeSpeed = 27,
+		walkSpeed = 9,
+		chargeSpeed = 24.3,
 		chargeRange = 95,
 		chargeCooldown = 4.5,
 		damage = 18,
