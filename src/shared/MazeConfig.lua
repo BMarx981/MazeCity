@@ -37,6 +37,24 @@ Config.World = {
 	-- visible floor; turn off first if lighting ever shows up in a perf trace.
 	LampShadows = true,
 	MovingWallMinLevel = 4,
+	-- The cycle: closed for DwellClosed, tween open, open for DwellOpen, tween
+	-- shut, each drawn per wall from its range. Here rather than only in
+	-- MazeGenerator.CFG because these are the numbers a playtest moves, and they
+	-- are baked onto the parts as attributes, so a change needs a regenerated world
+	-- rather than a restarted service.
+	--
+	-- Two sums are worth holding in your head while you move them. DwellClosed[2]
+	-- plus MovingWallTween[2] is the longest a player can be held at a shut wall,
+	-- currently 8 seconds. And the dwells against the tweens are how much of its
+	-- life a wall spends standing still, currently about half; raising the dwells
+	-- is what turns machinery back into scenery.
+	--
+	-- Shortening the tween buys both of those and is the wrong lever: it is the
+	-- only part of the cycle a player can read as intent, and a wall that snaps
+	-- shut is one nobody gets out from under.
+	MovingWallTween = { 3, 5 },
+	MovingWallDwellClosed = { 1.5, 3 },
+	MovingWallDwellOpen = { 5, 9 },
 	-- The floor mark under a moving wall: a disc where a rotating one turns, a
 	-- rail along the path a sliding one runs. A wall that has already moved is a
 	-- wall the player can read; the mark is for the one they are walking up to for
@@ -79,11 +97,14 @@ Config.World = {
 	-- the choice to walk down it is an actual choice.
 	DeadEndCoinsPerLevel = 10,
 	PathCoinsPerLevel = 3,
-	-- One powerup every N levels rather than a per-level chance, so the part
-	-- count stays a pure function of these settings instead of the seed and a
-	-- double-build still verifies against a fixed number. Which kind, and which
-	-- cell, are drawn; whether the level has one at all is not.
-	PowerupEveryNLevels = 3,
+	-- A fixed count on every level rather than one orb every third level. Three
+	-- per tower meant most floors had none at all and the one that did was in a
+	-- dead end nobody had a reason to walk into, so the mystery box was something
+	-- a player met roughly once a session. It stays a count rather than a chance
+	-- for the same reason the coins do: the part count is then a pure function of
+	-- these settings instead of the seed, and a double-build still verifies
+	-- against a fixed number. Where they land is drawn; how many is not.
+	PowerupsPerLevel = 3,
 	-- Coins in the arc above each roof bounce pad, which until now launched the
 	-- player at nothing. Placed by pure geometry, drawing no random numbers.
 	RoofArcCoins = 6,
@@ -177,10 +198,18 @@ Config.Collectibles = {
 	-- taken. Deliberately not any of the per-kind colours below: those are what
 	-- the banner and the HUD chip use once the roll has happened.
 	PowerupOrbColor = Color3.fromRGB(255, 250, 225),
+	-- Thirty seconds each, where these used to run 8 to 15. Par for a floor is 65
+	-- seconds at the top of a tower and 150 at the bottom, so the old durations
+	-- expired inside the same corridor the orb was found in and there was barely
+	-- anything to spend one on; thirty is most of a floor at the top and about a
+	-- fifth of one at the bottom, long enough to change how the rest of the floor
+	-- is walked. Freeze is the one to watch when tuning: it is the only kind that
+	-- removes a whole system rather than improving the player, so if any of these
+	-- wants to come back down it is that one.
 	PowerupKinds = {
 		Speed = {
 			label = "Fast feet",
-			duration = 12,
+			duration = 30,
 			walkSpeedMultiplier = 1.45,
 			color = Color3.fromRGB(120, 235, 255),
 		},
@@ -191,7 +220,7 @@ Config.Collectibles = {
 		-- TimerGui draws it, so PickupService has no effect to apply or undo.
 		Reveal = {
 			label = "Show the way",
-			duration = 10,
+			duration = 30,
 			color = Color3.fromRGB(150, 255, 170),
 		},
 		-- Pays twice: a lump sum the moment it is taken, and double value on every
@@ -201,7 +230,7 @@ Config.Collectibles = {
 		-- has not back through the dead ends they skipped.
 		CoinBoost = {
 			label = "Coin rush!",
-			duration = 15,
+			duration = 30,
 			coinGrantMin = 10,
 			coinGrantMax = 30,
 			coinMultiplier = 2,
@@ -212,13 +241,13 @@ Config.Collectibles = {
 		-- strand anyone the way a walk-through-walls ghost could.
 		Ghost = {
 			label = "Unseen",
-			duration = 10,
+			duration = 30,
 			color = Color3.fromRGB(220, 200, 255),
 			highlightColor = Color3.fromRGB(200, 180, 255),
 		},
 		Freeze = {
 			label = "Freeze!",
-			duration = 8,
+			duration = 30,
 			color = Color3.fromRGB(255, 255, 255),
 		},
 	},

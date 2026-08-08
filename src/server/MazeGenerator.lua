@@ -116,15 +116,33 @@ local CFG = {
 	MOVING_WALL_MIN_LEVEL = 4,
 	MOVING_WALL_BASE = 2,
 	-- A moving wall's cycle is: closed for DwellClosed, tween open, open for
-	-- DwellOpen, tween shut. Only the closed half is time the player can be
-	-- stuck, and arriving just as one shuts costs the full dwell plus a tween
-	-- before the gap is passable again. That sum, not either range on its own,
-	-- is the number to tune: it was 25s and is now 10. The open range stays
-	-- long enough that arriving at an open wall usually means walking through.
+	-- DwellOpen, tween shut. Two different clocks live in here and they are tuned
+	-- against each other.
+	--
+	-- The first is how long the player can be stuck: only the closed half counts,
+	-- and arriving just as one shuts costs the full closed dwell plus a tween
+	-- before the gap is passable again. That sum, not either range on its own, is
+	-- the number that decides whether a wall is an obstacle or a wait. It was 25s,
+	-- then 10, and is now 8.
+	--
+	-- The second is how much of its life the wall spends standing still, which is
+	-- what makes a floor read as machinery rather than as scenery that occasionally
+	-- twitches. It was about two thirds; it is about half. Both dwells came down to
+	-- get there and the open one is the one with a cost: the window in which
+	-- arriving at an open wall means walking straight through is shorter, so being
+	-- caught by one is now a thing that happens rather than a thing that could.
+	-- 5s is still three times what it takes to cross a cell at a walk, and the
+	-- closing tween is passable for part of its length on top of that.
+	--
+	-- Tween is deliberately not shortened to buy either of these. It is the only
+	-- part of the cycle the player can read as intent, and a wall that snaps shut
+	-- is one nobody gets out from under.
 	MOVING_WALL_TWEEN = { 3, 5 },
-	MOVING_WALL_DWELL_CLOSED = { 2.5, 5 },
-	MOVING_WALL_DWELL_OPEN = { 7, 14 },
-	-- Spread over the cycle so neighbouring walls are not in lockstep.
+	MOVING_WALL_DWELL_CLOSED = { 1.5, 3 },
+	MOVING_WALL_DWELL_OPEN = { 5, 9 },
+	-- Spread over the cycle so neighbouring walls are not in lockstep. Still wider
+	-- than the shortest cycle, which is what matters; a phase that wraps is as
+	-- decorrelated as one that does not.
 	MOVING_WALL_PHASE_MAX = 12,
 	-- The floor mark. Thin enough to read as paint rather than as a lip to trip
 	-- over, and it sits on the slab rather than in it, so there is no z-fight.
@@ -140,7 +158,7 @@ local CFG = {
 
 	COIN_DEAD_END_PER_LEVEL = 10,
 	COIN_PATH_PER_LEVEL = 3,
-	POWERUP_EVERY_N_LEVELS = 3,
+	POWERUPS_PER_LEVEL = 3,
 	ROOF_ARC_COINS = 6,
 	COIN_SIZE = 3.4,
 	COIN_THICKNESS = 0.45,
@@ -270,6 +288,9 @@ local function refreshFromConfig()
 		CFG.LAMP_SHADOWS = w.LampShadows
 	end
 	CFG.MOVING_WALL_MIN_LEVEL = w.MovingWallMinLevel or CFG.MOVING_WALL_MIN_LEVEL
+	CFG.MOVING_WALL_TWEEN = w.MovingWallTween or CFG.MOVING_WALL_TWEEN
+	CFG.MOVING_WALL_DWELL_CLOSED = w.MovingWallDwellClosed or CFG.MOVING_WALL_DWELL_CLOSED
+	CFG.MOVING_WALL_DWELL_OPEN = w.MovingWallDwellOpen or CFG.MOVING_WALL_DWELL_OPEN
 	CFG.MOVING_WALL_MARK_COLOR = w.MovingWallMarkColor or CFG.MOVING_WALL_MARK_COLOR
 	CFG.MOVING_WALL_MARK_TRANSPARENCY = setting(w.MovingWallMarkTransparency, CFG.MOVING_WALL_MARK_TRANSPARENCY)
 	CFG.PHANTOM_PER_LEVEL = w.PhantomWallsPerLevel or CFG.PHANTOM_PER_LEVEL
@@ -277,7 +298,7 @@ local function refreshFromConfig()
 	CFG.PHANTOM_TRANSPARENCY = setting(w.PhantomTransparency, CFG.PHANTOM_TRANSPARENCY)
 	CFG.COIN_DEAD_END_PER_LEVEL = setting(w.DeadEndCoinsPerLevel, CFG.COIN_DEAD_END_PER_LEVEL)
 	CFG.COIN_PATH_PER_LEVEL = setting(w.PathCoinsPerLevel, CFG.COIN_PATH_PER_LEVEL)
-	CFG.POWERUP_EVERY_N_LEVELS = setting(w.PowerupEveryNLevels, CFG.POWERUP_EVERY_N_LEVELS)
+	CFG.POWERUPS_PER_LEVEL = setting(w.PowerupsPerLevel, CFG.POWERUPS_PER_LEVEL)
 	CFG.ROOF_ARC_COINS = setting(w.RoofArcCoins, CFG.ROOF_ARC_COINS)
 	ROOF_Y = CFG.LEVELS * LEVEL_HEIGHT
 end
@@ -1166,7 +1187,7 @@ end
 --
 -- The count is a pure function of the settings rather than of the seed, which is
 -- what keeps a part count usable as a determinism check: a fixed number of coins
--- per level, and a powerup on fixed levels. Only where they land is random.
+-- per level and a fixed number of powerups. Only where they land is random.
 
 local COIN_COLOR = Color3.fromRGB(255, 202, 66)
 
@@ -1294,6 +1315,37 @@ local function buildCollectibles(parent, origin, baseY, g, blocked, entryCell, r
 		makeCoin(folder, origin + Vector3.new(center.X, baseY + CFG.COIN_HEIGHT, center.Z), ctx, ctx.level)
 	end
 
+	-- No kind is drawn here. PickupService rolls one when the orb is touched, so
+	-- what an orb is worth is not a property of the city, and the same orb is a
+	-- different prize to the next player to reach it.
+	local function orbAt(c)
+		local center = cellCenter(c.x, c.z)
+		local orbColor = Config.Collectibles.PowerupOrbColor
+		local orb = makePart(
+			folder,
+			"Powerup",
+			CFrame.new(origin + Vector3.new(center.X, baseY + CFG.POWERUP_HEIGHT, center.Z)),
+			Vector3.new(CFG.POWERUP_SIZE, CFG.POWERUP_SIZE, CFG.POWERUP_SIZE),
+			orbColor,
+			Enum.Material.Neon
+		)
+		orb.Shape = Enum.PartType.Ball
+		orb.CanCollide = false
+		orb.CastShadow = false
+		tagWithContext(orb, "Powerup", ctx.section, ctx.building, ctx.level)
+
+		-- Thirty of these per tower now rather than three, against nine hundred and
+		-- sixty lamps, so the light is still a rounding error on the level and it
+		-- is the only thing that makes an orb findable from the far end of a
+		-- corridor.
+		local glow = Instance.new("PointLight")
+		glow.Brightness = 3
+		glow.Range = 26
+		glow.Color = orbColor
+		glow.Shadows = false
+		glow.Parent = orb
+	end
+
 	-- Dead ends first, then the route, then anywhere still open. The top-up is
 	-- what makes the total per level exact instead of a target: a floor whose
 	-- spanning tree happens to have few leaves, or whose route to the stairs is
@@ -1318,45 +1370,24 @@ local function buildCollectibles(parent, origin, baseY, g, blocked, entryCell, r
 		end
 	end
 
-	-- A powerup goes in whatever dead end is left over, so the loudest thing on
-	-- the floor is also the thing furthest from the route. Only if the level has
-	-- run out of them does it fall back to open maze.
-	if CFG.POWERUP_EVERY_N_LEVELS > 0 and (ctx.level + 1) % CFG.POWERUP_EVERY_N_LEVELS == 0 then
-		-- No kind is drawn here any more. PickupService rolls one when the orb is
-		-- touched, so what an orb is worth is not a property of the city, and the
-		-- same orb is a different prize to the next player to reach it.
-		local pool = deadEnds
-		if #pool == 0 then
-			pool = anywhere()
+	-- Powerups take whatever dead ends the coins left, so the loudest thing on the
+	-- floor is still the thing furthest from the route, and they top up from open
+	-- maze the same way the coins do. Same reason as the coins, too: every level
+	-- places exactly POWERUPS_PER_LEVEL however few leaves its spanning tree
+	-- happened to grow, so the part count stays a function of the settings.
+	local orbs = 0
+	local spare
+	while orbs < CFG.POWERUPS_PER_LEVEL do
+		local c = draw(deadEnds)
+		if not c then
+			spare = spare or anywhere()
+			c = draw(spare)
 		end
-
-		local c = draw(pool)
-		if c then
-			local center = cellCenter(c.x, c.z)
-			local orbColor = Config.Collectibles.PowerupOrbColor
-			local orb = makePart(
-				folder,
-				"Powerup",
-				CFrame.new(origin + Vector3.new(center.X, baseY + CFG.POWERUP_HEIGHT, center.Z)),
-				Vector3.new(CFG.POWERUP_SIZE, CFG.POWERUP_SIZE, CFG.POWERUP_SIZE),
-				orbColor,
-				Enum.Material.Neon
-			)
-			orb.Shape = Enum.PartType.Ball
-			orb.CanCollide = false
-			orb.CastShadow = false
-			tagWithContext(orb, "Powerup", ctx.section, ctx.building, ctx.level)
-
-			-- Three of these per tower against nine hundred and sixty lamps, so
-			-- the light is affordable and it is the only thing that makes an orb
-			-- findable from the far end of a corridor.
-			local glow = Instance.new("PointLight")
-			glow.Brightness = 3
-			glow.Range = 26
-			glow.Color = orbColor
-			glow.Shadows = false
-			glow.Parent = orb
+		if not c then
+			break
 		end
+		orbAt(c)
+		orbs = orbs + 1
 	end
 
 	return folder
