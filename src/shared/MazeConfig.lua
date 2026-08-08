@@ -420,27 +420,97 @@ end
 -- every EnemySpawn marker inherits it. Override per section here if you want
 -- a whole district to feel different regardless of building style.
 
--- Every walkSpeed here is below the unupgraded player's 16, on purpose: a
--- straight corridor is always an escape, even for a player who has never
--- bought anything, so no chase is ever unwinnable and no enemy can corner a
--- player who keeps moving. Threat is carried by the growl, the eyes, the
--- windup flash and the chase itself, Pac-Man style, not by the numbers.
+-- Two rules shape every number here.
 --
--- The Shop's Fast Feet upgrade moves the player baseline as high as 20.5, so
--- the band sits deliberately high in the space under 16: a fresh player still
--- escapes but feels the pressure, and an upgraded one walks away from
--- everything with ease, which is exactly what they paid for. The spread is
--- what makes the types feel different: a Charger is close enough to keep the
--- pressure on, a Sentry is a thing to walk around. Damage is low enough that a
--- bad corner costs progress toward the speed bonus rather than the floor.
--- Leashes are wide enough to cross most of a 250-stud floor.
+-- Sustained walkSpeed stays under the unupgraded player's 16, so a straight
+-- corridor is always an escape and no chase is ever unwinnable. The margin used
+-- to be half a stud on the fastest type, which is an escape on paper and reads
+-- as being glued to: turning a corner cost the player more than it cost the
+-- enemy, so nothing was ever actually shaken off. The band now sits low enough
+-- that running away visibly works within a corridor or two. Fast Feet takes the
+-- player to 20.5, so an upgraded one leaves everything behind, which is what
+-- they paid for.
+--
+-- What replaces raw speed is the `behavior` field, which selects a rule in
+-- EnemyService. Six types that differ only by a stud of speed are one enemy
+-- with six colours; six types that each do a different thing are a roster. Now
+-- that a hit is both telegraphed and genuinely escapable, damage is high enough
+-- for contact to be a mistake rather than a tax: an enemy that is dangerous to
+-- touch and easy to leave behind is a decision the player gets to make.
+--
+-- chargeSpeed is the one number above 16, and deliberately: it is a straight
+-- line the player watches an enemy wind up for, and sidestepping it is the
+-- whole interaction.
 Config.EnemyProfiles = {
-	Drifter = { walkSpeed = 13, damage = 6, leash = 150, attackCooldown = 1.2, color = Color3.fromRGB(120, 160, 220) },
-	Stalker = { walkSpeed = 14.5, damage = 9, leash = 190, attackCooldown = 1.0, color = Color3.fromRGB(200, 150, 90) },
-	Sentry = { walkSpeed = 12.5, damage = 13, leash = 120, attackCooldown = 1.8, color = Color3.fromRGB(150, 150, 160) },
-	Swarmer = { walkSpeed = 15, damage = 4, leash = 170, attackCooldown = 0.6, color = Color3.fromRGB(110, 200, 170) },
-	Lurker = { walkSpeed = 13.5, damage = 11, leash = 135, attackCooldown = 1.4, color = Color3.fromRGB(210, 205, 185) },
-	Charger = { walkSpeed = 15.5, damage = 10, leash = 210, attackCooldown = 1.1, color = Color3.fromRGB(210, 100, 95) },
+	-- The default, and the one a player meets first. Wanders its spawn cell,
+	-- chases at a speed that loses ground on every corner.
+	Drifter = {
+		behavior = "Patrol",
+		walkSpeed = 11,
+		damage = 12,
+		leash = 150,
+		attackCooldown = 1.4,
+		color = Color3.fromRGB(120, 160, 220),
+	},
+	-- Slows to a crawl while the player is facing it and closes fast the moment
+	-- they turn away. The one that makes a corridor behind you worth checking.
+	Stalker = {
+		behavior = "Stalk",
+		walkSpeed = 9,
+		unwatchedSpeed = 15,
+		damage = 14,
+		leash = 190,
+		attackCooldown = 1.2,
+		color = Color3.fromRGB(200, 150, 90),
+	},
+	-- Barely leaves its cell. The short leash is the point: it is a hazard with
+	-- a position, so it can be mapped and walked around, and blundering into one
+	-- is the most expensive contact in the game.
+	Sentry = {
+		behavior = "Guard",
+		walkSpeed = 12,
+		damage = 20,
+		leash = 70,
+		attackCooldown = 1.8,
+		color = Color3.fromRGB(150, 150, 160),
+	},
+	-- Alone it is nothing. One that spots the player wakes every other Swarmer
+	-- within packRadius on the same floor, so a bad room produces a crowd.
+	Swarmer = {
+		behavior = "Pack",
+		walkSpeed = 13,
+		packRadius = 120,
+		damage = 6,
+		leash = 170,
+		attackCooldown = 0.7,
+		color = Color3.fromRGB(110, 200, 170),
+	},
+	-- Sits dormant and nearly invisible until the player is inside ambushRange,
+	-- then reveals and commits. Cannot be avoided by anyone who has not learned
+	-- the floor, which is exactly what makes learning it worth something.
+	Lurker = {
+		behavior = "Ambush",
+		walkSpeed = 14,
+		ambushRange = 34,
+		damage = 16,
+		leash = 120,
+		attackCooldown = 1.5,
+		color = Color3.fromRGB(210, 205, 185),
+	},
+	-- Slow until it has a clear straight line, then telegraphs and sprints down
+	-- it, overshoots and has to recover. The only enemy that outruns a player,
+	-- and only along a line they were shown in advance.
+	Charger = {
+		behavior = "Charge",
+		walkSpeed = 10,
+		chargeSpeed = 27,
+		chargeRange = 95,
+		chargeCooldown = 4.5,
+		damage = 18,
+		leash = 210,
+		attackCooldown = 1.6,
+		color = Color3.fromRGB(210, 100, 95),
+	},
 }
 
 -- Section index -> enemy type that replaces whatever the building style picked.
@@ -452,10 +522,30 @@ Config.SectionEnemyOverride = {
 -- Enemies scale up as players climb.
 Config.EnemyHealthBase = 90
 Config.EnemyHealthPerLevel = 14
+-- How long a marker whose enemy died stays empty. Nothing in the game damages
+-- an enemy yet, so this is reachable only through the Died path; it is kept
+-- because that path is real rather than as a hook for a weapon that may never
+-- arrive.
 Config.EnemyRespawnSeconds = 25
--- Enemies with no player inside this radius stop pathfinding entirely. Keep it
--- above the largest leash above, or the leash is what stops mattering.
-Config.EnemyActivationRange = 220
+
+-- A rig exists only while somebody is near enough to meet it. Generation places
+-- 3 markers on each of 10 levels in each of 6 buildings, so a section is 180
+-- enemies and the old service built every one of them at world build time and
+-- kept it forever: 360 live Humanoids before anyone had climbed a floor, and
+-- another 180 per lazily generated section. Gating the pathfinding rather than
+-- the rig left the whole cost standing, and a server spending its frame on
+-- hundreds of idle Humanoid state machines is what made the survivors move like
+-- they were underwater.
+--
+-- Spawn and despawn differ so a player pacing the boundary does not thrash the
+-- rig. Despawn is measured from the enemy rather than its marker, so one that
+-- chased somebody across the floor is not deleted out from under them.
+Config.EnemySpawnRange = 190
+Config.EnemyDespawnRange = 260
+-- Y slack that still counts as the same floor, for both target selection and
+-- noticing that an enemy has fallen down a stairwell and has to walk home.
+-- LEVEL_HEIGHT is 20.5, so this is comfortably inside one storey.
+Config.EnemyFloorBand = 16
 
 function Config.resolveEnemyType(sectionIndex, markerType)
 	local override = Config.SectionEnemyOverride[sectionIndex]
@@ -549,6 +639,8 @@ Config.Sounds = {
 	ZipWhoosh = "rbxasset://sounds/action_falling.mp3", -- the same wind on the roof zipline, separate so it can be swapped for a metallic zing
 	BouncePad = "rbxasset://sounds/action_jump.mp3", -- boing on launching off a roof pad
 	EnemyGrowl = "rbxasset://sounds/bass.mp3", -- looping low drone, louder and higher the closer the enemy is
+	EnemyAlert = "rbxasset://sounds/impact_water.mp3", -- one-shot on acquiring a target, and on a Lurker revealing
+	EnemyCharge = "rbxasset://sounds/action_jump.mp3", -- one-shot under a Charger's windup, pitched down
 	PhantomPass = "rbxasset://sounds/impact_water.mp3", -- soft bloop on phasing through a phantom wall
 	CoinPickup = "rbxasset://sounds/electronicpingshort.wav", -- the same ping, pitched well up so a coin never reads as a floor clear
 	PowerupPickup = "rbxasset://sounds/electronicpingshort.wav",
@@ -596,7 +688,26 @@ Config.Juice = {
 	EnemyTellSeconds = 0.3, -- warning flash before contact damage lands
 	EnemyTellColor = Color3.fromRGB(255, 90, 90),
 	EnemyTellReach = 7, -- damage only lands if the player is still this close when the flash ends
-	EnemyEyeColor = Color3.fromRGB(20, 20, 24),
+	EnemyEyeColor = Color3.fromRGB(255, 236, 190),
+	EnemyAlertVolume = 0.45,
+	EnemyChargeVolume = 0.55,
+	-- The rig is a hovering shade rather than anything with legs, which is a
+	-- decision and not a shortcut: a walk cycle needs either art or a skeleton,
+	-- and a thing that floats needs neither and never foot-slides. Everything
+	-- below drives Motor6Ds from one Heartbeat loop over the live enemies.
+	EnemyBobHeight = 0.42, -- studs the body rises and falls at rest
+	EnemyBobRate = 2.1, -- radians per second of that bob
+	EnemyLeanAngle = 0.32, -- radians the body tips into its own movement, at full speed
+	EnemyTailSway = 0.5, -- radians the trailing segments swing, growing down the chain
+	EnemyHandOrbit = 0.35, -- studs the floating hands drift, counter-phase to the bob
+	EnemyLookYaw = 0.9, -- radians the head may turn off-body to keep the player in view
+	EnemyLookPitch = 0.45,
+	-- Neon carries the glow instead of a PointLight. Forty active shades with a
+	-- light each is forty lights, and Roblox's budget for those is small enough
+	-- that the maze lamps would start dropping out to pay for the enemies.
+	EnemyWispTexture = "rbxasset://textures/particles/smoke_main.dds",
+	EnemyWispRate = 7,
+	EnemyLurkerHiddenTransparency = 0.88, -- what an unrevealed Lurker fades its body to
 	PhantomSparkleVolume = 0.35,
 	PhantomSparkleSeconds = 0.7,
 	PhantomSparkleParticles = 28,
