@@ -3,6 +3,11 @@
 -- type comes from the marker's EnemyType attribute (set by building style)
 -- unless the section overrides it.
 --
+-- What an enemy is and what it looks like are not here: the rows live in
+-- ReplicatedStorage.EnemyDefinitions, the rig builder in
+-- ReplicatedStorage.ModelGenerator, and picking a template and applying the
+-- runtime stats in Enemy/EnemyFactory. This file is the loop that drives them.
+--
 -- Drop your own rigs in ServerStorage/Enemies/<TypeName>. If a rig is missing a
 -- procedural shade is used, so the game is fully playable from a cold rojo
 -- build. An artist rig keeps its own look and skips the joint animation below;
@@ -22,35 +27,24 @@
 -- still for eight seconds with its replan check sitting unreachable underneath.
 -- The think loop re-issues MoveTo every tick and decides arrival itself.
 --
--- Behaviour is per type, selected by profile.behavior. Six types separated only
--- by a stud of walkSpeed is one enemy wearing six colours.
+-- Behaviour is per type, selected by profile.behavior against EnemyTypes.Behavior.
+-- Six types separated only by a stud of walkSpeed is one enemy wearing six
+-- colours. Two of the branches below key off data rather than off a name, and
+-- that is deliberate: Drifter and Stalker are both Chasers, so what separates
+-- them is that one has an unwatchedSpeed and the other wanders at its post.
 
 local CollectionService = game:GetService("CollectionService")
 local PathfindingService = game:GetService("PathfindingService")
-local PhysicsService = game:GetService("PhysicsService")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
-local ServerStorage = game:GetService("ServerStorage")
 
 local Config = require(ReplicatedStorage:WaitForChild("MazeConfig"))
+local ModelGenerator = require(ReplicatedStorage:WaitForChild("ModelGenerator"))
+local EnemyTypes = require(ReplicatedStorage:WaitForChild("EnemyTypes"))
+local EnemyFactory = require(script.Parent:WaitForChild("Enemy"):WaitForChild("EnemyFactory"))
 
--- Enemies do not collide with each other. Three of them meeting in a corridor
--- used to wedge into a shoving match none of them could path out of, which was
--- most of what "they just stand there" turned out to be. They still collide
--- with everything else, so nothing about containment changes: the maze walls
--- are in their own group and this one is not made non-collidable with it.
-local ENEMY_GROUP = "Enemy"
-local function ensureCollisionGroup(name)
-	for _, group in ipairs(PhysicsService:GetRegisteredCollisionGroups()) do
-		if group.name == name then
-			return
-		end
-	end
-	PhysicsService:RegisterCollisionGroup(name)
-end
-ensureCollisionGroup(ENEMY_GROUP)
-PhysicsService:CollisionGroupSetCollidable(ENEMY_GROUP, ENEMY_GROUP, false)
+local Behavior = EnemyTypes.Behavior
 
 -- Loop mechanics. Gameplay-facing numbers live in MazeConfig; these are the
 -- shape of the update itself and mean nothing to a designer.
@@ -94,386 +88,12 @@ local CHARGE_STALL_SPEED = 4
 
 local AMBUSH_REHIDE_SECONDS = 6
 
-local enemyFolder = ServerStorage:FindFirstChild("Enemies")
-
-local liveFolder = workspace:FindFirstChild("LiveEnemies")
-if not liveFolder then
-	liveFolder = Instance.new("Folder")
-	liveFolder.Name = "LiveEnemies"
-	liveFolder.Parent = workspace
-end
+local liveFolder = EnemyFactory.liveFolder
 
 -- marker -> entry, and the set of every marker whether or not it holds one.
 local live = {}
 local markers = {}
 local deadUntil = {}
-
--- ============================================================
--- The rig
--- ============================================================
--- A hovering shade: a translucent hood around a dark head with lit eyes, an
--- ember at the chest, hands with no arms between them, and tapering segments
--- trailing into smoke. No legs anywhere, which is the point. A walk cycle needs
--- art or a skeleton and foot-slides without both, and the rig before this one
--- was a box with a ball on it precisely because neither was available.
---
--- The shape is a recipe, not a hardcoded body. DEFAULT_LOOK below is the whole
--- baseline and each profile's `look` is merged over it, so the six types differ
--- by silhouette rather than by tint: they used to be one rig in six colours,
--- which at corridor distance is one rig. Optional groups (crown, horns, plates,
--- motes) are absent unless a type asks for them, and any size of 0 leaves that
--- part off entirely.
---
--- Everything cosmetic hangs off Motor6Ds rather than welds so one Heartbeat
--- loop can animate it. Structure and skin stay separate: the Humanoid drives an
--- invisible root and torso, the skin never touches physics.
-
--- Studs of daylight kept under the lowest part of a rig at the bottom of its
--- bob. Small, because a shade is supposed to skim the floor.
-local FLOOR_MARGIN = 0.35
-
-local DEFAULT_LOOK = {
-	scale = 1,
-	bobScale = 1,
-	bobRate = 1,
-	-- Resting hover, and only a floor: the builder raises it to clear whatever
-	-- the type's tail and tendrils actually hang down to.
-	hover = 2.4,
-	head = 1.5,
-	headOffset = 1.6,
-	hood = 2.35,
-	hoodOffset = 1.52,
-	hoodTransparency = 0.34,
-	core = 0.9,
-	coreOffset = Vector3.new(0, 0.35, -0.18),
-	hands = 0.52,
-	handSpread = 1.35,
-	handHeight = 0.5,
-	tail = {
-		{ size = 1.6, y = -0.45 },
-		{ size = 1.15, y = -1.2 },
-		{ size = 0.72, y = -1.85 },
-	},
-	-- The head is 1.5 across, so the eyes sit just proud of its front face.
-	-- Anything smaller stops reading as a face down a corridor.
-	eyeCount = 2,
-	eyeSize = 0.34,
-	eyeSpread = 0.3,
-	eyeHeight = 0.16,
-	eyeDepth = 0.62,
-	crown = nil,
-	horns = nil,
-	plates = nil,
-	motes = nil,
-}
-
--- Shallow on purpose. The nested tables (tail, crown, motes) are replaced whole
--- rather than merged key by key, because a type that overrides its tail means a
--- different tail and not a three-segment one with the first entry edited.
-local function resolveLook(profile)
-	local look = table.clone(DEFAULT_LOOK)
-	for key, value in pairs(profile.look or {}) do
-		look[key] = value
-	end
-	return look
-end
-
--- A size is a number for a sphere or a Vector3 for an ellipsoid, which is what
--- keeps the profile tables short: most parts are round and say so in one number.
-local function sizeOf(value, scale)
-	if typeof(value) == "Vector3" then
-		return value * scale
-	end
-	return Vector3.new(value, value, value) * scale
-end
-
-local function weld(a, b)
-	local w = Instance.new("WeldConstraint")
-	w.Part0 = a
-	w.Part1 = b
-	w.Parent = a
-end
-
--- Block parts wearing a Sphere SpecialMesh rather than Shape = Ball, because a
--- Ball part will not stretch and half these silhouettes are ellipsoids: the
--- Stalker is a tall thin one, the Lurker's cowl is a wide flat one, the
--- Charger's horns are long thin ones. The mesh fills the part's Size, so a
--- Vector3 in a profile is the shape it draws.
-local function skinPart(model, name, size, color, transparency, material)
-	local part = Instance.new("Part")
-	part.Name = name
-	part.Size = size
-	part.Color = color
-	part.Material = material or Enum.Material.Neon
-	part.Transparency = transparency
-	part.CanCollide = false
-	part.CanTouch = false
-	part.CanQuery = false
-	part.CastShadow = false
-	part.Massless = true
-	part.Parent = model
-
-	local mesh = Instance.new("SpecialMesh")
-	mesh.MeshType = Enum.MeshType.Sphere
-	mesh.Parent = part
-	return part
-end
-
-local function joint(parent, part0, part1, name, c0)
-	local motor = Instance.new("Motor6D")
-	motor.Name = name
-	motor.Part0 = part0
-	motor.Part1 = part1
-	motor.C0 = c0
-	motor.Parent = parent
-	return motor
-end
-
-local function makeShade(enemyType)
-	local profile = Config.getProfile(enemyType)
-	local juice = Config.Juice
-	local model = Instance.new("Model")
-	model.Name = enemyType
-
-	local look = resolveLook(profile)
-	local scale = look.scale
-	local dark = profile.color:Lerp(Color3.new(0, 0, 0), 0.72)
-
-	-- The collider scales with the silhouette. A Swarmer drawn at 0.62 around a
-	-- full size root is a small thing you bump into from a stud and a half away,
-	-- which reads as the hit detection being broken rather than as the enemy
-	-- being small.
-	local root = Instance.new("Part")
-	root.Name = "HumanoidRootPart"
-	root.Size = Vector3.new(2, 2, 1) * scale
-	root.Transparency = 1
-	root.CanQuery = false
-	root.TopSurface = Enum.SurfaceType.Smooth
-	root.BottomSurface = Enum.SurfaceType.Smooth
-	root.CollisionGroup = ENEMY_GROUP
-	root.Parent = model
-
-	-- R6 wants a part called Torso and the Humanoid is happier having one. It
-	-- carries no geometry: it is the frame the skin is animated against.
-	local torso = Instance.new("Part")
-	torso.Name = "Torso"
-	torso.Size = Vector3.new(2, 2, 1) * scale
-	torso.Transparency = 1
-	torso.CanCollide = false
-	torso.CanTouch = false
-	torso.CanQuery = false
-	torso.Massless = true
-	torso.Parent = model
-
-	local head = skinPart(model, "Head", sizeOf(look.head, scale), dark, 0, Enum.Material.SmoothPlastic)
-	local joints = {
-		root = joint(root, root, torso, "RootJoint", CFrame.new()),
-		neck = joint(torso, torso, head, "Neck", CFrame.new(0, look.headOffset * scale, 0)),
-		tails = {},
-		crown = {},
-		motes = {},
-		rigid = {},
-	}
-
-	if look.hood ~= 0 then
-		local hood = skinPart(model, "Hood", sizeOf(look.hood, scale), profile.color, look.hoodTransparency)
-		joints.hood = joint(torso, torso, hood, "HoodJoint", CFrame.new(0, look.hoodOffset * scale, 0.06 * scale))
-	end
-	if look.core ~= 0 then
-		local core = skinPart(model, "Core", sizeOf(look.core, scale), profile.color, 0)
-		joints.core = joint(torso, torso, core, "CoreJoint", CFrame.new(look.coreOffset * scale))
-	end
-	if look.hands ~= 0 then
-		local size = sizeOf(look.hands, scale)
-		for _, side in ipairs({ -1, 1 }) do
-			local name = side < 0 and "HandLeft" or "HandRight"
-			local hand = skinPart(model, name, size, profile.color, 0.12)
-			local c0 = CFrame.new(side * look.handSpread * scale, look.handHeight * scale, -0.28 * scale)
-			local motor = joint(torso, torso, hand, name .. "Joint", c0)
-			if side < 0 then
-				joints.handL = motor
-			else
-				joints.handR = motor
-			end
-		end
-	end
-
-	-- Tracked as the rig is built and spent on HipHeight at the end, so a type
-	-- that grows a longer tail floats higher to suit instead of dragging it
-	-- through the slab. Hand tuned hover per type is a number somebody edits a
-	-- tail without, and the failure is silent: the enemy looks fine standing
-	-- still and scrapes the floor on the down beat of every bob.
-	local lowestSkin = 0
-
-	-- Transparency climbs down the chain so the last segment reads as smoke
-	-- rather than as a part, however many segments a type asked for.
-	local trailing = head
-	for index, segment in ipairs(look.tail) do
-		local fade = 0.45 + 0.33 * ((index - 1) / math.max(#look.tail - 1, 1))
-		local size = sizeOf(segment.size, scale)
-		local part = skinPart(model, "Tail" .. index, size, profile.color, fade)
-		table.insert(
-			joints.tails,
-			joint(torso, torso, part, "Tail" .. index .. "Joint", CFrame.new(0, segment.y * scale, 0))
-		)
-		lowestSkin = math.min(lowestSkin, segment.y * scale - size.Y / 2)
-		trailing = part
-	end
-
-	-- One radial ring, drawn upward as a crown or downward as tendrils depending
-	-- on the sign of `height`. The Sentry and the Lurker are the same code.
-	if look.crown then
-		local crown = look.crown
-		local size = sizeOf(crown.size, scale)
-		for index = 1, crown.count do
-			local angle = (index - 1) / crown.count * math.pi * 2
-			local part = skinPart(model, "Crown" .. index, size, profile.color, 0.1)
-			local c0 = CFrame.new(
-				math.sin(angle) * crown.radius * scale,
-				crown.height * scale,
-				math.cos(angle) * crown.radius * scale
-			) * CFrame.Angles(math.cos(angle) * crown.tilt, 0, -math.sin(angle) * crown.tilt)
-			table.insert(joints.crown, joint(torso, torso, part, "Crown" .. index .. "Joint", c0))
-		end
-		lowestSkin = math.min(lowestSkin, crown.height * scale - size.Y / 2)
-	end
-
-	-- Symmetric pairs. Plates sit at the shoulders, horns sweep off the brow; both
-	-- are rigid and ride whatever the torso is doing.
-	--
-	-- The order matters: anchor at the mount point, orient, then push out along
-	-- the part's own axis by `forward`. Offsetting before rotating leaves a 1.9
-	-- stud horn centred on the brow, which is half a horn poking backward out of
-	-- the head.
-	local function symmetricPair(spec, name)
-		local size = sizeOf(spec.size, scale)
-		local tilt = spec.tilt or 0
-		for _, side in ipairs({ -1, 1 }) do
-			local partName = name .. (side < 0 and "Left" or "Right")
-			local part = skinPart(model, partName, size, profile.color, 0.05)
-			local c0 = CFrame.new(side * spec.spread * scale, spec.height * scale, -0.1 * scale)
-				* CFrame.Angles(tilt, 0, side * 0.12)
-				* CFrame.new(0, 0, -(spec.forward or 0) * scale)
-			table.insert(joints.rigid, joint(torso, torso, part, partName .. "Joint", c0))
-		end
-	end
-	if look.plates then
-		symmetricPair(look.plates, "Plate")
-	end
-	if look.horns then
-		symmetricPair(look.horns, "Horn")
-	end
-
-	-- Satellites, orbited in the animation loop. Parented to the torso rather
-	-- than the head so they keep their circle while the head tracks the player.
-	if look.motes then
-		local motes = look.motes
-		local size = sizeOf(motes.size, scale)
-		for index = 1, motes.count do
-			local part = skinPart(model, "Mote" .. index, size, profile.color, 0.05)
-			-- Seeded onto the ring rather than at the origin, so the first frame
-			-- before Heartbeat takes over is not three motes stacked in the chest.
-			local angle = (index - 1) / motes.count * math.pi * 2
-			local c0 = CFrame.new(
-				math.sin(angle) * motes.radius * scale,
-				motes.height * scale,
-				math.cos(angle) * motes.radius * scale
-			)
-			table.insert(joints.motes, joint(torso, torso, part, "Mote" .. index .. "Joint", c0))
-		end
-	end
-
-	-- Eyes are most of what "a real rig" was going to buy: a blank ball is
-	-- scenery, the same ball with eyes is looking at you. Laid out in a row and
-	-- centred, so one is a cyclops and four are a thing that is not a person.
-	-- Front is -Z. Welded rather than jointed: they belong to the head.
-	for index = 1, look.eyeCount do
-		local offset = (index - (look.eyeCount + 1) / 2) * look.eyeSpread * 2 * scale
-		local eye =
-			skinPart(model, "Eye" .. index, sizeOf(look.eyeSize, scale), juice.EnemyEyeColor, 0, Enum.Material.Neon)
-		eye.CFrame = head.CFrame * CFrame.new(offset, look.eyeHeight * scale, -look.eyeDepth * scale)
-		weld(head, eye)
-	end
-
-	local wisp = Instance.new("ParticleEmitter")
-	wisp.Name = "Wisp"
-	wisp.Texture = juice.EnemyWispTexture
-	wisp.Rate = juice.EnemyWispRate
-	wisp.Lifetime = NumberRange.new(0.7, 1.3)
-	wisp.Speed = NumberRange.new(0.4, 1.1)
-	wisp.SpreadAngle = Vector2.new(28, 28)
-	wisp.Color = ColorSequence.new(profile.color)
-	wisp.LightEmission = 0.6
-	wisp.Transparency = NumberSequence.new({
-		NumberSequenceKeypoint.new(0, 0.55),
-		NumberSequenceKeypoint.new(1, 1),
-	})
-	wisp.Size = NumberSequence.new({
-		NumberSequenceKeypoint.new(0, 0.9),
-		NumberSequenceKeypoint.new(1, 0),
-	})
-	wisp.Acceleration = Vector3.new(0, -2, 0)
-	-- The lowest part the type actually has. A Sentry has no tail at all, and a
-	-- wisp emitter on a destroyed reference is an error at build time.
-	wisp.Parent = trailing
-
-	-- Parented last, so it finds a complete rig and picks up the root part on its
-	-- first pass rather than on a later one.
-	--
-	-- Hover is whichever is greater: the type's own resting height, or enough to
-	-- keep the lowest thing hanging off it clear of the slab at the bottom of the
-	-- bob. The bob is the part that is easy to forget, and it is worth 0.42 studs
-	-- times bobScale on every frame.
-	local swing = Config.Juice.EnemyBobHeight * look.bobScale
-	local humanoid = Instance.new("Humanoid")
-	humanoid.RigType = Enum.HumanoidRigType.R6
-	humanoid.HipHeight = math.max(look.hover * scale, -lowestSkin + swing + FLOOR_MARGIN)
-	humanoid.Parent = model
-
-	model.PrimaryPart = root
-
-	-- Base C0s captured here rather than rebuilt by the caller, because only this
-	-- function knows which optional groups a type ended up with.
-	local bases = {
-		neck = joints.neck.C0,
-		hood = joints.hood and joints.hood.C0,
-		core = joints.core and joints.core.C0,
-		handL = joints.handL and joints.handL.C0,
-		handR = joints.handR and joints.handR.C0,
-		tails = {},
-		crown = {},
-	}
-	for index, motor in ipairs(joints.tails) do
-		bases.tails[index] = motor.C0
-	end
-	for index, motor in ipairs(joints.crown) do
-		bases.crown[index] = motor.C0
-	end
-
-	return model, { joints = joints, bases = bases, look = look }
-end
-
-local function templateFor(enemyType)
-	if enemyFolder then
-		local template = enemyFolder:FindFirstChild(enemyType)
-		if template and template:IsA("Model") then
-			return template:Clone(), nil
-		end
-	end
-	return makeShade(enemyType)
-end
-
--- Recorded at build time so hiding a Lurker and revealing it again returns each
--- part to the transparency it was authored with, artist rig or shade.
-local function readSkin(model)
-	local skin = {}
-	for _, part in ipairs(model:GetDescendants()) do
-		if part:IsA("BasePart") and part.Name ~= "HumanoidRootPart" then
-			table.insert(skin, { part = part, transparency = part.Transparency, color = part.Color })
-		end
-	end
-	return skin
-end
 
 -- ============================================================
 -- Sensing
@@ -762,10 +382,10 @@ end
 -- ============================================================
 
 local function alertPack(entry, target)
-	local radius = entry.profile.packRadius or 0
+	local radius = entry.profile.behaviorConfig.packRadius or 0
 	local deadline = os.clock() + PACK_ALERT_SECONDS
 	for _, other in pairs(live) do
-		if other ~= entry and other.alive and other.profile.behavior == "Pack" then
+		if other ~= entry and other.alive and other.profile.behavior == Behavior.Swarmer then
 			if
 				math.abs(other.homeY - entry.homeY) < Config.EnemyFloorBand
 				and (other.home - entry.home).Magnitude <= radius
@@ -788,7 +408,7 @@ end
 -- reaches here.
 local function chaseSpeed(entry, target)
 	local profile = entry.profile
-	if profile.behavior == "Stalk" then
+	if profile.unwatchedSpeed then
 		if isWatched(entry, target) then
 			return profile.walkSpeed
 		end
@@ -804,7 +424,7 @@ local function canCharge(entry, target)
 	end
 	local delta = target.Position - entry.root.Position
 	local flat = Vector3.new(delta.X, 0, delta.Z)
-	if flat.Magnitude < 18 or flat.Magnitude > profile.chargeRange then
+	if flat.Magnitude < 18 or flat.Magnitude > profile.behaviorConfig.chargeRange then
 		return false
 	end
 	return hasLineOfSight(entry.root.Position + Vector3.new(0, 1, 0), target)
@@ -815,7 +435,7 @@ end
 local function beginCharge(entry, target)
 	local profile = entry.profile
 	entry.state = "Charging"
-	entry.chargeReadyAt = os.clock() + profile.chargeCooldown
+	entry.chargeReadyAt = os.clock() + profile.behaviorConfig.chargeCooldown
 
 	stopMoving(entry)
 	flashRig(entry, CHARGE_WINDUP)
@@ -865,7 +485,7 @@ local function stepIdle(entry)
 	local profile = entry.profile
 	entry.humanoid.WalkSpeed = profile.walkSpeed
 
-	if profile.behavior ~= "Patrol" then
+	if not profile.behaviorConfig.idleWander then
 		stopMoving(entry)
 		return
 	end
@@ -893,7 +513,7 @@ local function acquire(entry, target)
 
 	if hadNone then
 		playOnce(entry.root, Config.Sounds.EnemyAlert, Config.Juice.EnemyAlertVolume, 0.8)
-		if entry.profile.behavior == "Pack" then
+		if entry.profile.behavior == Behavior.Swarmer then
 			alertPack(entry, target)
 		end
 	end
@@ -940,9 +560,9 @@ local function think(entry)
 
 	-- A Lurker is scenery until somebody is close enough, and goes back to being
 	-- scenery once it has given up and gone home.
-	if profile.behavior == "Ambush" and not entry.revealed then
+	if profile.behavior == Behavior.Ambusher and not entry.revealed then
 		local close = target
-			and (target.Position - entry.root.Position).Magnitude <= profile.ambushRange
+			and (target.Position - entry.root.Position).Magnitude <= profile.behaviorConfig.ambushRange
 			and hasLineOfSight(entry.root.Position + Vector3.new(0, 1, 0), target)
 		if close then
 			entry.revealed = true
@@ -952,7 +572,7 @@ local function think(entry)
 		else
 			target = nil
 		end
-	elseif profile.behavior == "Ambush" and not target and entry.state == "Idle" then
+	elseif profile.behavior == Behavior.Ambusher and not target and entry.state == "Idle" then
 		if now >= (entry.rehideAt or 0) then
 			entry.revealed = false
 			setHidden(entry, true)
@@ -984,7 +604,7 @@ local function think(entry)
 		local char = hrp.Parent
 		local hum = char and char:FindFirstChildOfClass("Humanoid")
 
-		if profile.behavior == "Charge" and canCharge(entry, hrp) then
+		if profile.behavior == Behavior.Charger and canCharge(entry, hrp) then
 			beginCharge(entry, hrp)
 			return
 		end
@@ -1186,44 +806,19 @@ local function spawnFromMarker(marker)
 	local section = marker:GetAttribute("Section") or 1
 	local level = marker:GetAttribute("Level") or 0
 	local enemyType = Config.resolveEnemyType(section, marker:GetAttribute("EnemyType"))
-	local profile = Config.getProfile(enemyType)
 
-	local model, anim = templateFor(enemyType)
-	local humanoid = model:FindFirstChildOfClass("Humanoid")
-	local root = model:FindFirstChild("HumanoidRootPart") or model.PrimaryPart
-	local torso = model:FindFirstChild("Torso") or root
-	if not humanoid or not root then
-		warn("EnemyService: rig for " .. enemyType .. " has no Humanoid or HumanoidRootPart")
-		model:Destroy()
+	-- The rig, its joint data, and a stat copy with the speed cap and the
+	-- difficulty multipliers already spent. Every read below goes through that
+	-- copy: a walkSpeed read off the definitions row is the design value and
+	-- eleven percent fast.
+	local model, anim, profile = EnemyFactory.create(enemyType, marker.CFrame, { section = section, level = level })
+	if not model then
 		return
 	end
 
-	humanoid.MaxHealth = Config.EnemyHealthBase + level * Config.EnemyHealthPerLevel
-	humanoid.Health = humanoid.MaxHealth
-	humanoid.WalkSpeed = profile.walkSpeed
-	-- Nothing damages an enemy, so a health bar over one is a promise the game
-	-- does not keep.
-	humanoid.DisplayDistanceType = Enum.HumanoidDisplayDistanceType.None
-	humanoid.BreakJointsOnDeath = false
-	humanoid.RequiresNeck = false
-	-- A maze floor is flat and every one of these is a way for a rig to end up
-	-- on its side in a corridor with no way back onto its feet.
-	humanoid:SetStateEnabled(Enum.HumanoidStateType.FallingDown, false)
-	humanoid:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, false)
-	humanoid:SetStateEnabled(Enum.HumanoidStateType.Climbing, false)
-	humanoid:SetStateEnabled(Enum.HumanoidStateType.Seated, false)
-	humanoid:SetStateEnabled(Enum.HumanoidStateType.PlatformStanding, false)
-
-	for _, part in ipairs(model:GetDescendants()) do
-		if part:IsA("BasePart") and part.CanCollide then
-			part.CollisionGroup = ENEMY_GROUP
-		end
-	end
-
-	model:PivotTo(marker.CFrame)
-	model.Parent = liveFolder
-	model:SetAttribute("Section", section)
-	model:SetAttribute("Level", level)
+	local humanoid = model:FindFirstChildOfClass("Humanoid")
+	local root = model:FindFirstChild("HumanoidRootPart") or model.PrimaryPart
+	local torso = model:FindFirstChild("Torso") or root
 
 	local entry = {
 		marker = marker,
@@ -1234,7 +829,7 @@ local function spawnFromMarker(marker)
 		anim = anim,
 		profile = profile,
 		enemyType = enemyType,
-		skin = readSkin(model),
+		skin = ModelGenerator.readSkin(model),
 		home = marker.Position,
 		homeY = marker.Position.Y,
 		growl = makeGrowl(root),
@@ -1268,7 +863,7 @@ local function spawnFromMarker(marker)
 		entry.blocked = true
 	end)
 
-	if profile.behavior == "Ambush" then
+	if profile.behavior == Behavior.Ambusher then
 		entry.revealed = false
 		setHidden(entry, true)
 	end

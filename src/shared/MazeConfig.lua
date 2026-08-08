@@ -436,7 +436,7 @@ Config.Accessories = {
 	-- The ceiling on all gear combined, applied once in Inventory.wornEffects so
 	-- that no consumer clamps anything.
 	--
-	-- These are not decoration. Config.EnemyProfiles is tuned on the stated rule
+	-- These are not decoration. EnemyDefinitions is tuned on the stated rule
 	-- that sustained enemy speed stays under the unupgraded player's 16 and that
 	-- Fast Feet's 20.5 leaves everything behind; gear at +2 puts the ceiling at
 	-- 22.5 and moves nothing structural. Uncapped, it eventually makes the par
@@ -465,246 +465,17 @@ Config.Accessories = {
 -- every EnemySpawn marker inherits it. Override per section here if you want
 -- a whole district to feel different regardless of building style.
 
--- Two rules shape every number here.
+-- Which enemy type a marker holds is decided here. What that type is, what it
+-- is worth in a fight and what it looks like moved to
+-- ReplicatedStorage.EnemyDefinitions, on the same split PetCatalog and
+-- Config.Pets already use: a roster grows by entries where a system is tuned by
+-- edits. The knobs for the system as a whole are Config.Enemies below.
 --
--- Sustained walkSpeed stays under the unupgraded player's 16, so a straight
--- corridor is always an escape and no chase is ever unwinnable. The margin used
--- to be half a stud on the fastest type, which is an escape on paper and reads
--- as being glued to: turning a corner cost the player more than it cost the
--- enemy, so nothing was ever actually shaken off. The band now sits low enough
--- that running away visibly works within a corridor or two. Fast Feet takes the
--- player to 20.5, so an upgraded one leaves everything behind, which is what
--- they paid for.
---
--- Every speed below, chargeSpeed included, then came down a further 10% off a
--- playtest that read as a hair too hard. The tenths are what that pass left
--- behind and are not significant in themselves: the spread between the types is
--- what matters, so a future pass should scale the set rather than round these
--- to something tidier one at a time.
---
--- What replaces raw speed is the `behavior` field, which selects a rule in
--- EnemyService. Six types that differ only by a stud of speed are one enemy
--- with six colours; six types that each do a different thing are a roster. Now
--- that a hit is both telegraphed and genuinely escapable, damage is high enough
--- for contact to be a mistake rather than a tax: an enemy that is dangerous to
--- touch and easy to leave behind is a decision the player gets to make.
---
--- chargeSpeed is the one number above 16, and deliberately: it is a straight
--- line the player watches an enemy wind up for, and sidestepping it is the
--- whole interaction.
---
--- `look` is the silhouette, and it is a sparse override rather than a whole
--- rig: EnemyService holds the default shade and merges these over it field by
--- field, so an entry says only what makes that type different and a change to
--- the baseline reaches every type that did not opt out. Sizes are a number for
--- a sphere or a Vector3 for an ellipsoid, 0 means leave the part off, and
--- everything is multiplied by `scale` so a type resizes in one number.
---
--- The silhouettes are meant to be read at corridor distance and to say what the
--- thing does before it does it: the Sentry is planted and armoured because it
--- guards a cell, the Charger is front-heavy and horned because it comes at you
--- in a line, the Swarmer is small with satellites because it means there are
--- more. bobScale and bobRate carry the same information in motion, which is
--- what survives when the corridor is dark and all you have is a moving shape.
-Config.EnemyProfiles = {
-	-- The default, and the one a player meets first. Wanders its spawn cell,
-	-- chases at a speed that loses ground on every corner. Its look is the
-	-- baseline every other entry below is a delta against, so it has none.
-	Drifter = {
-		behavior = "Patrol",
-		walkSpeed = 9.9,
-		damage = 12,
-		leash = 150,
-		attackCooldown = 1.4,
-		color = Color3.fromRGB(120, 160, 220),
-		look = {},
-	},
-	-- Slows to a crawl while the player is facing it and closes fast the moment
-	-- they turn away. The one that makes a corridor behind you worth checking.
-	Stalker = {
-		behavior = "Stalk",
-		walkSpeed = 8.1,
-		unwatchedSpeed = 13.5,
-		damage = 14,
-		leash = 190,
-		attackCooldown = 1.2,
-		color = Color3.fromRGB(200, 150, 90),
-		-- Tall, narrow, and trailing four segments instead of three: it reads as
-		-- something stretched upward and always slightly too close, and the slow
-		-- deep bob is what sells it standing still while you look at it.
-		look = {
-			bobScale = 1.35,
-			bobRate = 0.7,
-			head = Vector3.new(1.15, 1.5, 1.2),
-			headOffset = 2,
-			hood = Vector3.new(1.75, 3, 1.8),
-			hoodOffset = 1.85,
-			hoodTransparency = 0.42,
-			core = 0.62,
-			hands = 0.4,
-			handSpread = 0.95,
-			handHeight = 0,
-			tail = {
-				{ size = 1.15, y = -0.5 },
-				{ size = 0.95, y = -1.35 },
-				{ size = 0.72, y = -2.1 },
-				{ size = 0.5, y = -2.75 },
-			},
-			eyeSize = 0.3,
-			eyeSpread = 0.22,
-		},
-	},
-	-- Barely leaves its cell. The short leash is the point: it is a hazard with
-	-- a position, so it can be mapped and walked around, and blundering into one
-	-- is the most expensive contact in the game.
-	Sentry = {
-		behavior = "Guard",
-		walkSpeed = 10.8,
-		damage = 20,
-		leash = 70,
-		attackCooldown = 1.8,
-		color = Color3.fromRGB(150, 150, 160),
-		-- Squat, wide, plated, crowned, and with no tail at all: everything else
-		-- here floats and this one is planted, which is the whole of what a player
-		-- needs to know about a thing that will not follow them. Four eyes in a row
-		-- because it is watching an approach rather than a person.
-		look = {
-			scale = 1.12,
-			bobScale = 0.25,
-			bobRate = 0.5,
-			head = Vector3.new(1.7, 1.25, 1.5),
-			headOffset = 1.25,
-			hood = Vector3.new(2.9, 2, 2.6),
-			hoodOffset = 1.15,
-			hoodTransparency = 0.22,
-			core = 1.25,
-			coreOffset = Vector3.new(0, 0.25, -0.25),
-			hands = 0.6,
-			handSpread = 1.75,
-			handHeight = 0.15,
-			tail = {},
-			plates = { size = Vector3.new(0.55, 1.5, 1.9), spread = 1.5, height = 1 },
-			crown = { count = 5, size = Vector3.new(0.28, 1.1, 0.28), radius = 1, height = 2.2, tilt = 0.35 },
-			eyeCount = 4,
-			eyeSize = 0.26,
-			eyeSpread = 0.28,
-			eyeDepth = 0.7,
-		},
-	},
-	-- Alone it is nothing. One that spots the player wakes every other Swarmer
-	-- within packRadius on the same floor, so a bad room produces a crowd.
-	Swarmer = {
-		behavior = "Pack",
-		walkSpeed = 11.7,
-		packRadius = 120,
-		damage = 6,
-		leash = 170,
-		attackCooldown = 0.7,
-		color = Color3.fromRGB(110, 200, 170),
-		-- Small, one big eye, no hands, and three motes orbiting it. The motes are
-		-- the tell: a single Swarmer already looks like several things moving at
-		-- once, which is a fair warning about what happens when it calls.
-		look = {
-			scale = 0.62,
-			bobScale = 0.8,
-			bobRate = 2.4,
-			head = 1.7,
-			headOffset = 1.2,
-			hood = 2.2,
-			hoodOffset = 1.15,
-			hoodTransparency = 0.3,
-			core = 0.5,
-			hands = 0,
-			tail = {
-				{ size = 1, y = -0.5 },
-				{ size = 0.55, y = -1.1 },
-			},
-			motes = { count = 3, size = 0.42, radius = 2.1, height = 1.3, rate = 1.6 },
-			eyeCount = 1,
-			eyeSize = 0.72,
-			eyeDepth = 0.75,
-		},
-	},
-	-- Sits dormant and nearly invisible until the player is inside ambushRange,
-	-- then reveals and commits. Cannot be avoided by anyone who has not learned
-	-- the floor, which is exactly what makes learning it worth something.
-	Lurker = {
-		behavior = "Ambush",
-		walkSpeed = 12.6,
-		ambushRange = 34,
-		damage = 16,
-		leash = 120,
-		attackCooldown = 1.5,
-		color = Color3.fromRGB(210, 205, 185),
-		-- A wide flat cowl with four eyes in a row and six tendrils hanging under
-		-- it, which is the same crown the Sentry wears pointed downward. Broad and
-		-- low so that folded against a corridor wall at 0.88 transparency it passes
-		-- for part of the maze, which is the only thing this one has to do well.
-		look = {
-			bobScale = 0.5,
-			bobRate = 0.85,
-			head = Vector3.new(1.7, 1, 1.3),
-			headOffset = 1.35,
-			hood = Vector3.new(3.4, 1.5, 2.4),
-			hoodOffset = 1.4,
-			hoodTransparency = 0.28,
-			core = 0.7,
-			hands = 0,
-			tail = {
-				{ size = Vector3.new(2.2, 0.9, 1.6), y = -0.35 },
-				{ size = Vector3.new(1.5, 0.7, 1.1), y = -1.05 },
-			},
-			crown = { count = 6, size = Vector3.new(0.22, 1.5, 0.22), radius = 1.25, height = -1.4, tilt = -0.15 },
-			eyeCount = 4,
-			eyeSize = 0.28,
-			eyeSpread = 0.3,
-			eyeHeight = 0.1,
-			eyeDepth = 0.55,
-		},
-	},
-	-- Slow until it has a clear straight line, then telegraphs and sprints down
-	-- it, overshoots and has to recover. The only enemy that outruns a player,
-	-- and only along a line they were shown in advance.
-	Charger = {
-		behavior = "Charge",
-		walkSpeed = 9,
-		chargeSpeed = 24.3,
-		chargeRange = 95,
-		chargeCooldown = 4.5,
-		damage = 18,
-		leash = 210,
-		attackCooldown = 1.6,
-		color = Color3.fromRGB(210, 100, 95),
-		-- Front-heavy: deep hood, shoulder plates, and two horns swept forward
-		-- along the line it is going to travel. The horns are the telegraph before
-		-- the telegraph, and a player who has met one once knows what the shape at
-		-- the end of the corridor is about to do.
-		look = {
-			scale = 1.15,
-			bobScale = 0.55,
-			bobRate = 1.5,
-			head = Vector3.new(1.5, 1.35, 1.8),
-			headOffset = 1.4,
-			hood = Vector3.new(2.5, 2.1, 3),
-			hoodOffset = 1.35,
-			hoodTransparency = 0.2,
-			core = 1.1,
-			coreOffset = Vector3.new(0, 0.4, -0.4),
-			hands = 0.66,
-			handSpread = 1.55,
-			handHeight = 0.25,
-			tail = {
-				{ size = 1.3, y = -0.5 },
-				{ size = 0.8, y = -1.15 },
-			},
-			plates = { size = Vector3.new(0.6, 1.3, 2.1), spread = 1.35, height = 0.95 },
-			horns = { size = Vector3.new(0.3, 0.34, 1.9), spread = 0.72, height = 1.9, forward = 0.95, tilt = -0.25 },
-			eyeSize = 0.36,
-			eyeSpread = 0.34,
-			eyeDepth = 0.85,
-		},
-	},
-}
+-- One rule from the old table is load-bearing enough to restate here, because
+-- it is what Config.Enemies.MaxChaseSpeed and the accessory WalkSpeed cap are
+-- both written against: no enemy's sustained speed reaches the unupgraded
+-- player's 16, so a straight corridor is always an escape. Charger's charge is
+-- the single exception and it is a telegraphed straight line.
 
 -- Section index -> enemy type that replaces whatever the building style picked.
 -- Leave a section out to keep per-building variety inside it.
@@ -712,8 +483,9 @@ Config.SectionEnemyOverride = {
 	-- [2] = "Charger",
 }
 
--- Enemies scale up as players climb.
-Config.EnemyHealthBase = 90
+-- Enemies scale up as players climb. The base a level is added to is per type
+-- and lives on its EnemyDefinitions row, since a Swarmer and a Brute have no
+-- business starting from the same number.
 Config.EnemyHealthPerLevel = 14
 -- How long a marker whose enemy died stays empty. Nothing in the game damages
 -- an enemy yet, so this is reachable only through the Died path; it is kept
@@ -740,55 +512,54 @@ Config.EnemyDespawnRange = 260
 -- LEVEL_HEIGHT is 20.5, so this is comfortably inside one storey.
 Config.EnemyFloorBand = 16
 
+-- Deliberately does not check that the name it returns is a real type. That is
+-- EnemyDefinitions.get's job and it warns when it falls back, so a typo in the
+-- override table above now says so instead of being quietly skipped in favour of
+-- the building's own style. Checking here as well would need this file to require
+-- the roster, and would put the fallback in two places.
 function Config.resolveEnemyType(sectionIndex, markerType)
-	local override = Config.SectionEnemyOverride[sectionIndex]
-	if override and Config.EnemyProfiles[override] then
-		return override
-	end
-	if markerType and Config.EnemyProfiles[markerType] then
-		return markerType
-	end
-	return "Drifter"
-end
-
-function Config.getProfile(enemyType)
-	return Config.EnemyProfiles[enemyType] or Config.EnemyProfiles.Drifter
+	return Config.SectionEnemyOverride[sectionIndex] or markerType or "Drifter"
 end
 
 -- The knobs that govern the enemy system as a whole, as opposed to what any one
--- type is. Per-type numbers move out of Config.EnemyProfiles and into
--- ReplicatedStorage.EnemyDefinitions at phase E1, on the same split content
--- already uses: a roster grows by entries where a system is tuned by edits.
+-- type is. Per-type numbers live on the ReplicatedStorage.EnemyDefinitions rows.
 --
--- Nothing reads this table yet. The flat Config.EnemyXxx keys above are still
--- the live ones and are deliberately not duplicated here, because two names for
--- one number is two numbers as soon as somebody edits the wrong one; they move
--- in at E2 when the service that reads them is rewritten.
+-- The flat Config.EnemyXxx keys above are the ones the current service still
+-- reads directly and are deliberately not duplicated here, because two names for
+-- one number is two numbers as soon as somebody edits the wrong one. They move
+-- in at phase E2, with the service that reads them.
 Config.Enemies = {
-	-- The hard ceiling on sustained speed, applied at spawn so no definition row
-	-- can put an enemy past it. The player walks at 16 unupgraded, so this is the
-	-- promise that a straight corridor is always an escape.
+	-- The hard ceiling on sustained speed, applied by EnemyFactory to every stat
+	-- copy so no definition row can put an enemy past it. The player walks at 16
+	-- unupgraded, so this is the promise that a straight corridor is always an
+	-- escape.
 	--
-	-- It is a backstop and not the tuning. The live band after the last playtest
-	-- is 8.1 to 12.6, well under this, and that is where the roster belongs: a
-	-- type that has to be clamped is a type whose row is wrong. Burst moves stay
-	-- exempt, Charger's chargeSpeed included, because a telegraphed line the
-	-- player is shown in advance is a thing to sidestep rather than outrun.
+	-- It is a backstop and not the tuning. The shipped band is 6.3 to 13.5, well
+	-- under this, and that is where the roster belongs: a type that has to be
+	-- clamped is a type whose row is wrong. Burst moves stay exempt, Charger's
+	-- chargeSpeed included, because a telegraphed line the player is shown in
+	-- advance is a thing to sidestep rather than outrun.
 	MaxChaseSpeed = 15,
 
 	-- Global multipliers over every definition row, applied to a per-spawn copy
 	-- and never written back into the row itself.
 	--
-	-- All of them ship at 1. The brief wanted damage halved here, and that was
-	-- right when the rows still carried the brief's numbers; since then a
-	-- playtest doubled damage against a hit that is now both telegraphed and
-	-- escapable, and halving the result would quietly undo it. The kid tuning
-	-- lives in the rows, where a playtest can move one type without moving the
-	-- other eighteen. This table is what an Easy or a Hard mode would turn.
+	-- SpeedMultiplier is the one that is not 1, and it is the record of a
+	-- playtest: the roster read as a hair too hard and the whole set came down
+	-- 10%. Carried here rather than as tenths scattered through nineteen rows,
+	-- because the spread between the types is what matters and the next pass
+	-- should be able to move all of it at once. The rows stay tidy integers.
+	--
+	-- Damage is deliberately 1. The brief wanted it halved, and that was right
+	-- when the rows still held the brief's numbers; a later playtest raised damage
+	-- per type against a hit that is now both telegraphed and escapable, and the
+	-- per-type ratios are nothing like uniform, so no single multiplier
+	-- reproduces them. That tuning lives in the rows where it can be moved one
+	-- type at a time.
 	Difficulty = {
 		HealthMultiplier = 1,
 		DamageMultiplier = 1,
-		SpeedMultiplier = 1,
+		SpeedMultiplier = 0.9,
 		DetectionMultiplier = 1,
 		CooldownMultiplier = 1,
 		BudgetMultiplier = 1,
