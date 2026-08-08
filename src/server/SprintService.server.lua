@@ -178,11 +178,12 @@ end)
 -- ============================================================
 -- Intents
 -- ============================================================
--- Same two kinds and the same absence of a rate limit as WallWalkIntent, and for
--- a weaker reason than that one has: start while sprinting is ignored, start on
+-- Two kinds and no rate limit, where AbilityIntent has three kinds and a budget.
+-- The difference is what a message can cost: an ability intent can change a
+-- selection and start an effect, where start while sprinting is ignored, start on
 -- a spent meter is refused by MinimumToStart, and stop while stopped is a no-op,
--- so the worst a spammer buys is one WalkSpeed write per message on a character
--- that is already theirs.
+-- so the worst a spammer buys here is one WalkSpeed write per message on a
+-- character that is already theirs.
 
 intents.OnServerEvent:Connect(function(player, payload)
 	if type(payload) ~= "table" then

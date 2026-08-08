@@ -198,6 +198,12 @@ local CFG = {
 	-- clear of the zipline landing at 50.
 	SHOP_OFFSET = 26,
 	SHOP_OUT = 20,
+	-- Studs between pedestal centres. A pedestal is 2.4 across, so this is mostly
+	-- the gap a player needs to stand at one prompt without the next one taking
+	-- the press. It is what the stall's width is derived from now that the list
+	-- of what it sells can grow: five pedestals at this pitch is a 31-stud
+	-- counter, which the plaza band takes without reaching the zipline landing.
+	SHOP_PITCH = 5,
 
 	-- The egg roost, one per roof deck. Placed by pure geometry off the footprint
 	-- so it draws no random numbers (invariant 6) and cost a countable +5
@@ -2144,11 +2150,27 @@ local function buildShop(parent, origin, style, entrySide, entryCell, ctx)
 		return Vector3.new(vLen, h, uLen)
 	end
 
+	-- The stall is sized to what it sells rather than to a constant, because the
+	-- shop stopped being three pedestals wide when the abilities joined the
+	-- passives on it. Pitch is unchanged, so the pedestals sit exactly where they
+	-- always did relative to each other and only the counter under them grew;
+	-- the floor keeps the old 16 so a short list does not read as a table with
+	-- the ends sawn off. It grows along the facade, where the street leaves
+	-- STREET studs before the neighbouring plot, and not outward, where
+	-- SHOP_OUT is holding it clear of the spawn pad and the zipline landing.
+	--
+	-- This is geometry from a list length, so it is the one part of buildShop
+	-- that moves when Config.Shop.Order or Config.Abilities.Order does. It draws
+	-- no random numbers either way (invariant 6): every part here is placed off
+	-- the door position the maze already fixed.
+	local pedestals = Config.shopOrder()
+	local baseWidth = math.max(16, #pedestals * CFG.SHOP_PITCH + 6)
+
 	makePart(
 		folder,
 		"ShopBase",
 		CFrame.new(at(shopU, CFG.SHOP_OUT, 0.25)),
-		sized(16, 0.5, 9),
+		sized(baseWidth, 0.5, 9),
 		style.trim,
 		Enum.Material.SmoothPlastic
 	)
@@ -2156,7 +2178,7 @@ local function buildShop(parent, origin, style, entrySide, entryCell, ctx)
 		makePart(
 			folder,
 			"ShopPost",
-			CFrame.new(at(shopU + side * 7, CFG.SHOP_OUT + 3.5, 4.75)),
+			CFrame.new(at(shopU + side * (baseWidth / 2 - 1), CFG.SHOP_OUT + 3.5, 4.75)),
 			sized(0.8, 8.5, 0.8),
 			style.skin,
 			style.material
@@ -2166,7 +2188,7 @@ local function buildShop(parent, origin, style, entrySide, entryCell, ctx)
 		folder,
 		"ShopCanopy",
 		CFrame.new(at(shopU, CFG.SHOP_OUT, 9.35)),
-		sized(18, 0.7, 11),
+		sized(baseWidth + 2, 0.7, 11),
 		style.trim,
 		style.material
 	)
@@ -2187,9 +2209,9 @@ local function buildShop(parent, origin, style, entrySide, entryCell, ctx)
 	signLabel.Text = "UPGRADE SHOP"
 	signLabel.Parent = sign
 
-	for i, key in ipairs(Config.Shop.Order) do
+	for i, key in ipairs(pedestals) do
 		local def = Config.Shop.Upgrades[key]
-		local u = shopU + (i - (#Config.Shop.Order + 1) / 2) * 5
+		local u = shopU + (i - (#pedestals + 1) / 2) * CFG.SHOP_PITCH
 
 		local pedestal = makePart(
 			folder,

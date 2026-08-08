@@ -277,11 +277,18 @@ Config.Shop = {
 	-- entries beside it and does not any more: nothing sets a character's jump,
 	-- because nothing in a maze is jumped onto or over.
 	BaseWalkSpeed = 16,
-	-- Pedestal order on the stall, left to right. Changing a key here changes
-	-- which upgrade a generated pedestal sells, and nothing about where the
-	-- pedestal is: buildShop reads this list for the Upgrade attribute and the
-	-- board text, so the swap moves no geometry.
-	Order = { "Speed", "WallWalker", "Magnet" },
+	-- Pedestal order on the stall, left to right, and the passives only: the
+	-- abilities follow them in Config.Abilities.Order. Two lists rather than one
+	-- because they are two different questions, and Config.shopOrder joins them,
+	-- so adding an ability is one list edit rather than two that can disagree
+	-- about what the shop sells.
+	--
+	-- Changing a key here changes which upgrade a generated pedestal sells, and
+	-- nothing about where the pedestal is: buildShop reads the joined list for
+	-- the Upgrade attribute and the board text, so a swap moves no geometry. The
+	-- count is the thing that does move geometry, the stall being sized to fit
+	-- what it sells.
+	Order = { "Speed", "Magnet" },
 	Upgrades = {
 		Speed = {
 			Label = "Fast Feet",
@@ -297,13 +304,47 @@ Config.Shop = {
 		WallWalker = {
 			Label = "Wall Walker",
 			Costs = { 30, 75, 150 },
-			-- Seconds of phasing carried onto each floor, indexed by tier. A list
-			-- rather than a per-tier scalar like the other two, because the curve is
+			-- Mode is what makes a row an ability rather than a passive: it is bound
+			-- to a key, it competes for the selection, and it spends the charge. A
+			-- row without one is Fast Feet, a number that is simply always true.
+			Mode = "Hold",
+			-- Seconds of phasing a full charge buys, indexed by tier. A list rather
+			-- than a per-tier scalar like the passives, because the curve is
 			-- deliberately not linear: three seconds is one wall and a moment of
 			-- hesitation, ten is a route. It is also the whole balance of the
-			-- upgrade, a floor refilling it being the only other limit.
+			-- ability, a floor refilling the charge being the only other limit.
 			SecondsPerTier = { 3, 6, 10 },
 			Color = Color3.fromRGB(190, 160, 255),
+		},
+		-- The answer to an enemy where the Wall Walker is the answer to a wall.
+		-- Deliberately the same effect as the Ghost orb, down to the attribute it
+		-- sets, because a player who has met the orb already knows what this does;
+		-- what the shop sells is having it on a key instead of on a floor that
+		-- happened to hold one. Longer per tier than the phase because it saves
+		-- nothing on its own: cloaked is still walking the same maze.
+		Cloak = {
+			Label = "Cloak",
+			Costs = { 40, 90, 175 },
+			Mode = "Hold",
+			SecondsPerTier = { 4, 8, 14 },
+			Color = Color3.fromRGB(220, 200, 255),
+		},
+		-- The answer to being lost, which is the third thing a floor does to a
+		-- player and the one the compass arrow only half solves: it says which way
+		-- and never which turns. Cast rather than Hold, because a route is read in
+		-- a glance and a held key would be spent staring at the floor.
+		--
+		-- The tiers buy both halves at once, a cheaper cast and a longer look, so
+		-- a full charge is one cast at tier 1, two at tier 2 and three at tier 3.
+		-- Nothing server side happens: TimerGui already draws this route for the
+		-- Reveal orb, so the ability is the cast, the charge, and a client event.
+		Trailblazer = {
+			Label = "Trailblazer",
+			Costs = { 35, 80, 160 },
+			Mode = "Cast",
+			ChargeCostPerTier = { 0.6, 0.45, 0.3 },
+			RevealSecondsPerTier = { 8, 13, 20 },
+			Color = Color3.fromRGB(150, 255, 170),
 		},
 		Magnet = {
 			Label = "Coin Magnet",
@@ -320,31 +361,118 @@ Config.Shop = {
 	PromptHoldSeconds = 0.25,
 }
 
--- The Wall Walker upgrade at runtime. The meter itself is Shop.Upgrades
--- .WallWalker.SecondsPerTier, which is what a tier buys; these are how the phase
--- behaves once it is running.
-Config.WallWalk = {
-	-- Grace after the meter empties while the player is still overlapping a wall.
-	-- Going solid inside geometry is how somebody gets stuck, so the phase holds
-	-- until they are clear of it. It is capped because the walls of a grid maze
-	-- all meet at the corners, so a player who never leaves one could otherwise
-	-- travel inside them indefinitely; past the cap they go solid and the engine
-	-- pushes them out, which is recoverable where being stuck is not.
+-- Every key the stall sells, passives first and then abilities. MazeGenerator
+-- reads it to lay pedestals out and SaveService reads nothing else: a pedestal
+-- carries its own key and both sides resolve that key against Shop.Upgrades, so
+-- neither has an opinion about which of the two lists it came from.
+--
+-- A key with no row is dropped rather than sold, silently, because this is
+-- called once per building and thirty warnings a section is not a better bug
+-- report than one missing plinth. AbilityService warns by name at startup for
+-- the ability half, which is where a new key is actually going to be added.
+function Config.shopOrder()
+	local keys = {}
+	for _, list in ipairs({ Config.Shop.Order, Config.Abilities.Order }) do
+		for _, key in ipairs(list) do
+			if Config.Shop.Upgrades[key] then
+				table.insert(keys, key)
+			end
+		end
+	end
+	return keys
+end
+
+-- The row, but only if it is an ability. Mode is the whole test, so a caller
+-- never has to know Config.Abilities.Order to ask whether a key is one.
+function Config.abilityDef(key)
+	local def = key and Config.Shop.Upgrades[key]
+	if def and def.Mode then
+		return def
+	end
+	return nil
+end
+
+-- ============================================================
+-- Abilities
+-- ============================================================
+-- The active half of the shop. An upgrade is a number that is always true; an
+-- ability is a verb on a key, and a player who owns three can only be using one
+-- at a time. Which one is their choice and it is changeable anywhere, at any
+-- point, which is the whole reason this is a block of its own: Fast Feet and
+-- Coin Magnet have nothing to choose between.
+--
+-- Sprint is deliberately not one of these. It is free, it has its own key and
+-- its own meter, and it never competes for the selection, because a movement
+-- verb every player owns from their first floor is not a thing to give up a
+-- phase for (Config.Sprint).
+--
+-- One charge, not one meter each, and this is the decision the rest of the
+-- system falls out of. The charge is a fraction of a floor's budget and each
+-- ability spends it at its own rate, so owning three is three ways to spend one
+-- floor rather than three floors' worth of resource, and switching on an empty
+-- bar buys nothing. It is also one bar to read rather than three, which matters
+-- more than it sounds for a player who is still learning to read.
+Config.Abilities = {
+	-- Selection order. The HUD bar, the number keys and the shop pedestals after
+	-- the passives all read this one list, so an ability arrives in all three by
+	-- being added here. A key with no Shop.Upgrades row warns and is skipped.
+	Order = { "WallWalker", "Cloak", "Trailblazer" },
+	-- The charge refills to full on reaching a floor, at the same LevelTrigger
+	-- the Wall Walker's meter always refilled at and for the same reason: a tier
+	-- is a budget bought for each floor, and MazeProgress is the wrong signal
+	-- because a tower's first floor is entered without one having been cleared.
+	RefillOnFloor = true,
+	-- Below this a Hold will not start and a Cast is refused. The same floor
+	-- Config.Sprint.MinimumToStart sets, and the same fraction of a full meter
+	-- (0.6 of 4 seconds), for the same reason: an ability that fires, does
+	-- nothing and stops on the next frame reads as broken rather than as spent.
+	-- A fraction of a charge here, where sprint's is in seconds, so it is worth
+	-- the least where the meter is shortest: 0.45s at Wall Walker tier 1, which
+	-- at the squeezed 12 studs a second is still five studs and a wall crossed.
+	MinimumToStart = 0.15,
+	-- How often the charge is pushed to the client while an ability is running.
+	-- The client draws between pushes off the same numbers, so it is a correction
+	-- rate and not a frame rate.
+	PushSeconds = 0.15,
+	-- Grace after the charge empties while the running ability says it is not
+	-- safe to stop. Only the Wall Walker has an unsafe state (going solid inside
+	-- a wall is how somebody gets stuck) but the cap lives here rather than in
+	-- that module, because the cap is what stops any future ability riding its
+	-- own unsafe state forever.
 	GraceSeconds = 6,
+	EmptyColor = Color3.fromRGB(230, 80, 80),
+	GraceColor = Color3.fromRGB(255, 190, 90),
+	-- Intents are select, use and release, and a player holding a key down sends
+	-- two of them. The budget is a cost ceiling rather than a correctness
+	-- measure, every intent being validated against what they own.
+	IntentsPerSecond = 12,
+}
+
+-- The Wall Walker at runtime. What a tier buys is Shop.Upgrades.WallWalker
+-- .SecondsPerTier; these are how the phase behaves once it is running. Grace
+-- moved to Config.Abilities, being the one number the runtime applies to every
+-- ability rather than to this one.
+Config.WallWalk = {
 	-- Radius around the root part that counts as "still in a wall". Wall thickness
 	-- is 2, so this clears one comfortably. Erring large only ever extends the
 	-- grace, which is the safe direction.
 	ClearanceRadius = 2.5,
-	-- How often the meter is pushed to the client while phasing. The client draws
-	-- between pushes off the same numbers, so this is a correction rate and not a
-	-- frame rate.
-	PushSeconds = 0.15,
 	HighlightColor = Color3.fromRGB(190, 160, 255),
 	HighlightTransparency = 0.45,
 	-- Phasing is not free movement: a wall still slows you to a squeeze, which is
 	-- what stops the top tier being ten seconds of running in a straight line
 	-- through the whole floor.
 	WalkSpeedMultiplier = 0.75,
+}
+
+-- The Cloak at runtime, and a shorter block than the phase because the effect is
+-- one attribute. Unseen is read by EnemyTargeting and is exactly what the Ghost
+-- orb sets, so an enemy already knows how to lose you; the shimmer is the only
+-- thing this has to draw, and it is a different colour from the orb's so a
+-- player can tell a bought cloak from a found one.
+Config.Cloak = {
+	HighlightColor = Color3.fromRGB(200, 180, 255),
+	HighlightTransparency = 0.55,
 }
 
 -- Sprint, and the one ability here that nothing sells. Every player has it from
@@ -384,7 +512,7 @@ Config.Sprint = {
 	-- and refilling would make hold-and-stop the fastest way to sprint.
 	MoveThreshold = 0.1,
 	-- How often the meter is pushed while it is moving. Same rate and the same
-	-- reason as Config.WallWalk.PushSeconds: the client draws between pushes off
+	-- reason as Config.Abilities.PushSeconds: the client draws between pushes off
 	-- these numbers, so it is a correction rate, not a frame rate.
 	PushSeconds = 0.15,
 	Color = Color3.fromRGB(120, 240, 170),

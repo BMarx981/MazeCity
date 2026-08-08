@@ -52,7 +52,15 @@ local function defaults()
 	local pets = Config.Pets
 	return {
 		schemaVersion = SCHEMA_VERSION,
+		-- Tiers for everything the stall sells, passive and active alike. The
+		-- abilities were not given a map of their own on purpose: a tier is a tier,
+		-- the keys cannot collide, and splitting them would have retired the Wall
+		-- Walker tiers players had already bought for the sake of a tidier field.
 		upgrades = {},
+		-- Which ability the key fires, or nil for "the first one they own". Stored
+		-- rather than defaulted every session because it is a preference, and a
+		-- player who chose the Cloak on Monday did not choose it for Monday.
+		selectedAbility = nil,
 		furthestSection = 1,
 		pets = {},
 		eggs = {},
@@ -148,6 +156,11 @@ local function adopt(data, result)
 	local pets = Config.Pets
 	data.schemaVersion = SCHEMA_VERSION
 	data.upgrades = result.upgrades or {}
+	-- Not validated here. A key retired from Config.Abilities.Order since the
+	-- profile was written is a selection AbilityService will simply not find in
+	-- the owned list, and it re-picks; this module's job is to hand back what was
+	-- stored, not to hold an opinion about what the shop currently sells.
+	data.selectedAbility = result.selectedAbility
 	data.furthestSection = result.furthestSection or 1
 	data.pets = result.pets or {}
 	data.eggs = result.eggs or {}
@@ -217,6 +230,7 @@ function Profiles.save(player)
 		schemaVersion = SCHEMA_VERSION,
 		coins = coins and coins.Value or 0,
 		upgrades = data.upgrades,
+		selectedAbility = data.selectedAbility,
 		furthestSection = data.furthestSection,
 		pets = data.pets,
 		eggs = data.eggs,

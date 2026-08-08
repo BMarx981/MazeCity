@@ -72,13 +72,27 @@ function EnemyTargeting.isWatched(controller, hrp)
 	return hrp.CFrame.LookVector:Dot(toEnemy.Unit) > 0.45
 end
 
--- The Ghost powerup. PickupService sets Unseen on the character and clears it
--- when the effect ends, so "invisible to enemies" costs one attribute read here
--- and nothing anywhere else. It is deliberately not walk-through-walls: in a
--- game with no combat, not being chased is the whole of what a ghost needs to
--- be, and it cannot strand a player outside the maze.
+-- The Ghost powerup and the Cloak ability. PickupService sets Unseen and clears
+-- it when the effect ends; Abilities/Cloak sets Cloaked and clears it when the
+-- key comes up. "Invisible to enemies" therefore costs two attribute reads here
+-- and nothing anywhere else.
+--
+-- Two attributes rather than one shared flag, and not for tidiness: each has
+-- exactly one writer. On one flag, an orb taken during a cloak would clear it on
+-- expiry and leave the cloak silently doing nothing until the key came up, and
+-- the reverse would end the orb early. A count would fix that and hand two
+-- services joint ownership of a character attribute, which is worse than the
+-- extra read. Anything else that wants to hide a player gets its own flag and a
+-- clause here.
+--
+-- Both are deliberately not walk-through-walls: in a game with no combat, not
+-- being chased is the whole of what hiding needs to be, and it cannot strand a
+-- player outside the maze.
 function EnemyTargeting.isCharacterVisible(character, humanoid)
-	return humanoid ~= nil and humanoid.Health > 0 and not character:GetAttribute("Unseen")
+	if humanoid == nil or humanoid.Health <= 0 then
+		return false
+	end
+	return not character:GetAttribute("Unseen") and not character:GetAttribute("Cloaked")
 end
 
 -- Studs from the marker this enemy will chase to. leashMultiplier is how a

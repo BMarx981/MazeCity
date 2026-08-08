@@ -493,9 +493,17 @@ end)
 
 local revealModel = nil
 local revealDots = {}
+-- Two things light this trail now, the Reveal orb and the Trailblazer ability,
+-- and they run on unrelated clocks. So the trail owns a deadline rather than
+-- belonging to whichever effect drew it: a caller extends the deadline and the
+-- loop below clears when it passes. Without that, a fifteen second cast started
+-- during a thirty second orb went out with the orb's own cleanup, and the
+-- ability read as broken on exactly the floor it was most worth using.
+local revealUntil = 0
 
 local function clearReveal()
 	revealDots = {}
+	revealUntil = 0
 	if revealModel then
 		revealModel:Destroy()
 		revealModel = nil
@@ -517,14 +525,22 @@ local function currentTrigger()
 	return nil
 end
 
-local function showReveal(color)
+local function showReveal(color, seconds)
+	-- The later of the two deadlines wins, so a cast during an orb extends the
+	-- trail rather than shortening it, and an orb during a cast does the same.
+	-- Computed before the clear, which resets it.
+	local deadline = math.max(revealUntil, os.clock() + (seconds or 0))
 	clearReveal()
 
 	local trigger = currentTrigger()
 	local route = trigger and trigger:GetAttribute("Route")
 	if not route or route == "" then
+		-- No route to draw is not a deadline to hold: a floor whose trigger has not
+		-- replicated yet would otherwise sit with an armed clock and no dots, and
+		-- the next real draw would inherit its leftover.
 		return
 	end
+	revealUntil = deadline
 
 	local juice = Config.Juice
 	local model = Instance.new("Model")
@@ -558,6 +574,7 @@ local function showReveal(color)
 
 	if #revealDots == 0 then
 		model:Destroy()
+		revealUntil = 0
 		return
 	end
 
@@ -580,6 +597,13 @@ end
 RunService.RenderStepped:Connect(function()
 	local count = #revealDots
 	if count == 0 then
+		return
+	end
+	-- The one place the trail goes out on its own. Both effects that draw it push
+	-- the deadline out and neither owns the teardown, which is what keeps them
+	-- from cutting each other short.
+	if os.clock() >= revealUntil then
+		clearReveal()
 		return
 	end
 
@@ -778,7 +802,7 @@ local function powerupStarted(payload)
 	emitBurst(profile.color, juice.CoinSparkleParticles * 2, juice.PhantomSparkleSeconds)
 
 	if payload.powerup == "Reveal" then
-		showReveal(profile.color)
+		showReveal(profile.color, payload.duration)
 	end
 end
 
@@ -789,7 +813,6 @@ task.spawn(function()
 			if left <= 0 then
 				powerName = nil
 				powerChip.Visible = false
-				clearReveal()
 			else
 				local profile = Config.getPowerupKind(powerName)
 				powerLabel.Text = string.format("%s  %ds", profile.label, math.ceil(left))
@@ -810,11 +833,13 @@ pickupRemote.OnClientEvent:Connect(function(payload)
 		powerupStarted(payload)
 	elseif payload.kind == "powerupEnded" then
 		-- The countdown above hides the chip on its own; this only matters when
-		-- the server ended an effect early, by handing out a different one.
+		-- the server ended an effect early, by handing out a different one. The
+		-- trail is deliberately not cleared here or above: it runs on its own
+		-- deadline now, because a Trailblazer cast taken during a Reveal orb must
+		-- outlive the orb it overlapped.
 		if powerName == payload.powerup then
 			powerName = nil
 			powerChip.Visible = false
-			clearReveal()
 		end
 	end
 end)
@@ -910,4 +935,31 @@ remote.OnClientEvent:Connect(function(payload)
 	if payload.event then
 		playEvent(payload.event)
 	end
+end)
+
+-- ============================================================
+-- Trailblazer
+-- ============================================================
+-- The ability half of the route trail. AbilityService owns the charge and the
+-- key; the effect is entirely this, which is why Abilities/Trailblazer has no
+-- server side at all. Listening on another service's remote is the pattern the
+-- shop banner and the coin ding already follow: a service owns its remote, and
+-- whichever GUI draws the thing listens.
+--
+-- Last in the file on purpose. It is the only thing here that waits on a remote
+-- this script does not otherwise need, and a WaitForChild that never resolves
+-- takes everything below it with it. Below it is now nothing.
+
+local abilityRemote = ReplicatedStorage:WaitForChild("AbilityUpdate")
+
+abilityRemote.OnClientEvent:Connect(function(payload)
+	if type(payload) ~= "table" then
+		return
+	end
+	local event = payload.event
+	if not event or event.kind ~= "cast" or event.ability ~= "Trailblazer" then
+		return
+	end
+	local def = Config.abilityDef("Trailblazer")
+	showReveal(def and def.Color or GREEN, event.seconds)
 end)

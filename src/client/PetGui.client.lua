@@ -117,11 +117,19 @@ end
 -- ============================================================
 -- Toggle button
 -- ============================================================
--- Top left. Every other corner is taken: TimerGui's chips run down the right
--- edge, its floor panel is top centre, and on a phone the bottom two corners are
--- the thumbstick and the jump button.
+-- Left edge, vertically centred. It was at the top left corner, which is the one
+-- place on a Roblox screen that is never actually free: the topbar owns the first
+-- 36 pixels and the chat window hangs below it, so a button at (16, 16) under
+-- IgnoreGuiInset sat behind both and the label could not be read at all. Nobody
+-- notices that in Studio with chat closed.
+--
+-- Mid-left is the corner-free spot on every device. The rest of the screen is
+-- spoken for: TimerGui's chips and the sprint meter run down the right edge, the
+-- floor panel is top centre, the ability bar is bottom centre, and on a phone the
+-- bottom two corners are the thumbstick and the jump button.
 
-local toggle = button(gui, UDim2.fromOffset(112, 40), UDim2.new(0, 16, 0, 16), "PETS", PANEL)
+local toggle = button(gui, UDim2.fromOffset(112, 40), UDim2.new(0, 16, 0.5, 0), "PETS", PANEL)
+toggle.AnchorPoint = Vector2.new(0, 0.5)
 toggle.BackgroundTransparency = 0.25
 
 -- The one thing on the toggle that is not a label: an unclaimed daily, or an egg
