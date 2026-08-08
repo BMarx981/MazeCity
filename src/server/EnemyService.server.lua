@@ -94,14 +94,6 @@ local CHARGE_STALL_SPEED = 4
 
 local AMBUSH_REHIDE_SECONDS = 6
 
--- Placeholder rig geometry, in studs. The head is a 1.5 ball, so the eyes sit
--- just proud of its front face; anything smaller stops reading as a face at
--- corridor distance.
-local EYE_SIZE = 0.34
-local EYE_SPREAD = 0.3
-local EYE_HEIGHT = 0.16
-local EYE_DEPTH = 0.62
-
 local enemyFolder = ServerStorage:FindFirstChild("Enemies")
 
 local liveFolder = workspace:FindFirstChild("LiveEnemies")
@@ -120,14 +112,80 @@ local deadUntil = {}
 -- The rig
 -- ============================================================
 -- A hovering shade: a translucent hood around a dark head with lit eyes, an
--- ember at the chest, two hands with no arms between them, and three tapering
--- segments trailing into smoke. No legs anywhere, which is the point. A walk
--- cycle needs art or a skeleton and foot-slides without both, and the old rig
+-- ember at the chest, hands with no arms between them, and tapering segments
+-- trailing into smoke. No legs anywhere, which is the point. A walk cycle needs
+-- art or a skeleton and foot-slides without both, and the rig before this one
 -- was a box with a ball on it precisely because neither was available.
+--
+-- The shape is a recipe, not a hardcoded body. DEFAULT_LOOK below is the whole
+-- baseline and each profile's `look` is merged over it, so the six types differ
+-- by silhouette rather than by tint: they used to be one rig in six colours,
+-- which at corridor distance is one rig. Optional groups (crown, horns, plates,
+-- motes) are absent unless a type asks for them, and any size of 0 leaves that
+-- part off entirely.
 --
 -- Everything cosmetic hangs off Motor6Ds rather than welds so one Heartbeat
 -- loop can animate it. Structure and skin stay separate: the Humanoid drives an
 -- invisible root and torso, the skin never touches physics.
+
+-- Studs of daylight kept under the lowest part of a rig at the bottom of its
+-- bob. Small, because a shade is supposed to skim the floor.
+local FLOOR_MARGIN = 0.35
+
+local DEFAULT_LOOK = {
+	scale = 1,
+	bobScale = 1,
+	bobRate = 1,
+	-- Resting hover, and only a floor: the builder raises it to clear whatever
+	-- the type's tail and tendrils actually hang down to.
+	hover = 2.4,
+	head = 1.5,
+	headOffset = 1.6,
+	hood = 2.35,
+	hoodOffset = 1.52,
+	hoodTransparency = 0.34,
+	core = 0.9,
+	coreOffset = Vector3.new(0, 0.35, -0.18),
+	hands = 0.52,
+	handSpread = 1.35,
+	handHeight = 0.5,
+	tail = {
+		{ size = 1.6, y = -0.45 },
+		{ size = 1.15, y = -1.2 },
+		{ size = 0.72, y = -1.85 },
+	},
+	-- The head is 1.5 across, so the eyes sit just proud of its front face.
+	-- Anything smaller stops reading as a face down a corridor.
+	eyeCount = 2,
+	eyeSize = 0.34,
+	eyeSpread = 0.3,
+	eyeHeight = 0.16,
+	eyeDepth = 0.62,
+	crown = nil,
+	horns = nil,
+	plates = nil,
+	motes = nil,
+}
+
+-- Shallow on purpose. The nested tables (tail, crown, motes) are replaced whole
+-- rather than merged key by key, because a type that overrides its tail means a
+-- different tail and not a three-segment one with the first entry edited.
+local function resolveLook(profile)
+	local look = table.clone(DEFAULT_LOOK)
+	for key, value in pairs(profile.look or {}) do
+		look[key] = value
+	end
+	return look
+end
+
+-- A size is a number for a sphere or a Vector3 for an ellipsoid, which is what
+-- keeps the profile tables short: most parts are round and say so in one number.
+local function sizeOf(value, scale)
+	if typeof(value) == "Vector3" then
+		return value * scale
+	end
+	return Vector3.new(value, value, value) * scale
+end
 
 local function weld(a, b)
 	local w = Instance.new("WeldConstraint")
@@ -136,11 +194,15 @@ local function weld(a, b)
 	w.Parent = a
 end
 
+-- Block parts wearing a Sphere SpecialMesh rather than Shape = Ball, because a
+-- Ball part will not stretch and half these silhouettes are ellipsoids: the
+-- Stalker is a tall thin one, the Lurker's cowl is a wide flat one, the
+-- Charger's horns are long thin ones. The mesh fills the part's Size, so a
+-- Vector3 in a profile is the shape it draws.
 local function skinPart(model, name, size, color, transparency, material)
 	local part = Instance.new("Part")
 	part.Name = name
-	part.Shape = Enum.PartType.Ball
-	part.Size = Vector3.new(size, size, size)
+	part.Size = size
 	part.Color = color
 	part.Material = material or Enum.Material.Neon
 	part.Transparency = transparency
@@ -149,9 +211,11 @@ local function skinPart(model, name, size, color, transparency, material)
 	part.CanQuery = false
 	part.CastShadow = false
 	part.Massless = true
-	part.TopSurface = Enum.SurfaceType.Smooth
-	part.BottomSurface = Enum.SurfaceType.Smooth
 	part.Parent = model
+
+	local mesh = Instance.new("SpecialMesh")
+	mesh.MeshType = Enum.MeshType.Sphere
+	mesh.Parent = part
 	return part
 end
 
@@ -171,9 +235,17 @@ local function makeShade(enemyType)
 	local model = Instance.new("Model")
 	model.Name = enemyType
 
+	local look = resolveLook(profile)
+	local scale = look.scale
+	local dark = profile.color:Lerp(Color3.new(0, 0, 0), 0.72)
+
+	-- The collider scales with the silhouette. A Swarmer drawn at 0.62 around a
+	-- full size root is a small thing you bump into from a stud and a half away,
+	-- which reads as the hit detection being broken rather than as the enemy
+	-- being small.
 	local root = Instance.new("Part")
 	root.Name = "HumanoidRootPart"
-	root.Size = Vector3.new(2, 2, 1)
+	root.Size = Vector3.new(2, 2, 1) * scale
 	root.Transparency = 1
 	root.CanQuery = false
 	root.TopSurface = Enum.SurfaceType.Smooth
@@ -185,7 +257,7 @@ local function makeShade(enemyType)
 	-- carries no geometry: it is the frame the skin is animated against.
 	local torso = Instance.new("Part")
 	torso.Name = "Torso"
-	torso.Size = Vector3.new(2, 2, 1)
+	torso.Size = Vector3.new(2, 2, 1) * scale
 	torso.Transparency = 1
 	torso.CanCollide = false
 	torso.CanTouch = false
@@ -193,46 +265,133 @@ local function makeShade(enemyType)
 	torso.Massless = true
 	torso.Parent = model
 
-	local dark = profile.color:Lerp(Color3.new(0, 0, 0), 0.72)
-	local head = skinPart(model, "Head", 1.5, dark, 0, Enum.Material.SmoothPlastic)
-	local hood = skinPart(model, "Hood", 2.35, profile.color, 0.34)
-	local core = skinPart(model, "Core", 0.9, profile.color, 0)
-	local handL = skinPart(model, "HandLeft", 0.52, profile.color, 0.12)
-	local handR = skinPart(model, "HandRight", 0.52, profile.color, 0.12)
-	local tail1 = skinPart(model, "Tail1", 1.6, profile.color, 0.45)
-	local tail2 = skinPart(model, "Tail2", 1.15, profile.color, 0.62)
-	local tail3 = skinPart(model, "Tail3", 0.72, profile.color, 0.78)
-
+	local head = skinPart(model, "Head", sizeOf(look.head, scale), dark, 0, Enum.Material.SmoothPlastic)
 	local joints = {
 		root = joint(root, root, torso, "RootJoint", CFrame.new()),
-		neck = joint(torso, torso, head, "Neck", CFrame.new(0, 1.6, 0)),
-		hood = joint(torso, torso, hood, "HoodJoint", CFrame.new(0, 1.52, 0.06)),
-		core = joint(torso, torso, core, "CoreJoint", CFrame.new(0, 0.35, -0.18)),
-		handL = joint(torso, torso, handL, "HandLeftJoint", CFrame.new(-1.35, 0.5, -0.28)),
-		handR = joint(torso, torso, handR, "HandRightJoint", CFrame.new(1.35, 0.5, -0.28)),
-		tails = {
-			joint(torso, torso, tail1, "Tail1Joint", CFrame.new(0, -0.45, 0)),
-			joint(torso, torso, tail2, "Tail2Joint", CFrame.new(0, -1.2, 0)),
-			joint(torso, torso, tail3, "Tail3Joint", CFrame.new(0, -1.85, 0)),
-		},
+		neck = joint(torso, torso, head, "Neck", CFrame.new(0, look.headOffset * scale, 0)),
+		tails = {},
+		crown = {},
+		motes = {},
+		rigid = {},
 	}
 
-	-- Two eyes are most of what "a real rig" was going to buy: a blank ball is
-	-- scenery, the same ball with eyes is looking at you. Front is -Z.
-	for _, side in ipairs({ -1, 1 }) do
-		local eye = Instance.new("Part")
-		eye.Name = side < 0 and "EyeLeft" or "EyeRight"
-		eye.Size = Vector3.new(EYE_SIZE, EYE_SIZE, EYE_SIZE)
-		eye.Shape = Enum.PartType.Ball
-		eye.Color = juice.EnemyEyeColor
-		eye.Material = Enum.Material.Neon
-		eye.CanCollide = false
-		eye.CanTouch = false
-		eye.CanQuery = false
-		eye.CastShadow = false
-		eye.Massless = true
-		eye.CFrame = head.CFrame * CFrame.new(side * EYE_SPREAD, EYE_HEIGHT, -EYE_DEPTH)
-		eye.Parent = model
+	if look.hood ~= 0 then
+		local hood = skinPart(model, "Hood", sizeOf(look.hood, scale), profile.color, look.hoodTransparency)
+		joints.hood = joint(torso, torso, hood, "HoodJoint", CFrame.new(0, look.hoodOffset * scale, 0.06 * scale))
+	end
+	if look.core ~= 0 then
+		local core = skinPart(model, "Core", sizeOf(look.core, scale), profile.color, 0)
+		joints.core = joint(torso, torso, core, "CoreJoint", CFrame.new(look.coreOffset * scale))
+	end
+	if look.hands ~= 0 then
+		local size = sizeOf(look.hands, scale)
+		for _, side in ipairs({ -1, 1 }) do
+			local name = side < 0 and "HandLeft" or "HandRight"
+			local hand = skinPart(model, name, size, profile.color, 0.12)
+			local c0 = CFrame.new(side * look.handSpread * scale, look.handHeight * scale, -0.28 * scale)
+			local motor = joint(torso, torso, hand, name .. "Joint", c0)
+			if side < 0 then
+				joints.handL = motor
+			else
+				joints.handR = motor
+			end
+		end
+	end
+
+	-- Tracked as the rig is built and spent on HipHeight at the end, so a type
+	-- that grows a longer tail floats higher to suit instead of dragging it
+	-- through the slab. Hand tuned hover per type is a number somebody edits a
+	-- tail without, and the failure is silent: the enemy looks fine standing
+	-- still and scrapes the floor on the down beat of every bob.
+	local lowestSkin = 0
+
+	-- Transparency climbs down the chain so the last segment reads as smoke
+	-- rather than as a part, however many segments a type asked for.
+	local trailing = head
+	for index, segment in ipairs(look.tail) do
+		local fade = 0.45 + 0.33 * ((index - 1) / math.max(#look.tail - 1, 1))
+		local size = sizeOf(segment.size, scale)
+		local part = skinPart(model, "Tail" .. index, size, profile.color, fade)
+		table.insert(
+			joints.tails,
+			joint(torso, torso, part, "Tail" .. index .. "Joint", CFrame.new(0, segment.y * scale, 0))
+		)
+		lowestSkin = math.min(lowestSkin, segment.y * scale - size.Y / 2)
+		trailing = part
+	end
+
+	-- One radial ring, drawn upward as a crown or downward as tendrils depending
+	-- on the sign of `height`. The Sentry and the Lurker are the same code.
+	if look.crown then
+		local crown = look.crown
+		local size = sizeOf(crown.size, scale)
+		for index = 1, crown.count do
+			local angle = (index - 1) / crown.count * math.pi * 2
+			local part = skinPart(model, "Crown" .. index, size, profile.color, 0.1)
+			local c0 = CFrame.new(
+				math.sin(angle) * crown.radius * scale,
+				crown.height * scale,
+				math.cos(angle) * crown.radius * scale
+			) * CFrame.Angles(math.cos(angle) * crown.tilt, 0, -math.sin(angle) * crown.tilt)
+			table.insert(joints.crown, joint(torso, torso, part, "Crown" .. index .. "Joint", c0))
+		end
+		lowestSkin = math.min(lowestSkin, crown.height * scale - size.Y / 2)
+	end
+
+	-- Symmetric pairs. Plates sit at the shoulders, horns sweep off the brow; both
+	-- are rigid and ride whatever the torso is doing.
+	--
+	-- The order matters: anchor at the mount point, orient, then push out along
+	-- the part's own axis by `forward`. Offsetting before rotating leaves a 1.9
+	-- stud horn centred on the brow, which is half a horn poking backward out of
+	-- the head.
+	local function symmetricPair(spec, name)
+		local size = sizeOf(spec.size, scale)
+		local tilt = spec.tilt or 0
+		for _, side in ipairs({ -1, 1 }) do
+			local partName = name .. (side < 0 and "Left" or "Right")
+			local part = skinPart(model, partName, size, profile.color, 0.05)
+			local c0 = CFrame.new(side * spec.spread * scale, spec.height * scale, -0.1 * scale)
+				* CFrame.Angles(tilt, 0, side * 0.12)
+				* CFrame.new(0, 0, -(spec.forward or 0) * scale)
+			table.insert(joints.rigid, joint(torso, torso, part, partName .. "Joint", c0))
+		end
+	end
+	if look.plates then
+		symmetricPair(look.plates, "Plate")
+	end
+	if look.horns then
+		symmetricPair(look.horns, "Horn")
+	end
+
+	-- Satellites, orbited in the animation loop. Parented to the torso rather
+	-- than the head so they keep their circle while the head tracks the player.
+	if look.motes then
+		local motes = look.motes
+		local size = sizeOf(motes.size, scale)
+		for index = 1, motes.count do
+			local part = skinPart(model, "Mote" .. index, size, profile.color, 0.05)
+			-- Seeded onto the ring rather than at the origin, so the first frame
+			-- before Heartbeat takes over is not three motes stacked in the chest.
+			local angle = (index - 1) / motes.count * math.pi * 2
+			local c0 = CFrame.new(
+				math.sin(angle) * motes.radius * scale,
+				motes.height * scale,
+				math.cos(angle) * motes.radius * scale
+			)
+			table.insert(joints.motes, joint(torso, torso, part, "Mote" .. index .. "Joint", c0))
+		end
+	end
+
+	-- Eyes are most of what "a real rig" was going to buy: a blank ball is
+	-- scenery, the same ball with eyes is looking at you. Laid out in a row and
+	-- centred, so one is a cyclops and four are a thing that is not a person.
+	-- Front is -Z. Welded rather than jointed: they belong to the head.
+	for index = 1, look.eyeCount do
+		local offset = (index - (look.eyeCount + 1) / 2) * look.eyeSpread * 2 * scale
+		local eye =
+			skinPart(model, "Eye" .. index, sizeOf(look.eyeSize, scale), juice.EnemyEyeColor, 0, Enum.Material.Neon)
+		eye.CFrame = head.CFrame * CFrame.new(offset, look.eyeHeight * scale, -look.eyeDepth * scale)
 		weld(head, eye)
 	end
 
@@ -254,17 +413,44 @@ local function makeShade(enemyType)
 		NumberSequenceKeypoint.new(1, 0),
 	})
 	wisp.Acceleration = Vector3.new(0, -2, 0)
-	wisp.Parent = tail3
+	-- The lowest part the type actually has. A Sentry has no tail at all, and a
+	-- wisp emitter on a destroyed reference is an error at build time.
+	wisp.Parent = trailing
 
 	-- Parented last, so it finds a complete rig and picks up the root part on its
 	-- first pass rather than on a later one.
+	--
+	-- Hover is whichever is greater: the type's own resting height, or enough to
+	-- keep the lowest thing hanging off it clear of the slab at the bottom of the
+	-- bob. The bob is the part that is easy to forget, and it is worth 0.42 studs
+	-- times bobScale on every frame.
+	local swing = Config.Juice.EnemyBobHeight * look.bobScale
 	local humanoid = Instance.new("Humanoid")
 	humanoid.RigType = Enum.HumanoidRigType.R6
-	humanoid.HipHeight = 2.4
+	humanoid.HipHeight = math.max(look.hover * scale, -lowestSkin + swing + FLOOR_MARGIN)
 	humanoid.Parent = model
 
 	model.PrimaryPart = root
-	return model, joints
+
+	-- Base C0s captured here rather than rebuilt by the caller, because only this
+	-- function knows which optional groups a type ended up with.
+	local bases = {
+		neck = joints.neck.C0,
+		hood = joints.hood and joints.hood.C0,
+		core = joints.core and joints.core.C0,
+		handL = joints.handL and joints.handL.C0,
+		handR = joints.handR and joints.handR.C0,
+		tails = {},
+		crown = {},
+	}
+	for index, motor in ipairs(joints.tails) do
+		bases.tails[index] = motor.C0
+	end
+	for index, motor in ipairs(joints.crown) do
+		bases.crown[index] = motor.C0
+	end
+
+	return model, { joints = joints, bases = bases, look = look }
 end
 
 local function templateFor(enemyType)
@@ -868,8 +1054,8 @@ end
 -- ============================================================
 
 local function animate(entry, dt)
-	local joints = entry.joints
-	if not joints then
+	local anim = entry.anim
+	if not anim then
 		return
 	end
 	-- Held while frozen, so a frozen enemy is frozen rather than a frozen enemy
@@ -879,41 +1065,75 @@ local function animate(entry, dt)
 	end
 
 	local juice = Config.Juice
+	local joints, bases, look = anim.joints, anim.bases, anim.look
 	entry.animClock = entry.animClock + dt
-	local phase = entry.animClock * juice.EnemyBobRate + entry.phase
+	-- bobRate and bobScale are the motion half of a type's identity: a Sentry
+	-- barely moves at rest and a Swarmer never stops, which is legible further
+	-- down a corridor than any of the geometry is.
+	local phase = entry.animClock * juice.EnemyBobRate * look.bobRate + entry.phase
 	local moving = math.clamp(entry.root.AssemblyLinearVelocity.Magnitude / 16, 0, 1)
 
-	local bob = math.sin(phase) * juice.EnemyBobHeight * (1 - moving * 0.4)
+	local bob = math.sin(phase) * juice.EnemyBobHeight * look.bobScale * (1 - moving * 0.4)
 	joints.root.C0 = CFrame.new(0, bob, 0) * CFrame.Angles(-juice.EnemyLeanAngle * moving, 0, 0)
 
 	-- Hands drift counter-phase to the body, which is what stops the whole rig
 	-- reading as one rigid object going up and down.
 	local orbit = math.sin(phase + math.pi) * juice.EnemyHandOrbit
-	joints.handL.C0 = entry.bases.handL * CFrame.new(0, orbit, -orbit * 0.5)
-	joints.handR.C0 = entry.bases.handR * CFrame.new(0, -orbit, -orbit * 0.5)
-	joints.core.C0 = entry.bases.core * CFrame.new(0, bob * 0.25, 0)
-	joints.hood.C0 = entry.bases.hood * CFrame.Angles(0, 0, math.sin(phase * 0.7) * 0.08)
+	if joints.handL then
+		joints.handL.C0 = bases.handL * CFrame.new(0, orbit, -orbit * 0.5)
+		joints.handR.C0 = bases.handR * CFrame.new(0, -orbit, -orbit * 0.5)
+	end
+	if joints.core then
+		joints.core.C0 = bases.core * CFrame.new(0, bob * 0.25, 0)
+	end
+	if joints.hood then
+		joints.hood.C0 = bases.hood * CFrame.Angles(0, 0, math.sin(phase * 0.7) * 0.08)
+	end
 
+	local tailCount = #joints.tails
 	for i, tail in ipairs(joints.tails) do
 		local lag = i * 0.55
-		local swing = math.sin(phase - lag) * juice.EnemyTailSway * (i / #joints.tails)
-		tail.C0 = CFrame.Angles(0, 0, swing) * CFrame.Angles(swing * 0.4 * moving, 0, 0) * entry.bases.tails[i]
+		local swing = math.sin(phase - lag) * juice.EnemyTailSway * (i / tailCount)
+		tail.C0 = CFrame.Angles(0, 0, swing) * CFrame.Angles(swing * 0.4 * moving, 0, 0) * bases.tails[i]
+	end
+
+	-- A crown ripples around its ring rather than swaying as one piece, which is
+	-- what makes the Lurker's tendrils read as hanging and the Sentry's spikes as
+	-- idling rather than as a hat.
+	for i, spike in ipairs(joints.crown) do
+		local ripple = math.sin(phase * 0.8 - i * 0.9) * 0.12
+		spike.C0 = bases.crown[i] * CFrame.Angles(ripple, 0, ripple * 0.5)
+	end
+
+	-- Motes orbit on their own clock. Evenly spaced around the ring and bobbing
+	-- out of phase with each other, so three of them never line up into one blob.
+	if look.motes and #joints.motes > 0 then
+		local motes = look.motes
+		local spin = entry.animClock * (motes.rate or 1.5)
+		for i, mote in ipairs(joints.motes) do
+			local angle = spin + (i - 1) / #joints.motes * math.pi * 2
+			mote.C0 = CFrame.new(
+				math.sin(angle) * motes.radius * look.scale,
+				(motes.height + math.sin(phase + i) * 0.3) * look.scale,
+				math.cos(angle) * motes.radius * look.scale
+			)
+		end
 	end
 
 	-- The head keeps the player in view independently of which way the body is
 	-- walking, so a shade retreating to its post is still watching you go.
-	local look = entry.target
-	if look and look.Parent then
-		local dir = (look.Position - entry.root.Position)
+	local watching = entry.target
+	if watching and watching.Parent then
+		local dir = (watching.Position - entry.root.Position)
 		if dir.Magnitude > 0.5 then
 			local localDir = entry.torso.CFrame:VectorToObjectSpace(dir.Unit)
 			local yaw = math.clamp(math.atan2(-localDir.X, -localDir.Z), -juice.EnemyLookYaw, juice.EnemyLookYaw)
 			local pitch =
 				math.clamp(math.asin(math.clamp(localDir.Y, -1, 1)), -juice.EnemyLookPitch, juice.EnemyLookPitch)
-			joints.neck.C0 = entry.bases.neck * CFrame.Angles(0, yaw, 0) * CFrame.Angles(pitch, 0, 0)
+			joints.neck.C0 = bases.neck * CFrame.Angles(0, yaw, 0) * CFrame.Angles(pitch, 0, 0)
 		end
 	else
-		joints.neck.C0 = entry.bases.neck * CFrame.Angles(0, math.sin(phase * 0.35) * 0.4, 0)
+		joints.neck.C0 = bases.neck * CFrame.Angles(0, math.sin(phase * 0.35) * 0.4, 0)
 	end
 end
 
@@ -968,7 +1188,7 @@ local function spawnFromMarker(marker)
 	local enemyType = Config.resolveEnemyType(section, marker:GetAttribute("EnemyType"))
 	local profile = Config.getProfile(enemyType)
 
-	local model, joints = templateFor(enemyType)
+	local model, anim = templateFor(enemyType)
 	local humanoid = model:FindFirstChildOfClass("Humanoid")
 	local root = model:FindFirstChild("HumanoidRootPart") or model.PrimaryPart
 	local torso = model:FindFirstChild("Torso") or root
@@ -1011,7 +1231,7 @@ local function spawnFromMarker(marker)
 		humanoid = humanoid,
 		root = root,
 		torso = torso,
-		joints = joints,
+		anim = anim,
 		profile = profile,
 		enemyType = enemyType,
 		skin = readSkin(model),
@@ -1031,14 +1251,6 @@ local function spawnFromMarker(marker)
 		-- to stop six shades in a room bobbing in lockstep, and a rig is not part
 		-- of what a seed is supposed to reproduce.
 		phase = math.random() * math.pi * 2,
-		bases = joints and {
-			neck = joints.neck.C0,
-			hood = joints.hood.C0,
-			core = joints.core.C0,
-			handL = joints.handL.C0,
-			handR = joints.handR.C0,
-			tails = { joints.tails[1].C0, joints.tails[2].C0, joints.tails[3].C0 },
-		} or nil,
 	}
 
 	entry.path = PathfindingService:CreatePath({

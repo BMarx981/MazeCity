@@ -441,9 +441,24 @@ end
 -- chargeSpeed is the one number above 16, and deliberately: it is a straight
 -- line the player watches an enemy wind up for, and sidestepping it is the
 -- whole interaction.
+--
+-- `look` is the silhouette, and it is a sparse override rather than a whole
+-- rig: EnemyService holds the default shade and merges these over it field by
+-- field, so an entry says only what makes that type different and a change to
+-- the baseline reaches every type that did not opt out. Sizes are a number for
+-- a sphere or a Vector3 for an ellipsoid, 0 means leave the part off, and
+-- everything is multiplied by `scale` so a type resizes in one number.
+--
+-- The silhouettes are meant to be read at corridor distance and to say what the
+-- thing does before it does it: the Sentry is planted and armoured because it
+-- guards a cell, the Charger is front-heavy and horned because it comes at you
+-- in a line, the Swarmer is small with satellites because it means there are
+-- more. bobScale and bobRate carry the same information in motion, which is
+-- what survives when the corridor is dark and all you have is a moving shape.
 Config.EnemyProfiles = {
 	-- The default, and the one a player meets first. Wanders its spawn cell,
-	-- chases at a speed that loses ground on every corner.
+	-- chases at a speed that loses ground on every corner. Its look is the
+	-- baseline every other entry below is a delta against, so it has none.
 	Drifter = {
 		behavior = "Patrol",
 		walkSpeed = 11,
@@ -451,6 +466,7 @@ Config.EnemyProfiles = {
 		leash = 150,
 		attackCooldown = 1.4,
 		color = Color3.fromRGB(120, 160, 220),
+		look = {},
 	},
 	-- Slows to a crawl while the player is facing it and closes fast the moment
 	-- they turn away. The one that makes a corridor behind you worth checking.
@@ -462,6 +478,30 @@ Config.EnemyProfiles = {
 		leash = 190,
 		attackCooldown = 1.2,
 		color = Color3.fromRGB(200, 150, 90),
+		-- Tall, narrow, and trailing four segments instead of three: it reads as
+		-- something stretched upward and always slightly too close, and the slow
+		-- deep bob is what sells it standing still while you look at it.
+		look = {
+			bobScale = 1.35,
+			bobRate = 0.7,
+			head = Vector3.new(1.15, 1.5, 1.2),
+			headOffset = 2,
+			hood = Vector3.new(1.75, 3, 1.8),
+			hoodOffset = 1.85,
+			hoodTransparency = 0.42,
+			core = 0.62,
+			hands = 0.4,
+			handSpread = 0.95,
+			handHeight = 0,
+			tail = {
+				{ size = 1.15, y = -0.5 },
+				{ size = 0.95, y = -1.35 },
+				{ size = 0.72, y = -2.1 },
+				{ size = 0.5, y = -2.75 },
+			},
+			eyeSize = 0.3,
+			eyeSpread = 0.22,
+		},
 	},
 	-- Barely leaves its cell. The short leash is the point: it is a hazard with
 	-- a position, so it can be mapped and walked around, and blundering into one
@@ -473,6 +513,32 @@ Config.EnemyProfiles = {
 		leash = 70,
 		attackCooldown = 1.8,
 		color = Color3.fromRGB(150, 150, 160),
+		-- Squat, wide, plated, crowned, and with no tail at all: everything else
+		-- here floats and this one is planted, which is the whole of what a player
+		-- needs to know about a thing that will not follow them. Four eyes in a row
+		-- because it is watching an approach rather than a person.
+		look = {
+			scale = 1.12,
+			bobScale = 0.25,
+			bobRate = 0.5,
+			head = Vector3.new(1.7, 1.25, 1.5),
+			headOffset = 1.25,
+			hood = Vector3.new(2.9, 2, 2.6),
+			hoodOffset = 1.15,
+			hoodTransparency = 0.22,
+			core = 1.25,
+			coreOffset = Vector3.new(0, 0.25, -0.25),
+			hands = 0.6,
+			handSpread = 1.75,
+			handHeight = 0.15,
+			tail = {},
+			plates = { size = Vector3.new(0.55, 1.5, 1.9), spread = 1.5, height = 1 },
+			crown = { count = 5, size = Vector3.new(0.28, 1.1, 0.28), radius = 1, height = 2.2, tilt = 0.35 },
+			eyeCount = 4,
+			eyeSize = 0.26,
+			eyeSpread = 0.28,
+			eyeDepth = 0.7,
+		},
 	},
 	-- Alone it is nothing. One that spots the player wakes every other Swarmer
 	-- within packRadius on the same floor, so a bad room produces a crowd.
@@ -484,6 +550,29 @@ Config.EnemyProfiles = {
 		leash = 170,
 		attackCooldown = 0.7,
 		color = Color3.fromRGB(110, 200, 170),
+		-- Small, one big eye, no hands, and three motes orbiting it. The motes are
+		-- the tell: a single Swarmer already looks like several things moving at
+		-- once, which is a fair warning about what happens when it calls.
+		look = {
+			scale = 0.62,
+			bobScale = 0.8,
+			bobRate = 2.4,
+			head = 1.7,
+			headOffset = 1.2,
+			hood = 2.2,
+			hoodOffset = 1.15,
+			hoodTransparency = 0.3,
+			core = 0.5,
+			hands = 0,
+			tail = {
+				{ size = 1, y = -0.5 },
+				{ size = 0.55, y = -1.1 },
+			},
+			motes = { count = 3, size = 0.42, radius = 2.1, height = 1.3, rate = 1.6 },
+			eyeCount = 1,
+			eyeSize = 0.72,
+			eyeDepth = 0.75,
+		},
 	},
 	-- Sits dormant and nearly invisible until the player is inside ambushRange,
 	-- then reveals and commits. Cannot be avoided by anyone who has not learned
@@ -496,6 +585,31 @@ Config.EnemyProfiles = {
 		leash = 120,
 		attackCooldown = 1.5,
 		color = Color3.fromRGB(210, 205, 185),
+		-- A wide flat cowl with four eyes in a row and six tendrils hanging under
+		-- it, which is the same crown the Sentry wears pointed downward. Broad and
+		-- low so that folded against a corridor wall at 0.88 transparency it passes
+		-- for part of the maze, which is the only thing this one has to do well.
+		look = {
+			bobScale = 0.5,
+			bobRate = 0.85,
+			head = Vector3.new(1.7, 1, 1.3),
+			headOffset = 1.35,
+			hood = Vector3.new(3.4, 1.5, 2.4),
+			hoodOffset = 1.4,
+			hoodTransparency = 0.28,
+			core = 0.7,
+			hands = 0,
+			tail = {
+				{ size = Vector3.new(2.2, 0.9, 1.6), y = -0.35 },
+				{ size = Vector3.new(1.5, 0.7, 1.1), y = -1.05 },
+			},
+			crown = { count = 6, size = Vector3.new(0.22, 1.5, 0.22), radius = 1.25, height = -1.4, tilt = -0.15 },
+			eyeCount = 4,
+			eyeSize = 0.28,
+			eyeSpread = 0.3,
+			eyeHeight = 0.1,
+			eyeDepth = 0.55,
+		},
 	},
 	-- Slow until it has a clear straight line, then telegraphs and sprints down
 	-- it, overshoots and has to recover. The only enemy that outruns a player,
@@ -510,6 +624,34 @@ Config.EnemyProfiles = {
 		leash = 210,
 		attackCooldown = 1.6,
 		color = Color3.fromRGB(210, 100, 95),
+		-- Front-heavy: deep hood, shoulder plates, and two horns swept forward
+		-- along the line it is going to travel. The horns are the telegraph before
+		-- the telegraph, and a player who has met one once knows what the shape at
+		-- the end of the corridor is about to do.
+		look = {
+			scale = 1.15,
+			bobScale = 0.55,
+			bobRate = 1.5,
+			head = Vector3.new(1.5, 1.35, 1.8),
+			headOffset = 1.4,
+			hood = Vector3.new(2.5, 2.1, 3),
+			hoodOffset = 1.35,
+			hoodTransparency = 0.2,
+			core = 1.1,
+			coreOffset = Vector3.new(0, 0.4, -0.4),
+			hands = 0.66,
+			handSpread = 1.55,
+			handHeight = 0.25,
+			tail = {
+				{ size = 1.3, y = -0.5 },
+				{ size = 0.8, y = -1.15 },
+			},
+			plates = { size = Vector3.new(0.6, 1.3, 2.1), spread = 1.35, height = 0.95 },
+			horns = { size = Vector3.new(0.3, 0.34, 1.9), spread = 0.72, height = 1.9, forward = 0.95, tilt = -0.25 },
+			eyeSize = 0.36,
+			eyeSpread = 0.34,
+			eyeDepth = 0.85,
+		},
 	},
 }
 

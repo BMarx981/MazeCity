@@ -163,7 +163,20 @@ local CFG = {
 	-- Clearance left under the slab where the floor above closes over the
 	-- stairs, and how far the opening runs past the treads to either side.
 	-- Together these size the hole; the cell around it stays floor.
-	STAIR_HEADROOM = 6,
+	--
+	-- Headroom is the whole of what makes the flight two-way. It was 6, which
+	-- after the treads land on it is 5.75 studs over the last covered step, and a
+	-- Roblox character is about 5 tall before any avatar scaling: climbing up
+	-- scraped through because the tight span is the last thing before the
+	-- opening, and walking back down did not, because it is the first. The
+	-- ceiling can only be raised by taking floor off the level above, since the
+	-- opening grows inward from the top step, and the limit is the wall line one
+	-- cell in: at 8 the opening stops 24.23 studs along a 45 stud run, and the
+	-- wall between the stair cell and the next sits across 24 to 26, so nothing
+	-- on the maze side of it is left standing over a shaft. Past about 8.1 that
+	-- wall gets a pit at its foot on the wrong side and a floor gains a fall
+	-- nobody can see coming.
+	STAIR_HEADROOM = 8,
 	STAIR_HOLE_MARGIN = 1,
 	-- How far the stairs up have to be from the stairs the player just came up,
 	-- as a fraction of the footprint: at 0.5 on a 10x10 that is 5 cells, 125
@@ -929,6 +942,12 @@ local function buildStairs(parent, origin, baseY, exitSide, cellB, style)
 	-- way to walk off the stairs and into the maze. Sized this way the top step
 	-- lands flush with the far edge of the hole and floor runs all the way
 	-- around it.
+	--
+	-- It grows inward from that far edge and never outward, which is what keeps
+	-- the top step reachable however much headroom STAIR_HEADROOM asks for. The
+	-- ceiling over the flight and the floor above it are the same slab, so the
+	-- two cannot both be had: STAIR_HEADROOM is where that trade sits and why it
+	-- stops where it does.
 	local holeAlong = math.min(runLen, runLen * (CFG.SLAB + CFG.STAIR_HEADROOM) / LEVEL_HEIGHT)
 	local holeWide = width + 2 * CFG.STAIR_HOLE_MARGIN
 	local holeCenter = runStart + outward * (runLen - holeAlong / 2)
