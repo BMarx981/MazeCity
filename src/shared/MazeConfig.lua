@@ -37,6 +37,23 @@ Config.World = {
 	-- visible floor; turn off first if lighting ever shows up in a perf trace.
 	LampShadows = true,
 	MovingWallMinLevel = 4,
+	-- The floor mark under a moving wall: a disc where a rotating one turns, a
+	-- rail along the path a sliding one runs. A wall that has already moved is a
+	-- wall the player can read; the mark is for the one they are walking up to for
+	-- the first time, which was the one that got them.
+	--
+	-- Transparency is the whole of the tuning and it is the same trade the phantom
+	-- has. Too solid and a floor with four of them reads as painted markings rather
+	-- than as scuffs the mechanism left; too faint and the hint arrives after the
+	-- wall does. Judge it on a lit floor and again on a dark one, where the same
+	-- value reads much stronger.
+	--
+	-- Drawn whatever Config.MovingWallsEnabled says, because that is a runtime
+	-- switch on a service and this is geometry: turning the walls off leaves the
+	-- marks behind rather than changing what a section is made of. Set the
+	-- transparency to 1 to have them drawn and unseen.
+	MovingWallMarkColor = Color3.fromRGB(240, 170, 60),
+	MovingWallMarkTransparency = 0.45,
 	PhantomWallsPerLevel = 4,
 	-- Phantoms are placed where they measurably shorten the run to the stairs,
 	-- not at random, or the player learns they are never worth walking through.

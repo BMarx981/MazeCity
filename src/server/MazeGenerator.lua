@@ -126,6 +126,15 @@ local CFG = {
 	MOVING_WALL_DWELL_OPEN = { 7, 14 },
 	-- Spread over the cycle so neighbouring walls are not in lockstep.
 	MOVING_WALL_PHASE_MAX = 12,
+	-- The floor mark. Thin enough to read as paint rather than as a lip to trip
+	-- over, and it sits on the slab rather than in it, so there is no z-fight.
+	MOVING_WALL_MARK_THICKNESS = 0.08,
+	-- Rail width as a fraction of the wall's own thickness. Under 1 on purpose:
+	-- the same width as the wall reads as a strip of floor somebody painted, and
+	-- narrower reads as the groove the wall runs in.
+	MOVING_WALL_MARK_RAIL_FRAC = 0.55,
+	MOVING_WALL_MARK_COLOR = Color3.fromRGB(240, 170, 60),
+	MOVING_WALL_MARK_TRANSPARENCY = 0.45,
 
 	ENEMY_SPAWNS_PER_LEVEL = 3,
 
@@ -261,6 +270,8 @@ local function refreshFromConfig()
 		CFG.LAMP_SHADOWS = w.LampShadows
 	end
 	CFG.MOVING_WALL_MIN_LEVEL = w.MovingWallMinLevel or CFG.MOVING_WALL_MIN_LEVEL
+	CFG.MOVING_WALL_MARK_COLOR = w.MovingWallMarkColor or CFG.MOVING_WALL_MARK_COLOR
+	CFG.MOVING_WALL_MARK_TRANSPARENCY = setting(w.MovingWallMarkTransparency, CFG.MOVING_WALL_MARK_TRANSPARENCY)
 	CFG.PHANTOM_PER_LEVEL = w.PhantomWallsPerLevel or CFG.PHANTOM_PER_LEVEL
 	CFG.PHANTOM_MAX_SHORTCUT = w.PhantomMaxShortcut or CFG.PHANTOM_MAX_SHORTCUT
 	CFG.PHANTOM_TRANSPARENCY = setting(w.PhantomTransparency, CFG.PHANTOM_TRANSPARENCY)
@@ -909,6 +920,70 @@ local function tagPhantoms(interior, g, blocked, entryCell, stairCell, count, rn
 	return picked
 end
 
+-- The floor mark under a moving wall. A pure function of the wall part and the
+-- attributes just written onto it: it reads what generation has already decided
+-- and draws nothing from rng, so adding it left every pre-existing part exactly
+-- where it was and the delta is one part per moving wall.
+--
+-- Both shapes are drawn from the wall itself rather than from the cell, because
+-- the wall carries its apron growth and is 27 long in a 25 cell. A mark sized to
+-- the cell would be a mark that lies by two studs about where the thing sweeps.
+--
+-- Neither is collidable, touchable or queryable. A hint that turns up in
+-- PickupService's radius sweep, in the Wall Walker's overlap check or in the
+-- enemy sight ray is a hint that has become a game object.
+local function markMovingWall(part, mode, travel, axis)
+	local size = part.Size
+	local floorY = part.Position.Y - CFG.WALL_HEIGHT / 2
+	local mark
+
+	if mode == "rotate" then
+		-- The circle the wall turns inside. It sweeps 90 degrees rather than the
+		-- full turn, so the disc is the wall's reach and not every stud of floor it
+		-- touches; the honest shape is two opposite quarter sectors and needs a fan
+		-- of parts to draw. The reach is what a player standing next to one wants to
+		-- know, and it is the same answer whichever way the wall happens to be
+		-- pointing when they arrive.
+		local diameter = math.max(size.X, size.Z)
+		mark = makePart(
+			part.Parent,
+			"MovingWallArc",
+			CFrame.new(part.Position.X, floorY + CFG.MOVING_WALL_MARK_THICKNESS / 2, part.Position.Z)
+				* CFrame.Angles(0, 0, math.rad(90)),
+			Vector3.new(CFG.MOVING_WALL_MARK_THICKNESS, diameter, diameter),
+			CFG.MOVING_WALL_MARK_COLOR,
+			Enum.Material.SmoothPlastic
+		)
+		mark.Shape = Enum.PartType.Cylinder
+	else
+		-- The rail runs the whole span the wall occupies across a cycle, its own
+		-- length plus its travel, and is narrower than the wall so it reads as a
+		-- groove the wall runs in rather than as a strip of painted floor.
+		local rail = CFG.WALL_THICKNESS * CFG.MOVING_WALL_MARK_RAIL_FRAC
+		local along = (axis == "X")
+		mark = makePart(
+			part.Parent,
+			"MovingWallTrack",
+			CFrame.new(
+				part.Position.X + (along and travel / 2 or 0),
+				floorY + CFG.MOVING_WALL_MARK_THICKNESS / 2,
+				part.Position.Z + (along and 0 or travel / 2)
+			),
+			along and Vector3.new(size.X + travel, CFG.MOVING_WALL_MARK_THICKNESS, rail)
+				or Vector3.new(rail, CFG.MOVING_WALL_MARK_THICKNESS, size.Z + travel),
+			CFG.MOVING_WALL_MARK_COLOR,
+			Enum.Material.SmoothPlastic
+		)
+	end
+
+	mark.Transparency = CFG.MOVING_WALL_MARK_TRANSPARENCY
+	mark.CanCollide = false
+	mark.CanTouch = false
+	mark.CanQuery = false
+	mark.CastShadow = false
+	return mark
+end
+
 local function tagMovingWalls(interior, blocked, used, level, rng, ctx)
 	if level < CFG.MOVING_WALL_MIN_LEVEL then
 		return
@@ -939,6 +1014,10 @@ local function tagMovingWalls(interior, blocked, used, level, rng, ctx)
 		p:SetAttribute("DwellClosed", rng:NextNumber(CFG.MOVING_WALL_DWELL_CLOSED[1], CFG.MOVING_WALL_DWELL_CLOSED[2]))
 		p:SetAttribute("Phase", rng:NextNumber(0, CFG.MOVING_WALL_PHASE_MAX))
 		tagWithContext(p, "MovingWall", ctx.section, ctx.building, level)
+		-- After the draws, deliberately: the mark reads what they decided and adds
+		-- no draw of its own, so the stream is the same one it was before this
+		-- existed and nothing downstream of here moved.
+		markMovingWall(p, mode, CFG.CELL, p:GetAttribute("SlideAxis"))
 		used[p] = true
 	end
 end
