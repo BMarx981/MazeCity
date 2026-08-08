@@ -18,6 +18,7 @@ local ServerScriptService = game:GetService("ServerScriptService")
 
 local Config = require(ReplicatedStorage:WaitForChild("MazeConfig"))
 local Profiles = require(ServerScriptService:WaitForChild("PlayerProfiles"))
+local WalkSpeed = require(ServerScriptService:WaitForChild("WalkSpeedResolver"))
 
 local remote = ReplicatedStorage:FindFirstChild("ShopUpdate")
 if not remote then
@@ -47,7 +48,11 @@ local function applyStats(player)
 	local shop = Config.Shop
 	local walk = shop.BaseWalkSpeed + tier(data, "Speed") * shop.Upgrades.Speed.WalkSpeedPerTier
 	char:SetAttribute("BaseWalkSpeed", walk)
-	humanoid.WalkSpeed = walk
+	-- Through the resolver rather than straight onto the humanoid. This runs on
+	-- every purchase, and writing the bare baseline here would cancel a sprint or
+	-- a powerup that happened to be live: buying Fast Feet mid-sprint would slow
+	-- the player down. The resolver re-multiplies whatever is still applied.
+	WalkSpeed.apply(char)
 
 	player:SetAttribute("MagnetBonus", tier(data, "Magnet") * shop.Upgrades.Magnet.RadiusPerTier)
 	-- The tier the walker reads for its meter. An attribute, the same channel

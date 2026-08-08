@@ -26,6 +26,7 @@ local ServerScriptService = game:GetService("ServerScriptService")
 
 local Config = require(ReplicatedStorage:WaitForChild("MazeConfig"))
 local MazeGenerator = require(ServerScriptService:WaitForChild("MazeGenerator"))
+local WalkSpeed = require(ServerScriptService:WaitForChild("WalkSpeedResolver"))
 
 local WALL_GROUP = MazeGenerator.WALL_GROUP
 local BLOCK_GROUP = MazeGenerator.ENEMY_BLOCK_GROUP
@@ -133,11 +134,11 @@ local function startPhase(player)
 		end
 	end)
 
-	-- Restored against BaseWalkSpeed rather than against whatever it was, so a
-	-- Fast Feet purchase or a Speed powerup landing mid-phase is not undone when
-	-- the phase ends. Same rule PickupService's boost follows.
-	local base = char:GetAttribute("BaseWalkSpeed") or humanoid.WalkSpeed
-	humanoid.WalkSpeed = base * Config.WallWalk.WalkSpeedMultiplier
+	-- A named factor in WalkSpeedResolver, so the squeeze multiplies with a Speed
+	-- powerup or a sprint rather than replacing whichever landed first, and ending
+	-- the phase removes only this term. Sprinting through a wall is therefore
+	-- 1.6 * 0.75, faster than walking but still paying the squeeze.
+	WalkSpeed.set(char, "WallWalk", Config.WallWalk.WalkSpeedMultiplier)
 
 	local shimmer = Instance.new("Highlight")
 	shimmer.Name = "WallWalkHighlight"
@@ -171,10 +172,7 @@ local function endPhase(player, reason)
 	local char = player.Character
 	if char then
 		setGroup(char, DEFAULT_GROUP)
-		local humanoid = char:FindFirstChildOfClass("Humanoid")
-		if humanoid and humanoid.Parent then
-			humanoid.WalkSpeed = char:GetAttribute("BaseWalkSpeed") or Config.Shop.BaseWalkSpeed
-		end
+		WalkSpeed.clear(char, "WallWalk")
 	end
 
 	push(player, { kind = reason or "stopped" })

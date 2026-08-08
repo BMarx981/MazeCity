@@ -347,6 +347,49 @@ Config.WallWalk = {
 	WalkSpeedMultiplier = 0.75,
 }
 
+-- Sprint, and the one ability here that nothing sells. Every player has it from
+-- their first floor, which is why the stamina regenerates on its own instead of
+-- refilling at a LevelTrigger the way the Wall Walker's meter does: a movement
+-- verb that runs out for the rest of the floor is a verb people stop reaching
+-- for. Fast Feet remains what the shop sells to go faster permanently; this is
+-- what the key does.
+--
+-- It multiplies through WalkSpeedResolver rather than writing WalkSpeed, so it
+-- composes with a Speed orb and with the Wall Walker's squeeze instead of
+-- replacing whichever landed first.
+Config.Sprint = {
+	-- Seconds of sprint from full. Short deliberately: long enough to cross a
+	-- corridor or reach the next corner ahead of a Charger, nowhere near long
+	-- enough to run a floor at sprint speed.
+	Seconds = 4,
+	-- Stamina per second recovered. Slower than the 1/s it drains at, so a chase
+	-- stays a decision about when to spend it rather than a key held permanently.
+	RegenPerSecond = 1.6,
+	-- Recovery holds off this long after a sprint ends, which is what stops a
+	-- tapped key from being a permanent sprint delivered at a stutter.
+	RegenDelaySeconds = 1,
+	-- Enemies are tuned on the rule that no sustained enemy speed reaches the
+	-- unupgraded 16 (Config.Enemies.MaxChaseSpeed is 15), so a straight corridor
+	-- is always an escape. Sprint does not change what is escapable, it changes
+	-- how long the escape takes: 25.6 unupgraded, 32.8 on top of Fast Feet, for
+	-- four seconds. Charger's telegraphed charge is still the one thing that
+	-- catches a sprinting player, which is the point of its being telegraphed.
+	WalkSpeedMultiplier = 1.6,
+	-- Stamina below this cannot start a sprint. Without a floor, an empty meter
+	-- is a key that fires, moves nobody a stud, and stops again on the next
+	-- frame, which reads as the ability being broken rather than spent.
+	MinimumToStart = 0.6,
+	-- Standing still neither drains the meter nor refills it. Draining would
+	-- charge a player for a key they are holding through a moving wall's dwell,
+	-- and refilling would make hold-and-stop the fastest way to sprint.
+	MoveThreshold = 0.1,
+	-- How often the meter is pushed while it is moving. Same rate and the same
+	-- reason as Config.WallWalk.PushSeconds: the client draws between pushes off
+	-- these numbers, so it is a correction rate, not a frame rate.
+	PushSeconds = 0.15,
+	Color = Color3.fromRGB(120, 240, 170),
+}
+
 -- One DataStore profile per player: coins, upgrade tiers, furthest section
 -- reached. A profile that fails to load is never saved over, so a Studio
 -- session without API access (or a bad day at the datastore) degrades to

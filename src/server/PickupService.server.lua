@@ -14,8 +14,10 @@
 local CollectionService = game:GetService("CollectionService")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local ServerScriptService = game:GetService("ServerScriptService")
 
 local Config = require(ReplicatedStorage:WaitForChild("MazeConfig"))
+local WalkSpeed = require(ServerScriptService:WaitForChild("WalkSpeedResolver"))
 
 local remote = ReplicatedStorage:FindFirstChild("PickupUpdate")
 if not remote then
@@ -133,15 +135,14 @@ local function applyPowerup(player, kindName)
 	end
 
 	if profile.walkSpeedMultiplier then
-		-- SaveService stamps BaseWalkSpeed on the character: multiplying and
-		-- restoring against it means a Fast Feet purchase made mid-boost is not
-		-- quietly undone when the boost ends.
-		local base = char:GetAttribute("BaseWalkSpeed") or humanoid.WalkSpeed
-		humanoid.WalkSpeed = base * profile.walkSpeedMultiplier
+		-- A named factor rather than a raw write. The undo removes this one term
+		-- from the product instead of restoring a number it remembered, which is
+		-- what lets a sprint or a phase run underneath the boost and survive it
+		-- expiring. A Fast Feet purchase made mid-boost still lands, because the
+		-- resolver reads BaseWalkSpeed fresh every time it recomputes.
+		WalkSpeed.set(char, "Powerup", profile.walkSpeedMultiplier)
 		table.insert(undo, function()
-			if humanoid.Parent then
-				humanoid.WalkSpeed = char:GetAttribute("BaseWalkSpeed") or base
-			end
+			WalkSpeed.clear(char, "Powerup")
 		end)
 	end
 
