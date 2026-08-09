@@ -59,6 +59,16 @@ Where the spec's generic shape meets this repo. The spec is written provider-neu
 - **What counts as a maze: towers topped out, at the spec's numbers.** `Config.Pets.HatchUnit = "tower"`, Summit Egg at 2 and Royal Summit Egg at 8. TowerTimerService fires both `floor` and `tower` on the bindable unconditionally, so this is a config read on the listening side and flipping it needs no service edit; what it does need is a pass over every `mazesRequired` in `EggCatalog`, because at `"floor"` the Royal Egg becomes most of one tower. XP is deliberately not governed by it: both kinds pay, so a player who only ever clears floors still levels a pet.
 - **The summit prompt is generated geometry.** `buildEggRoost` puts an `EggPedestal`-tagged pedestal, egg, board and prompt on every roof deck, as a pure function of the footprint drawing no random numbers (invariant 6). Cost is +5 instances per building, +30 per section, which moves the determinism baseline once by a countable amount. It sits at `(FX / 2, FZ * CFG.ROOST_Z_FRAC)`, the one part of the deck nothing else uses.
 
+- **A pet is a defence, and the shape of it is a ward rather than a fight.** Requested 2026-08-09, after the enemy roster was finished at Milestone E4. The design constraint is that combat is out of the game: enemies cannot be damaged, every one of them is outrunnable, and nothing a player does to an enemy exists. So the defensive pet does not fight, it makes enemies lose interest: an enemy inside an active ward drops its target, forgets where it saw anybody and walks back to its marker.
+
+  The three things that keep it from swallowing the game:
+
+  1. **It is a duty cycle, not a state.** The ward is idle until an enemy comes inside its radius, then it runs for `activeSeconds` and recharges for `rechargeSeconds`. A permanently-on aura would strictly dominate the Ghost powerup and the Cloak ability, which are the two things a player spends coins on for exactly this problem. Triggered rather than blindly cyclic because a ward that spends its uptime in an empty corridor is a ward a player cannot learn to rely on.
+  2. **It costs the only equip slot.** `Config.Pets.MaxEquipped` is 1, so carrying the ward means not carrying Glow, and a dark maze is the price of a safe one. That is the trade the ability is for and it needs no extra mechanism.
+  3. **It never damages, stuns, or moves an enemy.** A warded enemy walks home under its own power at its own speed, which means nothing about the enemy system's promises changes: it is the existing Return branch, reached from a new gate.
+
+  The channel is the one Ghost and Cloak already use: **a flag on an instance, written by the owning service and read by the enemy side.** PetService writes `WardRadius` on the follower rig while the ward is running and clears it when it stops, so the attribute existing *is* the ward being up; `Enemy/EnemyWard` is the reader and the only thing on that side that knows pets exist.
+
 ### Open decisions
 
 - **Where this sits against the ship plan.** The v1 plan is at P, then M5 (README/CI), then M6 (ship). Pets is a whole new system with a save-schema change and the project's first client input surface. Either it lands after M6 or it displaces M5 and M6; it should not run beside them on the same save format.
@@ -118,6 +128,18 @@ Exit: a pet levels and evolves; the claim refuses twice in one UTC day and grows
 
 Exit: system is playable without developer knowledge.
 
+## Clutch 6: Ward, the defensive ability
+
+**Done, 2026-08-09.** The first pet ability that touches another system, and the first reason to equip a pet that is not convenience. Settled decision above is the design; this is what landed.
+
+- [x] `Ward` ability type in `PetCatalog`, on one new pet (`ward_hound`, Rare), with `radius`, `activeSeconds` and `rechargeSeconds` params. The evolution multiplier scales radius and not uptime, on the same reasoning Glow scales range and not brightness: the stronger version covers more corridor rather than being on more of the time.
+- [x] Added to all three egg hatch tables, because a pet no egg can roll is a pet nobody has.
+- [x] PetService owns the cycle: it scans `workspace.LiveEnemies` at `Config.Pets.WardScanSeconds`, arms on the first enemy inside the radius, publishes `WardRadius` on the rig for `activeSeconds`, then clears it and recharges. The ring is a part on the rig, drawn on the floor rather than at pet height, and it is the whole of the feedback: ring up means safe.
+- [x] `src/server/Enemy/EnemyWard.lua` is the enemy-side reader, list cached for one think interval, positions read live.
+- [x] The gate in `EnemyController:tick`, placed after `behavior.update` rather than with freeze and stun, and the refusal in `EnemyCombat.canAttack`.
+
+Exit: equip the ward pet, walk a floor with enemies on it, watch them turn around; unequip and watch them chase.
+
 ### What is not covered by any clutch
 
 - Pet **release** does not exist, so a full pet shelf is unblocked only by raising the cap. `Inventory.setLocked` is in place for the day it does.
@@ -126,7 +148,7 @@ Exit: system is playable without developer knowledge.
 
 ## Later clutches (unscheduled)
 
-- Remaining abilities: DeadEndPing, CoinMagnet, CheckpointSave, SpeedBoost, HatchBoost. `Inventory.equippedAbility(data, type)` is the resolver they all go through and is already wired for HatchBoost in `IncubatorService`, so the first of these should be a catalogue edit plus one applier. CoinMagnet is the one with an integration to think about first: `MagnetBonus` on the player is written by SaveService from upgrade tiers, so a pet writing it too needs the two combined rather than one overwriting the other.
+- Remaining abilities: DeadEndPing, CoinMagnet, CheckpointSave, SpeedBoost, HatchBoost. Ward came out of this list ahead of all of them and is Clutch 6. `Inventory.equippedAbility(data, type)` is the resolver they all go through and is already wired for HatchBoost in `IncubatorService`, so the first of these should be a catalogue edit plus one applier. CoinMagnet is the one with an integration to think about first: `MagnetBonus` on the player is written by SaveService from upgrade tiers, so a pet writing it too needs the two combined rather than one overwriting the other.
 - Pet release, which is what makes the pet storage cap a decision rather than a wall
 - Multi-equip gamepass, storage cap products, premium eggs
 - Seasonal/event eggs via `availableUntil`

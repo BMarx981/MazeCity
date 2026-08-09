@@ -38,6 +38,7 @@ local Config = require(ReplicatedStorage:WaitForChild("MazeConfig"))
 local EnemyRig = require(script.Parent:WaitForChild("EnemyRig"))
 local EnemyStatusService = require(script.Parent:WaitForChild("EnemyStatusService"))
 local EnemyTargeting = require(script.Parent:WaitForChild("EnemyTargeting"))
+local EnemyWard = require(script.Parent:WaitForChild("EnemyWard"))
 local WalkSpeedResolver = require(script.Parent.Parent:WaitForChild("WalkSpeedResolver"))
 
 local EnemyCombat = {}
@@ -75,17 +76,25 @@ function EnemyCombat.applyDamage(controller, character, amount)
 	return true
 end
 
--- Every hit in the game asks the same four questions before it is allowed to
--- start: is this thing already swinging or on cooldown, is it stopped, can the
--- player be seen at all, and is it pretending to be something else. Melee, the
--- shockwave and everything on the floor all come through here, so a new way to
--- hurt somebody cannot quietly skip one.
+-- Every hit in the game asks the same questions before it is allowed to start: is
+-- this thing already swinging or on cooldown, is it stopped, is it inside a pet's
+-- ward, and is it pretending to be something else. Melee, the shockwave and
+-- everything on the floor all come through here, so a new way to hurt somebody
+-- cannot quietly skip one.
+--
+-- The ward is checked here as well as in the controller's tick for the same reason
+-- the powerups are: the Touched path fires between ticks, and a warded enemy that
+-- bit somebody who walked into it while it was retreating would read as the pet
+-- being broken rather than as a rule with an edge.
 function EnemyCombat.canAttack(controller)
 	local now = os.clock()
 	if controller.windingUp or now - controller.lastAttack < controller.stats.attackCooldown then
 		return false
 	end
 	if EnemyStatusService.isFrozen() or EnemyStatusService.has(controller.model, "Stun") then
+		return false
+	end
+	if EnemyWard.covers(controller.root.Position) then
 		return false
 	end
 	-- A Lurker that has not revealed itself does not bite, and neither does a Mimic

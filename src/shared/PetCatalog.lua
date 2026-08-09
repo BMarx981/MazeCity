@@ -64,6 +64,42 @@ Pets.lumen_moth = {
 	xpCurve = { base = 130, growth = 1.16 },
 }
 
+-- The one pet that is a defence rather than a convenience, and the only ability
+-- in the catalogue that reaches into another system. An enemy inside a running
+-- ward drops its target and walks back to its marker; it is never damaged, never
+-- stunned and never moved, because there is no combat in this game and a pet is
+-- not where one starts.
+--
+-- The three params are the balance and they are all here rather than in
+-- Config.Pets, because how big a ward is and how long it lasts is what this pet
+-- is. It is triggered rather than always on: an aura that never lapses is
+-- strictly better than the Ghost powerup and the Cloak ability, which are the two
+-- things a player spends coins on for this exact problem. At six seconds up and
+-- ten down it is a way out of a corner rather than a way to ignore a floor.
+--
+-- The evolution multiplier scales radius and deliberately not uptime, for the
+-- reason Glow scales range and not brightness: more corridor covered reads as a
+-- stronger pet, more of the time covered reads as the enemies being switched off.
+Pets.ward_hound = {
+	id = "ward_hound",
+	name = "Ward Hound",
+	rarity = "Rare",
+	model = "WardHound",
+	placeholder = { color = Color3.fromRGB(140, 210, 235), shape = "Block", size = 2.1 },
+	ability = { type = "Ward", params = { radius = 16, activeSeconds = 6, rechargeSeconds = 10 } },
+	evolutions = {
+		{
+			level = 15,
+			model = "WardHoundBulwark",
+			displaySuffix = "Bulwark",
+			abilityMultiplier = 1.45,
+			placeholder = { color = Color3.fromRGB(180, 235, 255), shape = "Block", size = 2.4 },
+		},
+	},
+	maxLevel = 50,
+	xpCurve = { base = 165, growth = 1.17 },
+}
+
 -- CoinMagnet and DeadEndPing are catalogued but not implemented: they are named
 -- in the plan's "later clutches" list. PetService applies the abilities it knows
 -- and ignores the rest, so a pet with an unbuilt ability still hatches, levels,

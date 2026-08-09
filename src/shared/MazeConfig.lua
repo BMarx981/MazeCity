@@ -611,6 +611,22 @@ Config.Pets = {
 	-- ceiling rather than a correctness measure.
 	IntentsPerSecond = 8,
 
+	-- The Ward ability. How big a ward is and how long it runs are on the pet's
+	-- catalogue row, because that is what the pet is; these two are the system's.
+	--
+	-- The scan is what arms it. A ward that ran on a blind timer would spend most
+	-- of its uptime in an empty corridor, so PetService looks for an enemy inside
+	-- the radius instead, and looks four times a second rather than every frame:
+	-- the enemies it is looking at think at 0.12 and none of them can cross a ward
+	-- in a quarter of a second.
+	WardScanSeconds = 0.25,
+	WardRingTransparency = 0.82,
+	-- Studs above the floor the ring is drawn at. It is drawn on the ground and
+	-- not around the pet on purpose: an area is something a player reads off the
+	-- floor they are standing on, and a halo at pet height says nothing about how
+	-- far it reaches.
+	WardRingHeight = 0.3,
+
 	-- Presentation.
 	HatchRevealSeconds = 2.6,
 	BroadcastSeconds = 4,

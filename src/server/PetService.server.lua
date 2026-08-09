@@ -160,6 +160,106 @@ local function applyGlow(primary, petConfig, stage)
 	light.Parent = primary
 end
 
+-- The Ward, and the first pet ability that reaches into another system. Its whole
+-- surface on this side is one attribute: while the ward is running, the rig
+-- carries WardRadius, and Enemy/EnemyWard turns that into enemies losing interest
+-- and walking home. The attribute existing is the ward being up, so there is no
+-- second flag to disagree with the first, and it is the same channel the Ghost
+-- powerup and the Cloak ability already use to hide a player.
+--
+-- Nothing here damages, stuns or moves an enemy. There is no combat in this game
+-- and a pet is not where one would start; a warded enemy walks back to its own
+-- marker under its own power, which is a branch the controller already had.
+--
+-- Armed by a scan rather than a timer. An enemy has to come inside the radius to
+-- set it off, so a ward is never spent on an empty corridor, and once it lapses it
+-- recharges: at six seconds up and ten down it is a way out of a corner rather
+-- than a way to switch a floor off. That matters more than it looks, because a
+-- ward that never lapsed would be strictly better than the two things a player
+-- buys coins for, and this one is only a hatch away.
+local function applyWard(entry, petConfig, stage)
+	if petConfig.ability.type ~= "Ward" then
+		return
+	end
+	local params = petConfig.ability.params
+	local radius = (params.radius or 14) * Inventory.abilityMultiplier(petConfig, stage)
+	entry.ward = {
+		radius = radius,
+		activeSeconds = params.activeSeconds or 5,
+		rechargeSeconds = params.rechargeSeconds or 10,
+		readyAt = 0,
+		activeUntil = 0,
+		scanAt = 0,
+	}
+
+	-- Drawn flat on the floor, so the size of it is legible from inside. Parented
+	-- to the rig, so it goes when the pet does with nothing to remember.
+	local ring = Instance.new("Part")
+	ring.Name = "WardRing"
+	ring.Shape = Enum.PartType.Cylinder
+	ring.Size = Vector3.new(0.2, radius * 2, radius * 2)
+	ring.Color = Inventory.placeholder(petConfig, stage).color
+	ring.Material = Enum.Material.Neon
+	ring.Transparency = 1
+	ring.Anchored = true
+	ring.CanCollide = false
+	ring.CanTouch = false
+	ring.CanQuery = false
+	ring.CastShadow = false
+	ring.Massless = true
+	ring.Parent = entry.model
+	entry.wardRing = ring
+end
+
+-- True while an enemy rig is inside the radius. Read off workspace.LiveEnemies
+-- rather than the enemy registry, because a rig in that folder is exactly what a
+-- player can see coming, and this service has no business knowing what the enemy
+-- system keeps.
+local function enemyInside(position, radius)
+	local live = workspace:FindFirstChild("LiveEnemies")
+	if not live then
+		return false
+	end
+	for _, model in ipairs(live:GetChildren()) do
+		local root = model.PrimaryPart or model:FindFirstChild("HumanoidRootPart")
+		if root and (root.Position - position).Magnitude <= radius then
+			return true
+		end
+	end
+	return false
+end
+
+local function stepWard(entry, now)
+	local ward = entry.ward
+	if not ward then
+		return
+	end
+	local primary = entry.primary
+
+	if now < ward.activeUntil then
+		entry.model:SetAttribute("WardRadius", ward.radius)
+		return
+	end
+	if ward.activeUntil > 0 then
+		-- It just ran out. Clearing the attribute is what lets the floor chase again,
+		-- so it happens before anything else can fail.
+		ward.activeUntil = 0
+		ward.readyAt = now + ward.rechargeSeconds
+		entry.model:SetAttribute("WardRadius", nil)
+		entry.wardRing.Transparency = 1
+	end
+
+	if now < ward.readyAt or now < ward.scanAt then
+		return
+	end
+	ward.scanAt = now + Config.Pets.WardScanSeconds
+	if enemyInside(primary.Position, ward.radius) then
+		ward.activeUntil = now + ward.activeSeconds
+		entry.model:SetAttribute("WardRadius", ward.radius)
+		entry.wardRing.Transparency = Config.Pets.WardRingTransparency
+	end
+end
+
 local function destroyFollower(player, petUid)
 	local mine = followers[player]
 	local entry = mine and mine[petUid]
@@ -190,6 +290,7 @@ local function spawnFollower(player, pet, index)
 		index = index,
 	}
 	applyGlow(entry.primary, petConfig, pet.stage)
+	applyWard(entry, petConfig, pet.stage)
 
 	local char = player.Character
 	local root = char and char:FindFirstChild("HumanoidRootPart")
@@ -258,29 +359,51 @@ RunService.Heartbeat:Connect(function(dt)
 	for player, mine in pairs(followers) do
 		local char = player.Character
 		local root = char and char:FindFirstChild("HumanoidRootPart")
+		local humanoid = char and char:FindFirstChildOfClass("Humanoid")
+		-- The slab the player is standing on, derived rather than guessed: a root
+		-- sits its own half height plus HipHeight above the floor. It is what the
+		-- ward ring is drawn on, and it costs one subtraction per player.
+		local floorY = root and humanoid and (root.Position.Y - humanoid.HipHeight - root.Size.Y / 2)
+
 		for petUid, entry in pairs(mine) do
 			local model = entry.model
 			if not model.Parent or not entry.primary or not entry.primary.Parent then
 				mine[petUid] = nil
-			elseif root then
-				-- Slots fan out sideways so a second equipped pet does not stand
-				-- inside the first. At MaxEquipped of one this is always zero.
-				local side = (entry.index - 1) * pets.FollowSide
-				local bob = math.sin((now / pets.BobSeconds) * math.pi * 2) * pets.BobHeight
-				local goal = root.CFrame * CFrame.new(side, pets.FollowHeight + bob, pets.FollowDistance)
-				-- Wrapped to a turn before it becomes radians. os.clock only ever
-				-- grows, and a CFrame holds float32, so an unwrapped angle quantises
-				-- into a visible judder after a few hours of server uptime.
-				local turn = math.rad((now * pets.SpinDegreesPerSecond) % 360)
-				local spun = CFrame.new(goal.Position) * CFrame.Angles(0, turn, 0)
+			else
+				-- Outside the root check, so a ward that was up when its owner died
+				-- still runs its clock down and clears itself rather than leaving the
+				-- floor permanently warded by a pet nobody is following.
+				stepWard(entry, now)
 
-				-- GetPivot, not PrimaryPart.CFrame: an artist's model may carry a
-				-- pivot offset, and PivotTo is what is written back.
-				local here = model:GetPivot()
-				if (goal.Position - here.Position).Magnitude > pets.FollowTeleportRange then
-					model:PivotTo(spun)
-				else
-					model:PivotTo(here:Lerp(spun, alpha))
+				if root then
+					-- Slots fan out sideways so a second equipped pet does not stand
+					-- inside the first. At MaxEquipped of one this is always zero.
+					local side = (entry.index - 1) * pets.FollowSide
+					local bob = math.sin((now / pets.BobSeconds) * math.pi * 2) * pets.BobHeight
+					local goal = root.CFrame * CFrame.new(side, pets.FollowHeight + bob, pets.FollowDistance)
+					-- Wrapped to a turn before it becomes radians. os.clock only ever
+					-- grows, and a CFrame holds float32, so an unwrapped angle quantises
+					-- into a visible judder after a few hours of server uptime.
+					local turn = math.rad((now * pets.SpinDegreesPerSecond) % 360)
+					local spun = CFrame.new(goal.Position) * CFrame.Angles(0, turn, 0)
+
+					-- GetPivot, not PrimaryPart.CFrame: an artist's model may carry a
+					-- pivot offset, and PivotTo is what is written back.
+					local here = model:GetPivot()
+					if (goal.Position - here.Position).Magnitude > pets.FollowTeleportRange then
+						model:PivotTo(spun)
+					else
+						model:PivotTo(here:Lerp(spun, alpha))
+					end
+
+					-- Put back on the floor afterwards, because the pivot above dragged
+					-- it up to the pet and set it spinning and bobbing. A ward is an area
+					-- and an area is read off the ground.
+					if entry.wardRing and floorY then
+						local at = entry.primary.Position
+						entry.wardRing.CFrame = CFrame.new(at.X, floorY + pets.WardRingHeight, at.Z)
+							* CFrame.Angles(0, 0, math.pi / 2)
+					end
 				end
 			end
 		end

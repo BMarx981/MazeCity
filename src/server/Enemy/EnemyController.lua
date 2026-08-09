@@ -39,6 +39,7 @@ local EnemyRig = require(script.Parent:WaitForChild("EnemyRig"))
 local EnemyStateMachine = require(script.Parent:WaitForChild("EnemyStateMachine"))
 local EnemyStatusService = require(script.Parent:WaitForChild("EnemyStatusService"))
 local EnemyTargeting = require(script.Parent:WaitForChild("EnemyTargeting"))
+local EnemyWard = require(script.Parent:WaitForChild("EnemyWard"))
 
 local Behaviors = script.Parent:WaitForChild("Behaviors")
 local BaseBehavior = require(Behaviors:WaitForChild("BaseBehavior"))
@@ -390,6 +391,34 @@ function EnemyController:tick(dt)
 	end
 
 	if behavior.update(self, dt) then
+		return
+	end
+
+	-- Backed off by somebody's pet. It drops the target, forgets the position and
+	-- walks home, which is the Return branch below reached early; nothing takes
+	-- damage, nothing is stunned and nothing is moved by anything but its own legs.
+	--
+	-- It sits here rather than up with the freeze and stun gates, and the placement
+	-- is load-bearing twice over. A claimed tick is a move the player has already
+	-- been shown, so a charge that was telegraphed still lands where it said it
+	-- would. And a Burrower under the floor is anchored: gated above, it would be
+	-- held mid-travel by a ward it is not allowed to finish crossing, and since it
+	-- cannot move it could never leave.
+	if EnemyWard.covers(self.root.Position) then
+		self:loseTarget()
+		self.lastSeen = nil
+		self.searchUntil = nil
+		self.growl.Playing = false
+		self.machine:transition(State.Return)
+		if flatTo(self.root.Position, self.home).Magnitude > HOME_RADIUS then
+			self.humanoid.WalkSpeed = self:returnSpeed()
+			self.path:moveTo(self.home)
+			if self.path:isStuck() then
+				self:goHome()
+			end
+		else
+			self.path:halt()
+		end
 		return
 	end
 

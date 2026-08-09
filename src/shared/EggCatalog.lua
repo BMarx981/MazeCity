@@ -24,6 +24,7 @@ Eggs.summit_common = {
 	hatchTable = {
 		{ petId = "firefly", weight = 60 },
 		{ petId = "lumen_moth", weight = 25 },
+		{ petId = "ward_hound", weight = 8 },
 		{ petId = "coin_bat", weight = 10 },
 		{ petId = "compass_crow", weight = 5 },
 	},
@@ -38,6 +39,7 @@ Eggs.summit_royal = {
 	coinCost = 2500,
 	hatchTable = {
 		{ petId = "lumen_moth", weight = 30 },
+		{ petId = "ward_hound", weight = 35 },
 		{ petId = "coin_bat", weight = 40 },
 		{ petId = "compass_crow", weight = 30 },
 	},
@@ -54,6 +56,7 @@ Eggs.streak_seven = {
 	source = "Streak",
 	hatchTable = {
 		{ petId = "lumen_moth", weight = 20 },
+		{ petId = "ward_hound", weight = 30 },
 		{ petId = "coin_bat", weight = 45 },
 		{ petId = "compass_crow", weight = 35 },
 	},
