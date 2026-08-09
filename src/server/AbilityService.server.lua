@@ -19,7 +19,7 @@
 --
 -- **Tiers arrive as attributes, selection leaves as one.** SaveService stamps
 -- AbilityTier_<Key> on the player when a purchase lands, the same channel
--- MagnetBonus and BaseWalkSpeed already use, and this service stamps
+-- MagnetRange and BaseWalkSpeed already use, and this service stamps
 -- SelectedAbility back. Both replicate, so AbilityGui draws the whole bar (which
 -- abilities exist, which are owned, which is selected, at what tier) off
 -- attributes and the remote carries only the charge and the events. A client

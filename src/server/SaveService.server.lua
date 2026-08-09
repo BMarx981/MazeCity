@@ -8,7 +8,7 @@
 -- counts into stats. Upgrades reach the rest of the game as attributes, which is
 -- the same channel Ghost and Freeze already use to cross a service boundary:
 -- BaseWalkSpeed on the character (the baseline every WalkSpeedResolver factor
--- multiplies), MagnetBonus on the player (PickupService widens the sweep by it),
+-- multiplies), MagnetRange on the player (PickupService pulls coins in from it),
 -- and one AbilityTier_<Key> per ability (AbilityService sizes the drain by it,
 -- AbilityGui draws the bar from it).
 --
@@ -54,11 +54,13 @@ local function applyStats(player)
 	-- Player attributes first and outside the character guard. They are what the
 	-- ability HUD draws itself from, and a profile that lands a moment before the
 	-- body would otherwise leave the bar blank until the spawn caught up.
-	player:SetAttribute("MagnetBonus", tier(data, "Magnet") * shop.Upgrades.Magnet.RadiusPerTier)
+	-- The pull in studs, not a bonus on anything: an unbought magnet is a zero,
+	-- which is what tells PickupService there is no second sweep to run.
+	player:SetAttribute("MagnetRange", shop.Upgrades.Magnet.RangePerTier[tier(data, "Magnet")] or 0)
 
 	-- One attribute per ability, which AbilityService reads to size the drain and
 	-- to know what is selectable, and AbilityGui reads to draw the bar. The same
-	-- channel MagnetBonus and BaseWalkSpeed already use, and stamped for every key
+	-- channel MagnetRange and BaseWalkSpeed already use, and stamped for every key
 	-- in the order rather than only for owned ones: a zero is what tells the HUD
 	-- an ability exists and has not been bought, where an absent attribute is
 	-- indistinguishable from a profile that has not landed.

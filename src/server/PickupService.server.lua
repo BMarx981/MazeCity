@@ -249,7 +249,12 @@ bindTag("Coin", function(player, part)
 	local coins = statValue(player, "Coins")
 	coins.Value = coins.Value + Config.Collectibles.CoinValue * multiplier
 	consume(part, Config.Collectibles.CoinRespawnSeconds)
-	remote:FireClient(player, { kind = "coin", multiplier = multiplier })
+	-- The part itself rather than its position, because the client draws the
+	-- magnet's flight by cloning it: the disc that flies in is then the disc that
+	-- vanished, down to its size and colour, and neither side has to carry the
+	-- other's geometry constants. It is safe to hand over because a coin is never
+	-- destroyed, only hidden, and the server never moves one.
+	remote:FireClient(player, { kind = "coin", multiplier = multiplier, coin = part })
 end)
 
 bindTag("Powerup", function(player, part)
@@ -285,11 +290,11 @@ end)
 -- straight up. So a radius around the player collects too, and Touched stays as
 -- the zero-latency path for the ones actually walked into.
 --
--- Cost is one spatial query per living player per sweep rather than a distance
--- test against every coin in the city, of which there are 990 per section. The
--- query is answered by the engine's broadphase, so it does not care how much
--- geometry is around; the handful of parts it comes back with are filtered by
--- tag here.
+-- Cost is one spatial query per living player per sweep, two for a player who
+-- owns the Coin Magnet, rather than a distance test against every coin in the
+-- city, of which there are 990 per section. The query is answered by the
+-- engine's broadphase, so it does not care how much geometry is around; the
+-- handful of parts it comes back with are filtered by tag here.
 
 local COLLECTIBLE_TAGS = { "Coin", "Powerup" }
 
@@ -308,10 +313,8 @@ local function sweep(player)
 	end
 
 	sweepParams.FilterDescendantsInstances = { char }
-	-- MagnetBonus is the Coin Magnet upgrade, stamped on the player by
-	-- SaveService; zero studs until bought.
-	local radius = Config.Collectibles.PickupRadius + (player:GetAttribute("MagnetBonus") or 0)
-	local near = workspace:GetPartBoundsInRadius(root.Position, radius, sweepParams)
+	local collectibles = Config.Collectibles
+	local near = workspace:GetPartBoundsInRadius(root.Position, collectibles.PickupRadius, sweepParams)
 
 	for _, part in ipairs(near) do
 		if not taken[part] then
@@ -321,6 +324,31 @@ local function sweep(player)
 					break
 				end
 			end
+		end
+	end
+
+	-- The Coin Magnet, as a second query rather than as a wider first one. The two
+	-- answer different questions: the sweep above is "close enough to have touched
+	-- it", which is every collectible, and this is "close enough for the magnet to
+	-- take it", which is coins and nothing else. Widening the one radius, which is
+	-- what the old MagnetBonus did, also hoovered powerup orbs out of rooms the
+	-- player never entered, and an orb that arrives from behind a wall with no
+	-- flight and no orb to see reads as a bug rather than as a prize.
+	--
+	-- Nothing here tests line of sight, which is the feature: a magnet stops at a
+	-- wall only if somebody writes the raycast, and none is written.
+	local range = player:GetAttribute("MagnetRange") or 0
+	if range <= collectibles.PickupRadius then
+		return
+	end
+
+	for _, part in ipairs(workspace:GetPartBoundsInRadius(root.Position, range, sweepParams)) do
+		if
+			not taken[part]
+			and CollectionService:HasTag(part, "Coin")
+			and math.abs(part.Position.Y - root.Position.Y) <= collectibles.MagnetHeight
+		then
+			handlers.Coin(player, part)
 		end
 	end
 end

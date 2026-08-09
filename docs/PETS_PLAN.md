@@ -148,7 +148,7 @@ Exit: equip the ward pet, walk a floor with enemies on it, watch them turn aroun
 
 ## Later clutches (unscheduled)
 
-- Remaining abilities: DeadEndPing, CoinMagnet, CheckpointSave, SpeedBoost, HatchBoost. Ward came out of this list ahead of all of them and is Clutch 6. `Inventory.equippedAbility(data, type)` is the resolver they all go through and is already wired for HatchBoost in `IncubatorService`, so the first of these should be a catalogue edit plus one applier. CoinMagnet is the one with an integration to think about first: `MagnetBonus` on the player is written by SaveService from upgrade tiers, so a pet writing it too needs the two combined rather than one overwriting the other.
+- Remaining abilities: DeadEndPing, CoinMagnet, CheckpointSave, SpeedBoost, HatchBoost. Ward came out of this list ahead of all of them and is Clutch 6. `Inventory.equippedAbility(data, type)` is the resolver they all go through and is already wired for HatchBoost in `IncubatorService`, so the first of these should be a catalogue edit plus one applier. CoinMagnet is the one with an integration to think about first: `MagnetRange` on the player is written by SaveService from upgrade tiers, so a pet writing it too needs the two combined rather than one overwriting the other. It is the pull in absolute studs now, not a bonus on `PickupRadius`, so a pet adds to a reach rather than to a radius.
 - Pet release, which is what makes the pet storage cap a decision rather than a wall
 - Multi-equip gamepass, storage cap products, premium eggs
 - Seasonal/event eggs via `availableUntil`

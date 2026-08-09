@@ -87,11 +87,13 @@ Summed over accessories worn by **equipped** pets only, then clamped per type ag
 
 Additive effects sum. Multiplier effects sum their bonus fractions and are applied once as `1 + sum`, never chained: two 25% items are 50%, not 56.25%, which is the version a player can predict.
 
-Then the integration problem PETS_PLAN already flagged, generalised. Today `MagnetBonus` is written by SaveService from shop tiers; a second writer would clobber it. The rule for every effect that lands on an existing attribute:
+Then the integration problem PETS_PLAN already flagged, generalised. Today `MagnetRange` is written by SaveService from shop tiers; a second writer would clobber it. The rule for every effect that lands on an existing attribute:
 
 > **One attribute, one writer. Readers add.**
 
-So SaveService keeps writing `MagnetBonus` and never learns that gear exists; PetService writes `PetMagnetBonus`; PickupService's sweep becomes `PickupRadius + MagnetBonus + PetMagnetBonus`. Every future source is one more attribute and one more addend at the reader, and no writer ever has to read another writer's value.
+So SaveService keeps writing `MagnetRange` and never learns that gear exists; PetService writes `PetMagnetBonus`; PickupService's magnet pass reaches `MagnetRange + PetMagnetBonus`. Every future source is one more attribute and one more addend at the reader, and no writer ever has to read another writer's value.
+
+The attribute changed shape after this was written and the addend still works, but read it before using the number. `MagnetRange` is the pull in absolute studs rather than studs added to `PickupRadius`, and it drives a coins-only second query that tests no line of sight; an unbought magnet is a zero, so gear alone has to clear `PickupRadius` before it reaches anything, which is the honest answer for a +5 trinket and not a bug to route around.
 
 Walk speed is the exception, and deliberately. `BaseWalkSpeed` is an absolute number that two services restore against (`PickupService.server.lua:139`, `WallWalkService.server.lua:133`), and that property is what keeps a Speed powerup and a phase from undoing each other. So:
 
@@ -108,7 +110,7 @@ Every effect names exactly one integration site. An effect with no site is not i
 | Effect | Unit | Lands at | Cap (all gear combined) |
 |---|---|---|---|
 | `WalkSpeed` | studs, additive | `PetWalkSpeed` attribute, folded into `BaseWalkSpeed` by SaveService | +2.0 |
-| `PickupRadius` | studs, additive | `PetMagnetBonus`, added in PickupService's sweep (`:312`) | +5.0 |
+| `PickupRadius` | studs, additive | `PetMagnetBonus`, added to `MagnetRange` in PickupService's magnet pass | +5.0 |
 | `CoinMultiplier` | fraction | PickupService's `coinBonus` (`:247`), as a permanent addend beside the CoinBoost powerup | +0.5 |
 | `GlowRange` | studs, additive | PetService `applyGlow` (`:147`). A glow item lights a pet that has no Glow ability, so this is not dead on a Coin Bat. | +25 |
 | `WallWalkSeconds` | seconds, additive | `capacityFor` in WallWalkService (`:62`), which becomes tier seconds plus bonus, so gear alone gives a meter to a player who never bought the upgrade | +4.0 |

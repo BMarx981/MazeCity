@@ -184,6 +184,14 @@ Config.Collectibles = {
 	-- radius around each player instead, and Touched stays as the instant path.
 	PickupRadius = 8,
 	PickupSweepSeconds = 0.07,
+	-- How far above or below a coin may be and still be pulled by the Coin
+	-- Magnet. The pull goes through walls deliberately and through floors
+	-- deliberately not: LEVEL_HEIGHT is a little over 20 studs, so a top-tier
+	-- 25-stud reach would otherwise lift coins off the floor above through the
+	-- slab, and a floor is meant to be walked before it pays. Half a level keeps
+	-- a pull on the level the player is standing on, and still takes a coin or
+	-- two out of a bounce pad's arc on the way up through it.
+	MagnetHeight = 10,
 	-- What an orb can turn out to be. Rolled by PickupService when the orb is
 	-- touched, not stamped by MazeGenerator when it is built, so an orb is a
 	-- mystery box: the same orb is a different thing to the second player to reach
@@ -349,11 +357,16 @@ Config.Shop = {
 		Magnet = {
 			Label = "Coin Magnet",
 			Costs = { 30, 70, 140 },
-			-- Studs added to PickupService's sweep radius per tier. The base
-			-- radius is Collectibles.PickupRadius; three tiers roughly doubles it,
-			-- which inhales a corridor of coins without vacuuming through walls
-			-- badly enough to feel like cheating.
-			RadiusPerTier = 2.5,
+			-- The reach of the pull in studs, absolute per tier rather than studs
+			-- added to Collectibles.PickupRadius. The magnet is its own sweep now,
+			-- coins only and straight through walls, so what the shop sells is the
+			-- reach itself and PickupService reads a zero as "no magnet".
+			--
+			-- Measured against CELL, which is 25. Tier 1 clears the cell the player
+			-- is standing in and reaches the next one whenever they are off its
+			-- centre; tier 3 takes the neighbouring cell from anywhere in the
+			-- corridor, wall in the way or not, which is what buying it is for.
+			RangePerTier = { 15, 20, 25 },
 			Color = Color3.fromRGB(255, 214, 110),
 		},
 	},
@@ -1028,6 +1041,21 @@ Config.Juice = {
 	CoinStreakSeconds = 1.5,
 	CoinSparkleParticles = 16,
 	CoinSparkleColor = Color3.fromRGB(255, 214, 110),
+	-- The Coin Magnet's flight. The server banks a magnetised coin the moment it
+	-- is in range and hides the part where the generator put it, which on its own
+	-- reads as coins blinking out through a wall. So the pickup payload names the
+	-- coin and TimerGui flies a local clone of it in: the disc that arrives is the
+	-- one that vanished, and it crosses a wall because a client-side clone
+	-- collides with nothing rather than because anything was made passable.
+	--
+	-- The ding waits for the landing rather than firing at the pull, which is what
+	-- turns a corridor's worth of coins into a rising run: they are all taken in
+	-- one sweep and they land in distance order.
+	CoinFlightSeconds = 0.3,
+	-- Under this the coin was walked into rather than pulled, and a flight would
+	-- only put a delay in front of a ding that should already have rung.
+	CoinFlightMinStuds = 5,
+	CoinFlightSpinDegrees = 720,
 	PowerupVolume = 0.6,
 	PowerupBannerSeconds = 2,
 	ShopBannerSeconds = 1.6,

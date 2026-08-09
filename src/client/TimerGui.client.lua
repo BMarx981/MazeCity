@@ -804,7 +804,11 @@ end)
 local streakPitch = Config.Juice.CoinPitchBase
 local streakAt = 0
 
-local function coinPickup(multiplier)
+-- The landing, not the pickup: a magnetised coin is banked by the server the
+-- moment it comes into range and this runs when the disc arrives, so the streak
+-- climbs in the order the coins land rather than in the order one sweep found
+-- them. A coin walked into lands the instant it is taken and nothing changes.
+local function coinLanded(multiplier)
 	local juice = Config.Juice
 	local now = os.clock()
 	if now - streakAt > juice.CoinStreakSeconds then
@@ -826,6 +830,103 @@ local function coinPickup(multiplier)
 	coinIcon.Size = UDim2.fromOffset(22, 22)
 	coinIcon.Position = UDim2.new(0, 9, 0.5, -11)
 	tween(coinIcon, 0.22, { Size = UDim2.fromOffset(16, 16), Position = UDim2.new(0, 12, 0.5, -8) })
+end
+
+-- The Coin Magnet's flight. The server hides the coin where the generator put it
+-- and tells this client which part it was; the disc that flies in is a local
+-- clone of that part, so it is the right disc without either side sharing the
+-- other's geometry constants, and it goes through the wall because a clone that
+-- collides with nothing has nothing to go through. Nothing here is authority:
+-- the coin is already counted, and the flight is what makes the count legible.
+local flightModel = Instance.new("Model")
+flightModel.Name = "CoinFlight"
+
+-- One Highlight over the lot of them, at AlwaysOnTop, which is what makes the
+-- pull legible rather than merely correct: the coin genuinely crosses the wall,
+-- and without this the player only sees it emerge from the near face having come
+-- from nowhere. Adorned to the model and not to each disc, the same bargain the
+-- route trail makes, because a highlight per instance is the one that blows the
+-- renderer's budget. The model outlives every flight, so this is created once.
+local flightGlow = Instance.new("Highlight")
+flightGlow.FillColor = Config.Juice.CoinSparkleColor
+flightGlow.FillTransparency = 0.3
+flightGlow.OutlineColor = Config.Juice.CoinSparkleColor
+flightGlow.OutlineTransparency = 0
+flightGlow.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+flightGlow.Adornee = flightModel
+flightGlow.Parent = flightModel
+
+flightModel.Parent = workspace
+
+local flights = {}
+
+local function flyCoin(coin, multiplier)
+	local disc = coin:Clone()
+	-- The tag comes off. It is how the spin loop above finds coins, and a clone
+	-- that kept it would be spun by that loop while this one flies it, and would
+	-- still be in its list a refresh after it landed.
+	CollectionService:RemoveTag(disc, "Coin")
+	disc.Name = "CoinFlight"
+	-- Set rather than inherited: the original is hidden at the moment it is taken,
+	-- and whether that has replicated by the time this runs is a race.
+	disc.Transparency = 0
+	disc.Anchored = true
+	disc.CanCollide = false
+	disc.CanTouch = false
+	disc.CanQuery = false
+	disc.CastShadow = false
+	disc.Parent = flightModel
+
+	table.insert(flights, { part = disc, from = coin.Position, multiplier = multiplier, elapsed = 0, spin = 0 })
+end
+
+RunService.RenderStepped:Connect(function(dt)
+	if #flights == 0 then
+		return
+	end
+
+	local juice = Config.Juice
+	local char = player.Character
+	local root = char and char:FindFirstChild("HumanoidRootPart")
+
+	for i = #flights, 1, -1 do
+		local flight = flights[i]
+		flight.elapsed = flight.elapsed + dt
+		local alpha = math.min(1, flight.elapsed / juice.CoinFlightSeconds)
+
+		if root and alpha < 1 then
+			flight.spin = flight.spin + math.rad(juice.CoinFlightSpinDegrees * dt)
+			-- Eased in, and homed on wherever the root is this frame rather than on
+			-- where it was when the coin was taken: the pull is the thing being read,
+			-- and a coin that flew at a spot the player has already walked past reads
+			-- as one that missed.
+			local reached = flight.from:Lerp(root.Position, alpha * alpha)
+			flight.part.CFrame = CFrame.new(reached) * CFrame.Angles(0, flight.spin, 0)
+		else
+			-- A dead or unloaded character is a flight with nowhere to land, and it
+			-- still has to ring: the coin was banked when it was pulled, and
+			-- swallowing the ding would read as a pickup lost with the body.
+			flight.part:Destroy()
+			table.remove(flights, i)
+			coinLanded(flight.multiplier)
+		end
+	end
+end)
+
+local function coinPickup(payload)
+	local coin = payload.coin
+	local char = player.Character
+	local root = char and char:FindFirstChild("HumanoidRootPart")
+	local pulled = coin
+		and coin.Parent
+		and root
+		and (coin.Position - root.Position).Magnitude >= Config.Juice.CoinFlightMinStuds
+
+	if pulled then
+		flyCoin(coin, payload.multiplier)
+	else
+		coinLanded(payload.multiplier)
+	end
 end
 
 local powerUntil = 0
@@ -878,7 +979,7 @@ pickupRemote.OnClientEvent:Connect(function(payload)
 		return
 	end
 	if payload.kind == "coin" then
-		coinPickup(payload.multiplier)
+		coinPickup(payload)
 	elseif payload.kind == "powerup" then
 		powerupStarted(payload)
 	elseif payload.kind == "powerupEnded" then
