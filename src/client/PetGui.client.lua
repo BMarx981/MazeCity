@@ -41,6 +41,9 @@ local SECONDS_PER_DAY = 86400
 local PANEL_W = Config.Pets.PanelWidth
 local PANEL_H = 470
 local ROW_H = 62
+-- Taller than the rest, because a pet row carries a strip of worn-gear chips
+-- under its XP bar that nothing else has.
+local PET_ROW_H = 78
 
 -- Distance at which the Place button lights up. The server re-checks this with
 -- its own slack, so being generous here only ever costs a refusal the player
@@ -53,6 +56,15 @@ local state = nil
 local dailyAvailable = false
 local openTab = "Pets"
 local nickTarget = nil
+-- The accessory uid waiting for a pet to be picked. Set by WEAR on a gear row,
+-- cleared by the pick, by Cancel, and by anything that leaves the tab: a picker
+-- still open over a list the player has moved on from is a press that lands
+-- somewhere unexpected.
+local gearTarget = nil
+
+-- Forward declared, because opening and cancelling the picker are redraws of the
+-- list the buttons doing it are drawn into.
+local refresh
 
 -- ============================================================
 -- Widgets
@@ -173,7 +185,7 @@ tabRow.Position = UDim2.new(0, 16, 0, 62)
 tabRow.BackgroundTransparency = 1
 tabRow.Parent = panel
 
-local TABS = { "Pets", "Eggs", "Daily" }
+local TABS = { "Pets", "Eggs", "Gear", "Daily" }
 local tabButtons = {}
 for i, name in ipairs(TABS) do
 	local width = 1 / #TABS
@@ -359,8 +371,14 @@ local REASONS = {
 	unknown = "That is not available",
 	filter = "Try a different name",
 	claimed = "Already claimed, come back tomorrow",
+	noitem = "You do not have that piece of gear",
+	gearfull = "Your gear bag is full",
+	locked = "That item is locked",
+	worn = "Take it off a pet first",
+	notforsale = "That one is not for sale",
 	nopet = nil,
 	notequipped = nil,
+	notworn = nil,
 	already = nil,
 }
 
@@ -414,11 +432,34 @@ local function nearRoost()
 	return false
 end
 
+-- One chip per worn slot, in the rarity colour of what is in it, under the XP
+-- bar. The initial rather than the name: four items in 190 pixels is four
+-- letters, and the Gear tab beside this is where the names are.
+local function wornChips(frame, worn)
+	local index = 0
+	for _, slot in ipairs(Config.Accessories.Slots) do
+		local item = worn and worn[slot]
+		if item then
+			local chip = Instance.new("Frame")
+			chip.Size = UDim2.fromOffset(30, 16)
+			chip.Position = UDim2.new(0, 22 + index * 34, 0, 56)
+			chip.BackgroundColor3 = Config.rarityColor(item.rarity)
+			chip.BorderSizePixel = 0
+			chip.Parent = frame
+			rounded(chip, 4)
+
+			local mark = label(chip, UDim2.fromScale(1, 1), UDim2.new(), Enum.Font.GothamBold, 11, PANEL)
+			mark.Text = string.sub(slot, 1, 1)
+			index = index + 1
+		end
+	end
+end
+
 local function petRow(pet, order)
-	local frame = row(order)
+	local frame = row(order, PET_ROW_H)
 
 	local swatch = Instance.new("Frame")
-	swatch.Size = UDim2.fromOffset(6, ROW_H - 16)
+	swatch.Size = UDim2.fromOffset(6, PET_ROW_H - 16)
 	swatch.Position = UDim2.new(0, 8, 0, 8)
 	swatch.BackgroundColor3 = Config.rarityColor(pet.rarity)
 	swatch.BorderSizePixel = 0
@@ -488,6 +529,8 @@ local function petRow(pet, order)
 		nickBox.PlaceholderText = "New name for " .. pet.name
 		nickBox:CaptureFocus()
 	end)
+
+	wornChips(frame, pet.worn)
 end
 
 -- The button says why it cannot be pressed rather than going grey and silent: a
@@ -554,6 +597,120 @@ local function shelfRow(eggConfig, order, canBuy)
 	buy.TextColor3 = canBuy and Color3.fromRGB(30, 26, 12) or WHITE
 	buy.MouseButton1Click:Connect(function()
 		send({ kind = "buyEgg", eggId = eggConfig.id })
+	end)
+end
+
+-- What a raw effect value means in words. The projection carries numbers and the
+-- catalogue is server-side, so which of them is a fraction comes from
+-- Config.Accessories rather than from a second table kept here.
+local function effectText(effect)
+	local name = Config.Accessories.EffectLabels[effect.type] or effect.type
+	if Config.Accessories.EffectPercent[effect.type] then
+		return string.format("%s +%d%%", name, math.floor(effect.value * 100 + 0.5))
+	end
+	if effect.value == math.floor(effect.value) then
+		return string.format("%s +%d", name, effect.value)
+	end
+	return string.format("%s +%.1f", name, effect.value)
+end
+
+local function effectsLine(item)
+	if #item.effects == 0 then
+		return "Cosmetic"
+	end
+	local parts = {}
+	for _, effect in ipairs(item.effects) do
+		table.insert(parts, effectText(effect))
+	end
+	return table.concat(parts, ", ")
+end
+
+local GEAR_ROW_H = 58
+
+local function gearRow(item, order, wearerName)
+	local frame = row(order, GEAR_ROW_H)
+
+	local swatch = Instance.new("Frame")
+	swatch.Size = UDim2.fromOffset(6, GEAR_ROW_H - 16)
+	swatch.Position = UDim2.new(0, 8, 0, 8)
+	swatch.BackgroundColor3 = Config.rarityColor(item.rarity)
+	swatch.BorderSizePixel = 0
+	swatch.Parent = frame
+	rounded(swatch, 3)
+
+	local name = label(frame, UDim2.new(0, 250, 0, 18), UDim2.new(0, 22, 0, 6), Enum.Font.GothamBold, 14, WHITE)
+	name.TextXAlignment = Enum.TextXAlignment.Left
+	name.Text = (item.locked and "[L] " or "") .. item.name
+
+	local sub = label(frame, UDim2.new(0, 250, 0, 14), UDim2.new(0, 22, 0, 24), Enum.Font.Gotham, 11, DIM)
+	sub.TextXAlignment = Enum.TextXAlignment.Left
+	sub.Text = string.format("%s  |  %s", item.slot, effectsLine(item))
+
+	local where = label(frame, UDim2.new(0, 250, 0, 14), UDim2.new(0, 22, 0, 38), Enum.Font.Gotham, 11, DIM)
+	where.TextXAlignment = Enum.TextXAlignment.Left
+	if wearerName then
+		where.Text = "Worn by " .. wearerName
+		where.TextColor3 = GREEN
+	else
+		where.Text = "In the bag"
+	end
+
+	local wear = button(
+		frame,
+		UDim2.fromOffset(96, 24),
+		UDim2.new(1, -108, 0, 6),
+		item.wornBy and "TAKE OFF" or "WEAR",
+		item.wornBy and Color3.fromRGB(60, 62, 74) or GREEN
+	)
+	wear.TextSize = 12
+	wear.MouseButton1Click:Connect(function()
+		if item.wornBy then
+			send({ kind = "unwear", petUid = item.wornBy, slot = item.slot })
+		else
+			gearTarget = item.uid
+			refresh()
+		end
+	end)
+
+	local lock = button(
+		frame,
+		UDim2.fromOffset(96, 20),
+		UDim2.new(1, -108, 0, 32),
+		item.locked and "UNLOCK" or "LOCK",
+		Color3.fromRGB(60, 62, 74)
+	)
+	lock.TextSize = 11
+	lock.MouseButton1Click:Connect(function()
+		send({ kind = "lockAccessory", accessoryUid = item.uid, locked = not item.locked })
+	end)
+end
+
+-- One line per pet while a piece of gear is waiting to be put on. It says what
+-- the pet is already wearing in that slot, because wearing is a replace and the
+-- thing being replaced should not be a surprise.
+local function pickRow(pet, item, order)
+	local frame = row(order, 44)
+
+	local name = label(frame, UDim2.new(0, 240, 0, 18), UDim2.new(0, 14, 0, 5), Enum.Font.GothamBold, 14, WHITE)
+	name.TextXAlignment = Enum.TextXAlignment.Left
+	name.Text = pet.name .. (pet.equipped and "  (out)" or "")
+
+	local sub = label(frame, UDim2.new(0, 240, 0, 14), UDim2.new(0, 14, 0, 24), Enum.Font.Gotham, 11, DIM)
+	sub.TextXAlignment = Enum.TextXAlignment.Left
+	local occupied = pet.worn and pet.worn[item.slot]
+	if occupied then
+		sub.Text = "Replaces " .. occupied.name
+	elseif not pet.equipped then
+		sub.Text = "Benched, so it will not do anything yet"
+	else
+		sub.Text = item.slot .. " is empty"
+	end
+
+	local put = button(frame, UDim2.fromOffset(84, 26), UDim2.new(1, -96, 0, 9), "PUT ON", GREEN)
+	put.TextSize = 12
+	put.MouseButton1Click:Connect(function()
+		send({ kind = "wear", petUid = pet.uid, accessoryUid = item.uid })
+		gearTarget = nil
 	end)
 end
 
@@ -654,6 +811,72 @@ local function drawEggs()
 	end
 end
 
+local function drawGear()
+	title.Text = "Gear"
+	local items = state.accessories or {}
+	local names = {}
+	for _, pet in ipairs(state.pets) do
+		names[pet.uid] = pet.name
+	end
+
+	-- The picker takes over the whole list rather than opening beside it: at 390
+	-- pixels there is no beside, and a player who has pressed WEAR has one
+	-- question left to answer.
+	if gearTarget then
+		local item = nil
+		for _, candidate in ipairs(items) do
+			if candidate.uid == gearTarget then
+				item = candidate
+			end
+		end
+		-- The item can be gone by the time this redraws, if the server refused or
+		-- something else changed underneath.
+		if not item then
+			gearTarget = nil
+		else
+			capLabel.Text = "Pick a pet"
+			-- Order 0, so the "no pets" note below (which is always order 1) cannot
+			-- tie with it and draw above the question it answers.
+			local header = row(0, 44)
+			header.BackgroundTransparency = 0.35
+			local ask = label(header, UDim2.new(0, 250, 1, 0), UDim2.new(0, 14, 0, 0), Enum.Font.GothamBold, 14, WHITE)
+			ask.TextXAlignment = Enum.TextXAlignment.Left
+			ask.Text = string.format("Put %s on which pet?", item.name)
+
+			local cancel = button(header, UDim2.fromOffset(84, 26), UDim2.new(1, -96, 0, 9), "CANCEL", ROW)
+			cancel.TextSize = 12
+			cancel.MouseButton1Click:Connect(function()
+				gearTarget = nil
+				refresh()
+			end)
+
+			if #state.pets == 0 then
+				emptyNote("No pets to put it on yet.")
+				return
+			end
+			for i, pet in ipairs(state.pets) do
+				pickRow(pet, item, i + 1)
+			end
+			return
+		end
+	end
+
+	-- The server's count, not #items: a row whose catalogue entry vanished is not
+	-- drawn but still holds a slot in the bag, and the cap is what refuses.
+	capLabel.Text = string.format(
+		"%d of %d kept  |  worn gear works on the pet you have out",
+		state.accessoryCount or #items,
+		state.accessoryCap or 0
+	)
+	if #items == 0 then
+		emptyNote("No gear yet. A piece of gear goes on one pet, and only the pet you have out gets what it does.")
+		return
+	end
+	for i, item in ipairs(items) do
+		gearRow(item, i, item.wornBy and names[item.wornBy] or nil)
+	end
+end
+
 local function drawDaily()
 	title.Text = "Daily"
 	capLabel.Text = "One claim per day, UTC"
@@ -720,7 +943,7 @@ local function drawDaily()
 	)
 end
 
-local function refresh()
+function refresh()
 	if not panel.Visible or not state then
 		return
 	end
@@ -732,6 +955,8 @@ local function refresh()
 		drawPets()
 	elseif openTab == "Eggs" then
 		drawEggs()
+	elseif openTab == "Gear" then
+		drawGear()
 	else
 		drawDaily()
 	end
@@ -767,6 +992,7 @@ local function openPanel(tab)
 	panel.Visible = true
 	nickBox.Visible = false
 	nickTarget = nil
+	gearTarget = nil
 	if not state then
 		send({ kind = "sync" })
 	end
@@ -777,6 +1003,7 @@ local function closePanel()
 	panel.Visible = false
 	nickBox.Visible = false
 	nickTarget = nil
+	gearTarget = nil
 end
 
 toggle.MouseButton1Click:Connect(function()
@@ -794,6 +1021,7 @@ for name, tabButton in pairs(tabButtons) do
 		openTab = name
 		nickBox.Visible = false
 		nickTarget = nil
+		gearTarget = nil
 		refresh()
 	end)
 end
@@ -909,6 +1137,22 @@ local function playEvent(event)
 		local what = event.pet.evolved and "evolved!" or string.format("reached level %d", event.pet.level)
 		showBanner(event.pet.name .. " " .. what, "", Config.rarityColor(event.pet.rarity), 2)
 		playSound(Config.Sounds.PowerupPickup, Config.Juice.PowerupVolume, 1.4)
+	elseif event.kind == "worn" then
+		-- The subtitle is the whole reason a move is not silent: at one equipped pet
+		-- a player moving a crown has just changed which pet it works on.
+		showBanner(
+			string.format("%s on %s", event.name, event.petName or "your pet"),
+			event.takenFrom and ("Taken off " .. event.takenFrom) or "",
+			GREEN,
+			2
+		)
+	elseif event.kind == "unworn" then
+		showBanner(
+			string.format("%s off %s", event.name or "Gear", event.petName or "your pet"),
+			"",
+			Color3.fromRGB(150, 160, 175),
+			1.6
+		)
 	elseif event.kind == "placed" then
 		showBanner("Egg placed", remaining(event.done, event.required), GREEN, 2.5)
 	elseif event.kind == "bought" then

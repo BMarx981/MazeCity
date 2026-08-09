@@ -55,23 +55,25 @@ Config.World = {
 	MovingWallTween = { 3, 5 },
 	MovingWallDwellClosed = { 1.5, 3 },
 	MovingWallDwellOpen = { 5, 9 },
-	-- The floor mark under a moving wall: a disc where a rotating one turns, a
-	-- rail along the path a sliding one runs. A wall that has already moved is a
-	-- wall the player can read; the mark is for the one they are walking up to for
-	-- the first time, which was the one that got them.
+	-- The floor mark under a moving wall: the scratch arcs a rotating one's tips
+	-- drag, the pair of rails a sliding one runs on. A wall that has already
+	-- moved is a wall the player can read; the mark is for the one they are
+	-- walking up to for the first time, which was the one that got them.
 	--
-	-- Transparency is the whole of the tuning and it is the same trade the phantom
-	-- has. Too solid and a floor with four of them reads as painted markings rather
-	-- than as scuffs the mechanism left; too faint and the hint arrives after the
-	-- wall does. Judge it on a lit floor and again on a dark one, where the same
-	-- value reads much stronger.
+	-- The colour is the wall's own, darkened by the shade, so the mark reads as
+	-- wear the mechanism left rather than as a painted hazard stripe and every
+	-- building style matches its own walls without a table here. Shade and
+	-- transparency are the whole of the tuning and pull the same way: shade 0 or
+	-- transparency 1 is invisible, and pushing either far enough re-creates the
+	-- painted stripe this replaced. Judge them on a lit floor and again on a dark
+	-- one, where the same values read much stronger.
 	--
 	-- Drawn whatever Config.MovingWallsEnabled says, because that is a runtime
 	-- switch on a service and this is geometry: turning the walls off leaves the
 	-- marks behind rather than changing what a section is made of. Set the
 	-- transparency to 1 to have them drawn and unseen.
-	MovingWallMarkColor = Color3.fromRGB(240, 170, 60),
-	MovingWallMarkTransparency = 0.45,
+	MovingWallMarkShade = 0.35,
+	MovingWallMarkTransparency = 0.3,
 	PhantomWallsPerLevel = 4,
 	-- Phantoms are placed where they measurably shorten the run to the stairs,
 	-- not at random, or the player learns they are never worth walking through.
@@ -701,6 +703,51 @@ Config.Accessories = {
 		PhantomSense = 30,
 		ScoreBonus = 0.15,
 		Armor = 0.4,
+	},
+
+	-- Where a slot sits on a rig that authored no attachment, as a fraction of
+	-- that rig's own bounding box measured from its centre: +Y up, -Z the face,
+	-- +Z the back. A rig with a HeadAttachment (an artist's, or a generated one
+	-- once docs/PET_LOOKS_PLAN lands) wins over this; the fractions are what put
+	-- a crown on the placeholder every pet is today, at whatever size it is.
+	SlotOffsets = {
+		Head = Vector3.new(0, 0.62, 0),
+		Neck = Vector3.new(0, -0.08, -0.42),
+		Back = Vector3.new(0, 0.06, 0.46),
+		Aura = Vector3.new(0, 0, 0),
+	},
+
+	-- The Aura slot is a particle rather than a part, and these are the numbers a
+	-- catalogue entry does not carry because they are the same for every aura:
+	-- colour, size and rate are the item, drift is the slot. Speed stays under a
+	-- stud a second so motes hang around a pet that is standing still instead of
+	-- streaming off it.
+	AuraLifetime = { 0.6, 1.4 },
+	AuraSpeed = { 0.2, 0.9 },
+	AuraDrag = 2,
+
+	-- How an effect reads in the UI. The client formats the projection's numbers
+	-- and never sees the catalogue, so what a raw 0.25 means in words is here
+	-- rather than in a table PetGui keeps beside it.
+	EffectLabels = {
+		WalkSpeed = "Walk speed",
+		PickupRadius = "Pickup reach",
+		CoinMultiplier = "Coins",
+		GlowRange = "Glow range",
+		WallWalkSeconds = "Wall walk",
+		PetXp = "Pet XP",
+		HatchProgress = "Hatch speed",
+		RouteVision = "Route sight",
+		PhantomSense = "Phantom sense",
+		ScoreBonus = "Score",
+		Armor = "Armor",
+	},
+	EffectPercent = {
+		CoinMultiplier = true,
+		PetXp = true,
+		HatchProgress = true,
+		ScoreBonus = true,
+		Armor = true,
 	},
 }
 

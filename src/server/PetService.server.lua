@@ -51,6 +51,7 @@ if not liveFolder then
 end
 
 local petFolder = ServerStorage:FindFirstChild("Pets")
+local accessoryFolder = ServerStorage:FindFirstChild("Accessories")
 
 -- player -> { [petUid] = { model, primary, stage, petId, index } }
 local followers = {}
@@ -133,6 +134,144 @@ local function buildRig(petConfig, stage)
 		end
 	end
 	return makePlaceholder(petConfig, stage)
+end
+
+-- ============================================================
+-- Gear on the rig
+-- ============================================================
+-- A worn accessory is a model parented into the follower, positioned once and
+-- carried by the same PivotTo that carries everything else. No welds and no
+-- constraints: the rig is anchored, so a joint would be a solver problem where
+-- an offset is arithmetic.
+--
+-- Nothing here requires AccessoryCatalog. Inventory.wornConfigs hands over the
+-- resolved entries, which is the same rule the effects follow: one file knows
+-- what an accessoryId means.
+
+-- An artist's rig, and a generated one once docs/PET_LOOKS_PLAN lands, authors a
+-- <Slot>Attachment and that wins. The fallback is computed from the rig's own
+-- bounding box, which is what puts a crown on the placeholder every pet is
+-- today, at whatever size that placeholder happens to be.
+local function slotCFrame(model, slot, boxCFrame, boxSize)
+	local attachment = model:FindFirstChild(slot .. "Attachment", true)
+	if attachment and attachment:IsA("Attachment") then
+		return attachment.WorldCFrame
+	end
+	local fraction = Config.Accessories.SlotOffsets[slot]
+	if not fraction then
+		return boxCFrame
+	end
+	return boxCFrame * CFrame.new(fraction.X * boxSize.X, fraction.Y * boxSize.Y, fraction.Z * boxSize.Z)
+end
+
+local function makeGearPlaceholder(config)
+	local look = config.placeholder
+
+	-- The Aura slot is never a part. An invisible holder rather than the emitter
+	-- on the body, so the particles sit where the slot says and not wherever the
+	-- rig's PrimaryPart happens to be.
+	if look.shape == "Particle" then
+		local holder = Instance.new("Part")
+		holder.Name = config.id
+		holder.Size = Vector3.new(0.2, 0.2, 0.2)
+		holder.Transparency = 1
+
+		local aura = Config.Accessories
+		local emitter = Instance.new("ParticleEmitter")
+		emitter.Name = "Aura"
+		emitter.Color = ColorSequence.new(look.color)
+		emitter.Size = NumberSequence.new(look.size.X)
+		emitter.Rate = look.rate or 8
+		emitter.Lifetime = NumberRange.new(aura.AuraLifetime[1], aura.AuraLifetime[2])
+		emitter.Speed = NumberRange.new(aura.AuraSpeed[1], aura.AuraSpeed[2])
+		emitter.Drag = aura.AuraDrag
+		emitter.SpreadAngle = Vector2.new(180, 180)
+		emitter.LightEmission = 0.6
+		emitter.Parent = holder
+		return holder
+	end
+
+	local part = Instance.new("Part")
+	part.Name = config.id
+	part.Color = look.color
+	part.Material = Enum.Material.SmoothPlastic
+	part.TopSurface = Enum.SurfaceType.Smooth
+	part.BottomSurface = Enum.SurfaceType.Smooth
+
+	if look.shape == "Ball" then
+		part.Shape = Enum.PartType.Ball
+		part.Size = look.size
+	elseif look.shape == "Cylinder" then
+		-- A cylinder's circular faces point along its X axis, so a ring worn flat
+		-- is sized height-first and laid over. Same turn the ward ring makes.
+		part.Shape = Enum.PartType.Cylinder
+		part.Size = Vector3.new(look.size.Y, look.size.X, look.size.Z)
+	else
+		part.Shape = Enum.PartType.Block
+		part.Size = look.size
+	end
+	return part
+end
+
+local function gearOrientation(config)
+	if config.placeholder.shape == "Cylinder" then
+		return CFrame.Angles(0, 0, math.pi / 2)
+	end
+	return CFrame.new()
+end
+
+local function buildGear(config)
+	if accessoryFolder then
+		local template = accessoryFolder:FindFirstChild(config.model)
+		if template and (template:IsA("Model") or template:IsA("BasePart")) then
+			return template:Clone(), true
+		end
+	end
+	return makeGearPlaceholder(config), false
+end
+
+-- Called before the glow and the ward, and the order is load-bearing: the ward
+-- ring is a disc as wide as the ward itself, so a bounding box measured after it
+-- exists would put a crown thirty studs above the pet.
+local function attachWorn(entry, data, pet)
+	local worn = Inventory.wornConfigs(data, pet)
+	if #worn == 0 then
+		return
+	end
+	local boxCFrame, boxSize = entry.model:GetBoundingBox()
+
+	for _, item in ipairs(worn) do
+		local gear, fromArt = buildGear(item.config)
+		local at = slotCFrame(entry.model, item.slot, boxCFrame, boxSize)
+
+		local placed = true
+		if gear:IsA("Model") then
+			if not gear.PrimaryPart then
+				gear.PrimaryPart = gear:FindFirstChildWhichIsA("BasePart")
+			end
+			if gear.PrimaryPart then
+				gear:PivotTo(at)
+			else
+				placed = false
+				warn("PetService: ServerStorage/Accessories/" .. item.config.model .. " has no BasePart, skipping it")
+			end
+		else
+			-- An artist's part is worn as authored; the placeholder shapes carry the
+			-- one turn a flat ring needs.
+			gear.CFrame = at * (fromArt and CFrame.new() or gearOrientation(item.config))
+		end
+
+		if placed then
+			gear.Name = "Gear_" .. item.slot
+			gear.Parent = entry.model
+		else
+			gear:Destroy()
+		end
+	end
+
+	-- Re-run over the whole rig rather than over each piece: an artist's model can
+	-- arrive unanchored and colliding, and there is one funnel for that already.
+	sterilise(entry.model)
 end
 
 -- Glow is the one ability implemented end to end, and it is a light on the rig
@@ -272,7 +411,7 @@ local function destroyFollower(player, petUid)
 	end
 end
 
-local function spawnFollower(player, pet, index)
+local function spawnFollower(player, data, pet, index, worn)
 	local petConfig = Inventory.petConfig(pet.petId)
 	if not petConfig then
 		return
@@ -288,7 +427,9 @@ local function spawnFollower(player, pet, index)
 		stage = pet.stage,
 		petId = pet.petId,
 		index = index,
+		worn = worn,
 	}
+	attachWorn(entry, data, pet)
 	applyGlow(entry.primary, petConfig, pet.stage)
 	applyWard(entry, petConfig, pet.stage)
 
@@ -316,14 +457,16 @@ local function reconcileFollowers(player)
 	for index, petUid in ipairs(data.equipped) do
 		local pet = data.pets[petUid]
 		if pet and Inventory.petConfig(pet.petId) then
-			wanted[petUid] = { pet = pet, index = index }
+			wanted[petUid] = { pet = pet, index = index, worn = Inventory.wornSignature(data, pet) }
 		end
 	end
 
 	local mine = followers[player] or {}
 	for petUid, entry in pairs(mine) do
 		local want = wanted[petUid]
-		if not want or want.pet.stage ~= entry.stage or want.pet.petId ~= entry.petId then
+		-- Worn gear joins stage and petId in the comparison, so putting a crown on
+		-- rebuilds the one rig wearing it and leaves every other follower alone.
+		if not want or want.pet.stage ~= entry.stage or want.pet.petId ~= entry.petId or want.worn ~= entry.worn then
 			destroyFollower(player, petUid)
 		else
 			entry.index = want.index
@@ -333,7 +476,7 @@ local function reconcileFollowers(player)
 	mine = followers[player] or {}
 	for petUid, want in pairs(wanted) do
 		if not mine[petUid] then
-			spawnFollower(player, want.pet, want.index)
+			spawnFollower(player, data, want.pet, want.index, want.worn)
 		end
 	end
 end
@@ -558,6 +701,74 @@ handlers.lock = function(player, payload)
 	local ok, reason = Inventory.setLocked(data, payload.petUid, payload.locked == true)
 	if not ok then
 		deny(player, "lock", reason)
+		return
+	end
+	pushState(player)
+end
+
+-- Gear intents, validated the way equip is: the client names a uid and a slot
+-- and is told what happened, including when the answer is no. Wearing is allowed
+-- on a benched pet, because gear doing nothing there is a rule about effects and
+-- not a reason to refuse dressing a pet up.
+
+local function petName(data, petUid)
+	local pet = data.pets[petUid]
+	local petConfig = pet and Inventory.petConfig(pet.petId)
+	if not petConfig then
+		return nil
+	end
+	return Inventory.displayName(pet, petConfig)
+end
+
+handlers.wear = function(player, payload)
+	local data = Profiles.data(player)
+	if not data or type(payload.petUid) ~= "string" or type(payload.accessoryUid) ~= "string" then
+		return
+	end
+	local ok, result = Inventory.wear(data, payload.petUid, payload.accessoryUid)
+	if not ok then
+		deny(player, "wear", result)
+		return
+	end
+	reconcileFollowers(player)
+	pushState(player, {
+		kind = "worn",
+		name = result.config.name,
+		slot = result.slot,
+		petName = petName(data, payload.petUid),
+		-- Names the pet that lost it, so moving an item is never silent.
+		takenFrom = result.takenFrom and petName(data, result.takenFrom) or nil,
+	})
+end
+
+handlers.unwear = function(player, payload)
+	local data = Profiles.data(player)
+	if not data or type(payload.petUid) ~= "string" or type(payload.slot) ~= "string" then
+		return
+	end
+	local ok, result = Inventory.unwear(data, payload.petUid, payload.slot)
+	if not ok then
+		deny(player, "unwear", result)
+		return
+	end
+	local instance = data.accessories[result]
+	local config = instance and Inventory.accessoryConfig(instance.accessoryId)
+	reconcileFollowers(player)
+	pushState(player, {
+		kind = "unworn",
+		name = config and config.name or nil,
+		petName = petName(data, payload.petUid),
+	})
+end
+
+handlers.lockAccessory = function(player, payload)
+	local data = Profiles.data(player)
+	if not data or type(payload.accessoryUid) ~= "string" then
+		return
+	end
+	local ok, reason = Inventory.setAccessoryLocked(data, payload.accessoryUid, payload.locked == true)
+	if not ok then
+		deny(player, "lockAccessory", reason)
 		return
 	end
 	pushState(player)

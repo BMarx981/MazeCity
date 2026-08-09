@@ -145,7 +145,10 @@ export type PetInstance = {
 	nickname: string?,
 	acquiredAt: number,
 	sourceEggId: string?,
-	worn: { [AccessorySlot]: string },
+	-- Optional, and it has to be: a pet hatched before gear existed is a row in a
+	-- saved profile with no such field, and `adopt` merges the pets map whole
+	-- rather than per pet. Every reader treats absent as empty.
+	worn: { [AccessorySlot]: string }?,
 }
 
 export type EggInstance = {

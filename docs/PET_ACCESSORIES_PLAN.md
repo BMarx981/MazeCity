@@ -227,11 +227,25 @@ Exercised outside Studio with a stub prelude and the real modules concatenated i
 
 ### Set 2: Wearing and rendering
 
-- [ ] `wear` / `unwear` / `lockAccessory` intents in PetService, validated the way equip already is, refusals named
-- [ ] Attachment and placeholder fallback; worn signature in `reconcileFollowers`
-- [ ] PetGui: Gear tab listing owned items by slot, a wear target picker, worn chips on the pet rows
+**Done.**
+
+- [x] `wear` / `unwear` / `lockAccessory` intents in PetService, validated the way equip already is, refusals named
+- [x] Attachment and placeholder fallback; worn signature in `reconcileFollowers`
+- [x] PetGui: Gear tab listing owned items by slot, a wear target picker, worn chips on the pet rows
 
 Exit: a crown appears on the follower, survives a death respawn, an evolution and a rejoin, and moving it to a second pet says which pet lost it.
+
+Five things settled while building it:
+
+- **`attachWorn` runs before `applyWard`, and that ordering is load-bearing.** The slot fallback measures the rig's bounding box, and the ward ring is a disc as wide as the ward, so a box measured after it exists puts a crown thirty studs over the pet's head. The comment says so at the call site.
+- **The signature names the accessory id, not the uid**, as the plan said, and the consequence is worth stating: swapping one Coin Chain for a second identical one is not a rebuild, which is the point.
+- **Two helpers rather than a catalogue require.** `Inventory.wornConfigs` and `Inventory.wornSignature` are what PetService reads, so invariant 3 holds for rendering the same way it holds for effects: PetService never requires `AccessoryCatalog`.
+- **What a raw `0.25` means in words lives in `Config.Accessories`**, as `EffectLabels` and `EffectPercent`. The projection carries numbers and the catalogue is server-side, so without this the client would keep a second table of what every effect is, which is exactly the drift invariant 3 exists to stop.
+- **`PetInstance.worn` is optional in the types.** A pet hatched before gear existed is a saved row with no such field, and `adopt` merges the pets map whole rather than per pet, so absent-means-empty is the honest contract and every reader keeps it.
+
+The catalogue's placeholder needed one field the data model did not have: `AccessoryPlaceholder.size` is a `Vector3`, not the pet placeholder's scalar, because a cape is flat and wide and a scalar cannot say that. Aura items are particles rather than parts, so they carry `rate` and read `Config.Accessories.AuraLifetime`/`AuraSpeed`/`AuraDrag` for the drift every aura shares.
+
+Harness now at 61 checks, covering the signature, slot ordering, the Aura-is-always-a-particle rule, and that every capped effect has a UI label. The rendering itself is not covered by it and is a Studio check: a `Model:GetBoundingBox` fallback and a `ParticleEmitter` are not things a stub prelude can honestly fake.
 
 ### Set 3: Effects that are one addend each
 

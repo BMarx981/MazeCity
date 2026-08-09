@@ -535,6 +535,36 @@ function Inventory.sellAccessory(data, accessoryUid)
 	return true, { value = Inventory.sellValue(config), config = config }
 end
 
+-- The gear on one pet, resolved and in slot order, as { slot, uid, config }.
+-- PetService builds rigs off this rather than off AccessoryCatalog, which is the
+-- same rule the effects follow: one file knows what an accessoryId means.
+function Inventory.wornConfigs(data, pet)
+	local list = {}
+	if not pet or not pet.worn then
+		return list
+	end
+	for _, slot in ipairs(Config.Accessories.Slots) do
+		local wornUid = pet.worn[slot]
+		local instance = wornUid and data.accessories[wornUid]
+		local config = instance and AccessoryCatalog[instance.accessoryId]
+		if config then
+			table.insert(list, { slot = slot, uid = wornUid, config = config })
+		end
+	end
+	return list
+end
+
+-- What a pet's rig is wearing, as one comparable string. A follower is rebuilt
+-- when this moves, so it names the accessory rather than its uid: swapping one
+-- Coin Chain for a second identical one is not a rebuild anybody can see.
+function Inventory.wornSignature(data, pet)
+	local parts = {}
+	for _, worn in ipairs(Inventory.wornConfigs(data, pet)) do
+		table.insert(parts, worn.slot .. "=" .. worn.config.id)
+	end
+	return table.concat(parts, "|")
+end
+
 -- The one resolver. Everything an accessory does reads this table or the
 -- attribute published from it, and no consumer anywhere reads AccessoryCatalog.
 --
@@ -609,16 +639,9 @@ end
 -- Slot -> { uid, accessoryId, name, rarity }, for the worn chips on a pet row.
 local function wornOf(data, pet)
 	local worn = {}
-	if not pet.worn then
-		return worn
-	end
-	for _, slot in ipairs(Config.Accessories.Slots) do
-		local wornUid = pet.worn[slot]
-		local instance = wornUid and data.accessories[wornUid]
-		local config = instance and AccessoryCatalog[instance.accessoryId]
-		if config then
-			worn[slot] = { uid = wornUid, accessoryId = config.id, name = config.name, rarity = config.rarity }
-		end
+	for _, item in ipairs(Inventory.wornConfigs(data, pet)) do
+		worn[item.slot] =
+			{ uid = item.uid, accessoryId = item.config.id, name = item.config.name, rarity = item.config.rarity }
 	end
 	return worn
 end
