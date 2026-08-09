@@ -171,6 +171,25 @@ local CFG = {
 	ARC_RADIUS = 3.2,
 	ARC_BASE_HEIGHT = 11,
 	ARC_TOP_HEIGHT = 40,
+	BOUNCE_PAD_SIZE = 12,
+	-- Where the row of pads sits across the deck, and how much daylight is left
+	-- between a pad and the crown. The fraction is what the row wants; the
+	-- clearance is what it settles for when the crown is wide enough to reach it,
+	-- and it is measured to the pad edge rather than its centre, so the whole
+	-- launch column is outside the crown and not just the spot underfoot.
+	BOUNCE_PAD_Z_FRAC = 0.3,
+	BOUNCE_PAD_CLEARANCE = 4,
+
+	-- Crown spans, as fractions of the footprint except the water tank, which is
+	-- an absolute width. They are config rather than literals inside buildCrown
+	-- because crownHalfSpan reads them too: the crown is the only thing that
+	-- stands over the middle of the deck, so its widest piece is what the bounce
+	-- pads have to be placed clear of, and a crown that grew without that number
+	-- growing with it would put a ceiling back over them.
+	CROWN_SETBACK_BODY = 0.45,
+	CROWN_SETBACK_CAP = 0.5,
+	CROWN_SPIRE_BASE = 0.22,
+	CROWN_TANK = 34,
 
 	PLOT_COLS = 3,
 	PLOT_ROWS = 2,
@@ -209,7 +228,8 @@ local CFG = {
 	-- so it draws no random numbers (invariant 6) and cost a countable +5
 	-- instances per building rather than reshuffling the city. The middle of the
 	-- deck is the one part of it nothing else uses: the bounce pads sit at
-	-- Z = FZ * 0.3, the planters at 0.75, the sign at 0.92, and the stair hole is
+	-- BOUNCE_PAD_Z_FRAC or nearer the parapet than that, the planters at 0.75,
+	-- the sign at 0.92, and the stair hole is
 	-- always within about 25 studs of an edge because the stairwell is an edge
 	-- cell. It is also where a player stepping off the top of the stairs is
 	-- looking, which is the whole reason the summit is where an egg goes.
@@ -1597,6 +1617,21 @@ local function buildWindows(parent, origin, style, side, doorU)
 	end
 end
 
+-- How far out from the deck centre the crown reaches, at its widest. Every crown
+-- is centred and every piece of one is a box or a cylinder about that centre, so
+-- one number describes the whole keep-out on both axes. Anything placed on the
+-- deck that a player is meant to travel upward through has to clear this.
+local function crownHalfSpan(style)
+	if style.crown == "setback" then
+		return FZ * math.max(CFG.CROWN_SETBACK_BODY, CFG.CROWN_SETBACK_CAP) / 2
+	elseif style.crown == "spire" then
+		return FZ * CFG.CROWN_SPIRE_BASE / 2
+	elseif style.crown == "watertower" then
+		return CFG.CROWN_TANK / 2
+	end
+	return 0
+end
+
 local function buildCrown(parent, origin, style)
 	local topY = ROOF_Y + CFG.PARAPET_HEIGHT
 	local cx, cz = FX / 2, FZ / 2
@@ -1606,7 +1641,7 @@ local function buildCrown(parent, origin, style)
 			parent,
 			"Penthouse",
 			CFrame.new(origin + Vector3.new(cx, topY + 14, cz)),
-			Vector3.new(FX * 0.45, 28, FZ * 0.45),
+			Vector3.new(FX * CFG.CROWN_SETBACK_BODY, 28, FZ * CFG.CROWN_SETBACK_BODY),
 			style.skin,
 			style.material
 		)
@@ -1614,7 +1649,7 @@ local function buildCrown(parent, origin, style)
 			parent,
 			"PenthouseCap",
 			CFrame.new(origin + Vector3.new(cx, topY + 29, cz)),
-			Vector3.new(FX * 0.5, 2, FZ * 0.5),
+			Vector3.new(FX * CFG.CROWN_SETBACK_CAP, 2, FZ * CFG.CROWN_SETBACK_CAP),
 			style.trim,
 			Enum.Material.Metal
 		)
@@ -1626,7 +1661,7 @@ local function buildCrown(parent, origin, style)
 				parent,
 				"Spire" .. i,
 				CFrame.new(origin + Vector3.new(cx, topY + (i - 0.5) * h, cz)),
-				Vector3.new(FX * 0.22 * f, h, FZ * 0.22 * f),
+				Vector3.new(FX * CFG.CROWN_SPIRE_BASE * f, h, FZ * CFG.CROWN_SPIRE_BASE * f),
 				style.skin,
 				style.material
 			)
@@ -1656,7 +1691,7 @@ local function buildCrown(parent, origin, style)
 			parent,
 			"Tank",
 			CFrame.new(origin + Vector3.new(cx, topY + 36, cz)),
-			Vector3.new(34, 34, 34),
+			Vector3.new(CFG.CROWN_TANK, CFG.CROWN_TANK, CFG.CROWN_TANK),
 			style.skin,
 			Enum.Material.CorrodedMetal
 		)
@@ -1926,13 +1961,30 @@ local function buildRoof(parent, origin, hole, style, isExit, ctx)
 	arcs.Name = "CoinArcs"
 	arcs.Parent = deck
 
+	-- The pads are a row across the deck and the crown stands in the middle of it,
+	-- so the two met by construction rather than by chance: the setback's cap is
+	-- half the footprint across and sits 38 studs up, which is a lid over the
+	-- middle pad and inside the arc all three throw through. The row is therefore
+	-- placed at BOUNCE_PAD_Z_FRAC or outboard of whatever the crown actually
+	-- occupies, whichever is nearer the parapet, so the launch column is clear on
+	-- every style rather than on the ones whose crown happens to be narrow. This
+	-- reads a decision generation has already made instead of drawing (invariant
+	-- 6): it moves parts without adding, removing or rolling any, so styles with
+	-- a spire, a water tower or a bare parapet are exactly where they were.
+	local padHalf = CFG.BOUNCE_PAD_SIZE / 2
+	local padZ = math.clamp(
+		FZ / 2 - crownHalfSpan(style) - padHalf - CFG.BOUNCE_PAD_CLEARANCE,
+		padHalf + CFG.BOUNCE_PAD_CLEARANCE,
+		FZ * CFG.BOUNCE_PAD_Z_FRAC
+	)
+
 	for i = 1, 3 do
-		local padCenter = Vector3.new(FX * (0.25 * i), ROOF_Y + 0.6, FZ * 0.3)
+		local padCenter = Vector3.new(FX * (0.25 * i), ROOF_Y + 0.6, padZ)
 		local pad = makePart(
 			deck,
 			"BouncePad",
 			CFrame.new(origin + padCenter),
-			Vector3.new(12, 1.2, 12),
+			Vector3.new(CFG.BOUNCE_PAD_SIZE, 1.2, CFG.BOUNCE_PAD_SIZE),
 			Color3.fromRGB(255, 120, 200),
 			Enum.Material.Neon
 		)
