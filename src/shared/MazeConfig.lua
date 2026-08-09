@@ -1040,11 +1040,20 @@ Config.Juice = {
 	-- the renderer's highlight budget on a long route. The pulse runs from the
 	-- player's end towards the stairs, because a trail that moves says "this way"
 	-- and a trail that sits there only says "here".
-	RouteDotSize = 1.6,
-	RouteDotHeight = 2.5, -- above the floor slab, low enough to read as breadcrumbs
-	RouteDotPulseSeconds = 1.4,
-	RouteDotPulseScale = 2.1,
-	RouteDotFade = 0.25,
+	--
+	-- Each marker is a chevron aimed at the hop after it. Balls said "here" one
+	-- cell at a time and left the direction to the pulse alone, which is a moving
+	-- brightness read across markers 25 studs apart: at a junction, with two hops
+	-- visible, it did not tell you which of them was next. An arrow says it while
+	-- standing still. Sized against CELL rather than to be dainty, for the same
+	-- reason: a 1.6 stud dot in a 25 stud corridor is a speck.
+	RouteArrowLength = 8, -- of one arm, so the chevron spans 2 * L * sin(Spread)
+	RouteArrowThickness = 1.4,
+	RouteArrowSpread = 40, -- degrees each arm sweeps back off the heading
+	RouteArrowHeight = 2.5, -- above the floor slab, low enough to read as breadcrumbs
+	RouteArrowPulseSeconds = 1.4,
+	RouteArrowPulseScale = 1.55, -- the swell has to stay inside its own cell
+	RouteArrowFade = 0.25,
 }
 
 -- ============================================================

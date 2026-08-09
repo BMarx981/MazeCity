@@ -490,9 +490,15 @@ end)
 -- One Highlight over the containing model is what makes them readable through a
 -- wall, which is the entire point of the powerup; adorning one per marker would
 -- run past the renderer's highlight budget on a long route.
+--
+-- A marker is a chevron aimed at the hop after it, not a ball. The pulse alone
+-- was carrying the whole of "which way", and a brightness travelling across
+-- markers a cell apart is not readable as a direction while you are standing at
+-- the junction deciding. Two arms swept back off a shared tip, because that is a
+-- real arrow from every angle a maze camera has and needs no mesh asset.
 
 local revealModel = nil
-local revealDots = {}
+local revealArrows = {}
 -- Two things light this trail now, the Reveal orb and the Trailblazer ability,
 -- and they run on unrelated clocks. So the trail owns a deadline rather than
 -- belonging to whichever effect drew it: a caller extends the deadline and the
@@ -501,8 +507,28 @@ local revealDots = {}
 -- ability read as broken on exactly the floor it was most worth using.
 local revealUntil = 0
 
+-- Both arms live in the hop's own frame, so the pulse is one scale applied to the
+-- offsets and the sizes together and the chevron cannot come apart mid-swell.
+local ARROW_SPREAD = math.rad(Config.Juice.RouteArrowSpread)
+local ARROW_TURN = { CFrame.Angles(0, ARROW_SPREAD, 0), CFrame.Angles(0, -ARROW_SPREAD, 0) }
+-- The tip sits forward of the hop by half the chevron's own depth, so the arrow
+-- is centred on the cell the route named rather than trailing behind it.
+local ARROW_TIP = -Config.Juice.RouteArrowLength * math.cos(ARROW_SPREAD) * 0.5
+
+local function scaleArrow(chevron, scale)
+	local juice = Config.Juice
+	local len = juice.RouteArrowLength * scale
+	local thick = juice.RouteArrowThickness * scale
+	local tip = chevron.base * CFrame.new(0, 0, ARROW_TIP * scale)
+	for i, arm in ipairs(chevron.arms) do
+		arm.Size = Vector3.new(thick, thick, len)
+		arm.CFrame = tip * ARROW_TURN[i] * CFrame.new(0, 0, len * 0.5)
+	end
+	chevron.scale = scale
+end
+
 local function clearReveal()
-	revealDots = {}
+	revealArrows = {}
 	revealUntil = 0
 	if revealModel then
 		revealModel:Destroy()
@@ -536,7 +562,7 @@ local function showReveal(color, seconds)
 	local route = trigger and trigger:GetAttribute("Route")
 	if not route or route == "" then
 		-- No route to draw is not a deadline to hold: a floor whose trigger has not
-		-- replicated yet would otherwise sit with an armed clock and no dots, and
+		-- replicated yet would otherwise sit with an armed clock and no arrows, and
 		-- the next real draw would inherit its leftover.
 		return
 	end
@@ -549,30 +575,51 @@ local function showReveal(color, seconds)
 	-- The trigger is built 4 studs over its slab and the offsets are measured in
 	-- its plane, so the markers come back down from there to breadcrumb height.
 	local origin = trigger.Position
-	local dotY = origin.Y - 4 + juice.RouteDotHeight
+	local markerY = origin.Y - 4 + juice.RouteArrowHeight
 
+	-- The hops are read in full before any of them is drawn, because an arrow
+	-- points at the hop after it and the parse cannot know that one yet.
+	local points = {}
 	for hop in string.gmatch(route, "[^;]+") do
 		local dx, dz = string.match(hop, "^(%-?%d+),(%-?%d+)$")
 		if dx then
-			local dot = Instance.new("Part")
-			dot.Name = "RouteDot"
-			dot.Shape = Enum.PartType.Ball
-			dot.Size = Vector3.new(juice.RouteDotSize, juice.RouteDotSize, juice.RouteDotSize)
-			dot.Position = Vector3.new(origin.X + tonumber(dx), dotY, origin.Z + tonumber(dz))
-			dot.Anchored = true
-			dot.CanCollide = false
-			dot.CanTouch = false
-			dot.CanQuery = false
-			dot.CastShadow = false
-			dot.Material = Enum.Material.Neon
-			dot.Color = color
-			dot.Transparency = juice.RouteDotFade
-			dot.Parent = model
-			table.insert(revealDots, dot)
+			table.insert(points, Vector3.new(origin.X + tonumber(dx), markerY, origin.Z + tonumber(dz)))
 		end
 	end
 
-	if #revealDots == 0 then
+	-- The last hop is the stairwell and has nothing after it to aim at, so it keeps
+	-- the heading it arrived on. Same fallback covers a repeated offset, which is a
+	-- zero-length step no direction can be taken from.
+	local heading = Vector3.new(0, 0, -1)
+	for i, point in ipairs(points) do
+		local nextPoint = points[i + 1]
+		if nextPoint then
+			local step = nextPoint - point
+			if step.Magnitude > 0.01 then
+				heading = step.Unit
+			end
+		end
+
+		local chevron = { base = CFrame.lookAt(point, point + heading), arms = {}, scale = 1 }
+		for j = 1, 2 do
+			local arm = Instance.new("Part")
+			arm.Name = "RouteArrow"
+			arm.Anchored = true
+			arm.CanCollide = false
+			arm.CanTouch = false
+			arm.CanQuery = false
+			arm.CastShadow = false
+			arm.Material = Enum.Material.Neon
+			arm.Color = color
+			arm.Transparency = juice.RouteArrowFade
+			arm.Parent = model
+			chevron.arms[j] = arm
+		end
+		scaleArrow(chevron, 1)
+		table.insert(revealArrows, chevron)
+	end
+
+	if #revealArrows == 0 then
 		model:Destroy()
 		revealUntil = 0
 		return
@@ -591,11 +638,11 @@ local function showReveal(color, seconds)
 	revealModel = model
 end
 
--- The pulse runs from the player's end of the route towards the stairs. A trail
--- that moves says "this way"; a trail that sits still only says "here", and the
--- compass arrow already covers "here".
+-- The pulse runs from the player's end of the route towards the stairs. The
+-- arrows say which way on their own now, so the swell is reinforcement rather
+-- than the only carrier of it: it says how far along the route you are.
 RunService.RenderStepped:Connect(function()
-	local count = #revealDots
+	local count = #revealArrows
 	if count == 0 then
 		return
 	end
@@ -608,13 +655,16 @@ RunService.RenderStepped:Connect(function()
 	end
 
 	local juice = Config.Juice
-	local phase = (os.clock() % juice.RouteDotPulseSeconds) / juice.RouteDotPulseSeconds
-	for i, dot in ipairs(revealDots) do
-		if dot.Parent then
-			local ahead = ((i - 1) / count - phase) % 1
-			local swell = math.max(0, 1 - ahead * 6)
-			local size = juice.RouteDotSize * (1 + (juice.RouteDotPulseScale - 1) * swell)
-			dot.Size = Vector3.new(size, size, size)
+	local phase = (os.clock() % juice.RouteArrowPulseSeconds) / juice.RouteArrowPulseSeconds
+	for i, chevron in ipairs(revealArrows) do
+		local ahead = ((i - 1) / count - phase) % 1
+		local swell = math.max(0, 1 - ahead * 6)
+		local scale = 1 + (juice.RouteArrowPulseScale - 1) * swell
+		-- An arrow is two parts to move where a ball was one to resize, and the
+		-- swell only touches a sixth of a route at a time, so the ones already
+		-- back at rest are left alone rather than rewritten with what they hold.
+		if math.abs(scale - chevron.scale) > 0.005 then
+			scaleArrow(chevron, scale)
 		end
 	end
 end)
