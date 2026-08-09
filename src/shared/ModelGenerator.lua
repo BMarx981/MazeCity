@@ -80,7 +80,17 @@ local DEFAULT_LOOK = {
 	horns = nil,
 	plates = nil,
 	motes = nil,
+	-- Props a type can wear instead of its own body. Only the Mimic has any, and
+	-- they are the one group here that is not a sphere: a crate that bulges is not
+	-- a crate. Built for every entry and left invisible; which one a given Mimic
+	-- shows is a runtime choice its behavior makes from the allowlist on its row.
+	disguises = nil,
 }
+
+-- The prefix build gives a disguise part and disguisesOf reads back. It is here
+-- for the same reason RIGID_NAMES is: two functions in this file may know a part
+-- name and nothing outside it may.
+local DISGUISE_PREFIX = "Disguise"
 
 -- The symmetric rigid pairs, in the order build makes them. rigOf reads them
 -- back by this list rather than by scanning, so a plate and a horn cannot swap
@@ -322,17 +332,40 @@ function ModelGenerator.build(typeName)
 	-- wisp emitter on a destroyed reference is an error at build time.
 	wisp.Parent = trailing
 
-	-- Parented last, so it finds a complete rig and picks up the root part on its
-	-- first pass rather than on a later one.
-	--
 	-- Hover is whichever is greater: the type's own resting height, or enough to
 	-- keep the lowest thing hanging off it clear of the slab at the bottom of the
 	-- bob. The bob is the part that is easy to forget, and it is worth 0.42 studs
 	-- times bobScale on every frame.
 	local swing = juice.EnemyBobHeight * look.bobScale
+	local hipHeight = math.max(look.hover * scale, -lowestSkin + swing + FLOOR_MARGIN)
+
+	-- Props, and the one group that is welded to the root rather than jointed to
+	-- the torso: a disguise must not bob, sway or lean, because all three are the
+	-- tell. Dropped by the rig's own hover so a crate sits on the slab while the
+	-- shade inside it floats, which is why this is built after HipHeight is known
+	-- rather than at a hand-tuned offset.
+	for _, spec in ipairs(look.disguises or {}) do
+		local prop = Instance.new("Part")
+		prop.Name = DISGUISE_PREFIX .. spec.name
+		prop.Size = spec.size
+		prop.Color = spec.color
+		prop.Material = spec.material or Enum.Material.SmoothPlastic
+		prop.Transparency = 0
+		prop.CanCollide = false
+		prop.CanTouch = false
+		prop.CanQuery = false
+		prop.CastShadow = false
+		prop.Massless = true
+		prop.CFrame = root.CFrame * CFrame.new(0, -hipHeight + spec.size.Y / 2, 0)
+		prop.Parent = model
+		weld(root, prop)
+	end
+
+	-- Parented last, so it finds a complete rig and picks up the root part on its
+	-- first pass rather than on a later one.
 	local humanoid = Instance.new("Humanoid")
 	humanoid.RigType = Enum.HumanoidRigType.R6
-	humanoid.HipHeight = math.max(look.hover * scale, -lowestSkin + swing + FLOOR_MARGIN)
+	humanoid.HipHeight = hipHeight
 	humanoid.Parent = model
 
 	model.PrimaryPart = root
@@ -415,6 +448,23 @@ function ModelGenerator.rigOf(model)
 	end
 
 	return { joints = joints, bases = bases, look = ModelGenerator.lookFor(model:GetAttribute("EnemyType")) }
+end
+
+-- The prop parts a rig was built with, keyed by the name its recipe gave them, or
+-- an empty table for a type that wears none. Read back by name here rather than
+-- matched by prefix at the call site, for the same reason rigOf reads the joints:
+-- a Mimic that hunts for "DisguiseCrate" itself keeps working after a recipe stops
+-- making one, and an enemy wearing nothing is invisible rather than obviously
+-- broken.
+function ModelGenerator.disguisesOf(model)
+	local found = {}
+	for _, spec in ipairs(ModelGenerator.lookFor(model:GetAttribute("EnemyType")).disguises or {}) do
+		local part = model:FindFirstChild(DISGUISE_PREFIX .. spec.name)
+		if part then
+			found[spec.name] = part
+		end
+	end
+	return found
 end
 
 -- Recorded when a rig goes live so hiding a Lurker and revealing it again returns

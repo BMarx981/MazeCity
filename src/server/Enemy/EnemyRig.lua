@@ -81,6 +81,17 @@ function EnemyRig.flash(controller, seconds)
 	end)
 end
 
+-- Smoke coming off a crate is not a crate, and smoke rising out of the floor is not
+-- a Burrower being underground. Separate from setHidden because the three types
+-- that vanish do it differently: a Lurker fades, a Mimic is replaced by a prop, and
+-- a Burrower is not there at all.
+function EnemyRig.setWisp(controller, enabled)
+	local wisp = controller.model:FindFirstChild("Wisp", true)
+	if wisp then
+		wisp.Enabled = enabled
+	end
+end
+
 function EnemyRig.setHidden(controller, hidden)
 	controller.hidden = hidden
 	for _, item in ipairs(controller.skin) do
@@ -89,10 +100,21 @@ function EnemyRig.setHidden(controller, hidden)
 			item.part.Transparency = hidden and math.max(base, Config.Juice.EnemyLurkerHiddenTransparency) or base
 		end
 	end
-	local wisp = controller.model:FindFirstChild("Wisp", true)
-	if wisp then
-		wisp.Enabled = not hidden
+	EnemyRig.setWisp(controller, not hidden)
+end
+
+-- Gone rather than faded, and with an exception list: the Mimic keeps the prop it
+-- is wearing visible while the shade inside it is not, and the Burrower keeps
+-- nothing. `hidden` is set alongside, so EnemyCombat refuses a bite from either
+-- for exactly as long as the player cannot see one coming.
+function EnemyRig.setInvisible(controller, invisible, except)
+	controller.hidden = invisible
+	for _, item in ipairs(controller.skin) do
+		if item.part.Parent and not (except and except[item.part]) then
+			item.part.Transparency = invisible and 1 or item.transparency
+		end
 	end
+	EnemyRig.setWisp(controller, not invisible)
 end
 
 -- Tracks whether there is something to growl at, pitching up as it closes. Silent

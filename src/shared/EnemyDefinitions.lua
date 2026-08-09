@@ -24,6 +24,7 @@
 --
 --   walkSpeed       studs/s, sustained. DESIGN value, see the speed note below
 --   unwatchedSpeed  optional second sustained speed, for types that have one
+--   returnSpeed     optional sustained speed for the walk back to its marker
 --   chargeSpeed     optional burst speed, exempt from "slower than the player"
 --   damage          per hit, already the shipped number
 --   health          before the per-level scaling in EnemyFactory
@@ -68,19 +69,20 @@
 -- ============================================================
 -- What is dormant
 -- ============================================================
--- The six types the game ships (Drifter, Stalker, Sentry, Swarmer, Lurker,
--- Charger) are live and their numbers are the playtested ones. The other
--- thirteen have rows and no behavior module yet, so spawning one gets its own
--- silhouette and BaseBehavior, which chases and hits like a Drifter with that
--- row's numbers, until phase E4. Their stats are the brief's, placed into the
--- same bands as the six so that E4 is a module and a silhouette rather than a
--- rebalance.
+-- Every one of the nineteen has a behavior module and a silhouette as of E4. The
+-- six the game meets today (Drifter, Stalker, Sentry, Swarmer, Lurker, Charger)
+-- are still the only ones a generated marker can hold, because a marker's type
+-- comes from its building's style and MazeGenerator names those six; the other
+-- thirteen are reachable through Config.SectionEnemyOverride until E5's spawn
+-- director decides what a floor is populated with. So they are written and
+-- playable, and not yet met by accident.
 --
 -- Whole fields are dormant too, and the list is worth keeping honest because a
 -- number nobody reads looks exactly like a number that is not working:
 --
 --   health, and Config.Enemies.HealthPerLevel with it. Nothing damages an enemy,
---           so MaxHealth is set correctly and read by nobody.
+--           so MaxHealth is set correctly and read by nobody. The Splitter and the
+--           Warden's enrage are the two things waiting on it.
 --   detection  the brief separates noticing a player (detection) from giving up on
 --           one (leash). The system uses leash for both, so an enemy notices from
 --           150 studs where its row says 55. Wiring it makes the whole roster
@@ -88,10 +90,17 @@
 --   memory  seconds it keeps hunting a lost player. A flat 3.5 for everybody,
 --           because that is the number that went through a playtest and Drifter's
 --           6 would quietly make the city more persistent.
---   attackRange, turnSpeed, acceleration, aggroDelay, stunDuration, knockback
+--   turnSpeed, acceleration, aggroDelay, stunDuration
 --           entered from the brief, read by nothing. Each needs a mechanic that
 --           does not exist yet rather than a line of plumbing.
 --   spawnCost, role, spawnable  the spawn director's, at E5.
+--
+-- Two came off that list at E4 and are only partly read, which is worth saying
+-- exactly. attackRange is the Ranged behavior's firing range and is read on the
+-- Spitter alone; every melee type reaches Config.Juice.EnemyTellReach instead,
+-- because how close a hit lands from is a promise the game makes once rather than
+-- per type. knockback is read by the two hits heavy enough to shove you, the
+-- Brute's swing and the Warden's shockwave, and both telegraph first.
 --
 -- They are entered correctly anyway, so that adding the mechanic is adding the
 -- mechanic and not also a data pass.
@@ -420,8 +429,13 @@ types.Charger = {
 }
 
 -- ============================================================
--- The thirteen with rows and no module yet (phase E4)
+-- The thirteen that landed at E4
 -- ============================================================
+-- Same shape as the six above and written to the same rule: the silhouette says
+-- what the thing does before its behavior gets a chance to. A Brute is the widest
+-- thing in the roster and has no tail, a Sprinter is the narrowest and trails
+-- four, a Watcher is one enormous eye on a stalk. None of them is the baseline
+-- shade in a new colour, which is what the whole recipe system exists to avoid.
 
 -- Stationary, sees a long way, and tells everyone. The counterpart to the
 -- Sentry: one owns a doorway by standing in it, this one owns a corridor by
@@ -445,10 +459,34 @@ types.Watcher = {
 	knockback = 3,
 	spawnCost = 3,
 	color = Color3.fromRGB(235, 210, 90),
+	-- One enormous eye on a tall thin body, ringed by a small crown, and no hands
+	-- at all. It is the only silhouette in the roster that is mostly eye, which is
+	-- the entire warning: a thing that does nothing but look at you is a thing that
+	-- has already told somebody.
+	look = {
+		bobScale = 0.3,
+		bobRate = 0.6,
+		head = 1.9,
+		headOffset = 1.9,
+		hood = Vector3.new(2.2, 2.6, 2.2),
+		hoodOffset = 1.6,
+		hoodTransparency = 0.3,
+		core = 0.55,
+		hands = 0,
+		tail = {
+			{ size = 1.1, y = -0.5 },
+			{ size = 0.7, y = -1.15 },
+		},
+		crown = { count = 5, size = Vector3.new(0.22, 0.8, 0.22), radius = 0.75, height = 2.6, tilt = 0.45 },
+		eyeCount = 1,
+		eyeSize = 0.95,
+		eyeDepth = 0.9,
+	},
 	behaviorConfig = {
 		scanArc = 120,
 		scanPeriod = 4,
 		alertRadius = 70,
+		alertSeconds = 6,
 	},
 }
 
@@ -474,6 +512,32 @@ types.Sprinter = {
 	knockback = 2,
 	spawnCost = 3,
 	color = Color3.fromRGB(240, 150, 70),
+	-- Narrow, drawn out along the line it travels, horns swept backward and four
+	-- tail segments streaming behind. Everything about it points the way it is
+	-- going, which is what makes the moment it stops to breathe legible.
+	look = {
+		scale = 0.85,
+		bobScale = 1.1,
+		bobRate = 2.6,
+		head = Vector3.new(1.1, 1.1, 1.6),
+		headOffset = 1.5,
+		hood = Vector3.new(1.7, 1.6, 2.6),
+		hoodOffset = 1.45,
+		hoodTransparency = 0.38,
+		core = 0.6,
+		hands = 0.4,
+		handSpread = 1,
+		handHeight = 0.7,
+		tail = {
+			{ size = Vector3.new(1.1, 0.9, 1.5), y = -0.4 },
+			{ size = Vector3.new(0.85, 0.7, 1.2), y = -1 },
+			{ size = Vector3.new(0.6, 0.5, 0.9), y = -1.55 },
+			{ size = Vector3.new(0.38, 0.34, 0.6), y = -2 },
+		},
+		horns = { size = Vector3.new(0.22, 0.22, 1.5), spread = 0.5, height = 1.7, forward = -0.7, tilt = 0.2 },
+		eyeSize = 0.3,
+		eyeSpread = 0.26,
+	},
 	-- The sprint is a multiplier rather than a second speed, so it scales with the
 	-- difficulty pass like everything else. 12 * 0.9 * 1.35 is 14.6, which is under
 	-- the player's 16: this one is not telegraphed the way a charge is, so it does
@@ -507,6 +571,32 @@ types.Brute = {
 	knockback = 18,
 	spawnCost = 6,
 	color = Color3.fromRGB(70, 120, 80),
+	-- The widest thing in the roster, plated at the shoulders, with no tail to
+	-- stream behind it and hands hanging low. It reads as heavy standing still,
+	-- which is the only thing a player needs to know before deciding to walk.
+	look = {
+		scale = 1.35,
+		bobScale = 0.35,
+		bobRate = 0.6,
+		head = Vector3.new(1.6, 1.2, 1.4),
+		headOffset = 1.15,
+		hood = Vector3.new(3.2, 2.4, 2.8),
+		hoodOffset = 1.1,
+		hoodTransparency = 0.15,
+		core = 1.4,
+		coreOffset = Vector3.new(0, 0.3, -0.3),
+		hands = 0.85,
+		handSpread = 2,
+		handHeight = -0.1,
+		tail = {},
+		plates = { size = Vector3.new(0.7, 1.8, 2.2), spread = 1.7, height = 1.1 },
+		eyeSize = 0.22,
+		eyeSpread = 0.4,
+	},
+	-- swingWindup is three times the melee tell every other type uses, and that is
+	-- the trade the whole type is built on: the hardest hit in the roster, shown for
+	-- long enough that standing in it is a choice. turnLockDuring is how long it
+	-- cannot re-aim afterwards, so stepping around it works.
 	behaviorConfig = {
 		swingWindup = 0.9,
 		turnLockDuring = 0.6,
@@ -534,6 +624,35 @@ types.Spitter = {
 	knockback = 0,
 	spawnCost = 5,
 	color = Color3.fromRGB(160, 110, 200),
+	-- A bulb of a head with three eyes and three motes circling close in. The motes
+	-- are the ammunition and they are the tell: a shape with things orbiting it is
+	-- a shape that can reach you from where it is standing.
+	look = {
+		scale = 0.95,
+		bobScale = 0.7,
+		bobRate = 1.3,
+		head = Vector3.new(1.7, 1.5, 1.7),
+		headOffset = 1.5,
+		hood = Vector3.new(2.4, 2, 2.4),
+		hoodOffset = 1.4,
+		hoodTransparency = 0.3,
+		core = 0.85,
+		hands = 0.45,
+		handSpread = 1.2,
+		handHeight = 0.6,
+		tail = {
+			{ size = 1.2, y = -0.45 },
+			{ size = 0.75, y = -1.1 },
+		},
+		motes = { count = 3, size = 0.36, radius = 1.5, height = 1.9, rate = 2.2 },
+		eyeCount = 3,
+		eyeSize = 0.26,
+		eyeSpread = 0.26,
+	},
+	-- attackRange on the row is the firing range and the Ranged module is the only
+	-- thing in the game that reads it. preferredDistance is where it wants to stand
+	-- and minimumDistance is where it starts backing away, which is what stops the
+	-- one enemy with reach from also being a melee enemy.
 	behaviorConfig = {
 		preferredDistance = 28,
 		minimumDistance = 14,
@@ -566,6 +685,29 @@ types.Blinker = {
 	knockback = 6,
 	spawnCost = 6,
 	color = Color3.fromRGB(185, 140, 235),
+	-- Thin, faint, and orbited by four motes at arm's length. The hood is the most
+	-- transparent in the roster on purpose: it is half here before it goes anywhere,
+	-- so arriving somewhere else is the same thing it was already doing.
+	look = {
+		scale = 0.9,
+		bobScale = 1.2,
+		bobRate = 1.8,
+		head = 1.3,
+		headOffset = 1.7,
+		hood = Vector3.new(1.9, 2.4, 1.9),
+		hoodOffset = 1.55,
+		hoodTransparency = 0.55,
+		core = 0.55,
+		hands = 0.38,
+		handSpread = 1.1,
+		handHeight = 0.8,
+		tail = {
+			{ size = 0.95, y = -0.45 },
+			{ size = 0.6, y = -1.05 },
+		},
+		motes = { count = 4, size = 0.3, radius = 2.4, height = 1.2, rate = 2.6 },
+		eyeSize = 0.28,
+	},
 	behaviorConfig = {
 		blinkCooldown = 5,
 		blinkMinDistance = 12,
@@ -597,6 +739,27 @@ types.Shrieker = {
 	knockback = 0,
 	spawnCost = 4,
 	color = Color3.fromRGB(240, 150, 190),
+	-- A wide flared bell with a ring of spines above it, and no hands. It is shaped
+	-- like the noise it makes, which is the only warning a player gets that this one
+	-- is worth reaching before it reaches everything else.
+	look = {
+		bobScale = 0.9,
+		bobRate = 1.1,
+		head = 1.3,
+		headOffset = 1.7,
+		hood = Vector3.new(3.6, 2.2, 2.2),
+		hoodOffset = 1.5,
+		hoodTransparency = 0.25,
+		core = 0.7,
+		hands = 0,
+		tail = {
+			{ size = 1.2, y = -0.45 },
+			{ size = 0.7, y = -1.1 },
+		},
+		crown = { count = 7, size = Vector3.new(0.2, 0.9, 0.2), radius = 1.5, height = 2.3, tilt = 0.5 },
+		eyeSize = 0.3,
+		eyeSpread = 0.34,
+	},
 	behaviorConfig = {
 		alertRadius = 80,
 		shriekWindup = 0.7,
@@ -626,6 +789,57 @@ types.Mimic = {
 	knockback = 6,
 	spawnCost = 5,
 	color = Color3.fromRGB(225, 185, 90),
+	-- Squat and wide with five small eyes in a row, so the reveal reads as a face
+	-- opening across the whole front of it rather than as a shade stepping out.
+	--
+	-- The disguises are geometry and live here with the rest of the silhouette; the
+	-- names in behaviorConfig are the allowlist the behavior may pick from, and it
+	-- can only ever choose one that appears in both. A prop the rig cannot draw is
+	-- therefore a prop no Mimic wears, rather than an invisible enemy.
+	--
+	-- None of them is a coin, and that is the one hard rule on this type: the game
+	-- spends every floor teaching a kid to grab every coin they can see.
+	look = {
+		scale = 0.95,
+		bobScale = 0.4,
+		bobRate = 1.4,
+		head = Vector3.new(1.8, 1.1, 1.4),
+		headOffset = 1.25,
+		hood = Vector3.new(2.6, 1.6, 2.2),
+		hoodOffset = 1.2,
+		hoodTransparency = 0.2,
+		core = 0.8,
+		hands = 0.5,
+		handSpread = 1.5,
+		handHeight = 0.1,
+		tail = {
+			{ size = 1.1, y = -0.4 },
+		},
+		eyeCount = 5,
+		eyeSize = 0.2,
+		eyeSpread = 0.22,
+		eyeHeight = 0.05,
+		disguises = {
+			{
+				name = "Crate",
+				size = Vector3.new(3.2, 3.2, 3.2),
+				color = Color3.fromRGB(150, 110, 70),
+				material = Enum.Material.WoodPlanks,
+			},
+			{
+				name = "Lamp",
+				size = Vector3.new(1.2, 5.4, 1.2),
+				color = Color3.fromRGB(95, 95, 105),
+				material = Enum.Material.Metal,
+			},
+			{
+				name = "Sign",
+				size = Vector3.new(3.6, 4.2, 0.4),
+				color = Color3.fromRGB(110, 115, 125),
+				material = Enum.Material.Metal,
+			},
+		},
+	},
 	behaviorConfig = {
 		disguises = { "Crate", "Lamp", "Sign" },
 		revealRange = 9,
@@ -654,11 +868,46 @@ types.Warden = {
 	knockback = 10,
 	spawnCost = 9,
 	color = Color3.fromRGB(60, 60, 75),
+	-- The only rig wearing plates and horns at once, at the largest scale in the
+	-- roster, with three eyes rather than two. Everything the other types have one
+	-- of, this has, which is what an elite is supposed to look like from the far end
+	-- of a corridor.
+	look = {
+		scale = 1.3,
+		bobScale = 0.45,
+		bobRate = 0.8,
+		head = 1.5,
+		headOffset = 1.7,
+		hood = Vector3.new(3, 2.6, 2.8),
+		hoodOffset = 1.5,
+		hoodTransparency = 0.18,
+		core = 1.2,
+		coreOffset = Vector3.new(0, 0.35, -0.3),
+		hands = 0.7,
+		handSpread = 1.8,
+		handHeight = 0.3,
+		tail = {
+			{ size = 1.5, y = -0.5 },
+			{ size = 1.05, y = -1.25 },
+			{ size = 0.65, y = -1.9 },
+		},
+		plates = { size = Vector3.new(0.6, 1.6, 2), spread = 1.6, height = 1.15 },
+		horns = { size = Vector3.new(0.28, 0.3, 1.4), spread = 0.6, height = 2.1, forward = 0.6, tilt = -0.15 },
+		eyeCount = 3,
+		eyeSize = 0.34,
+		eyeSpread = 0.3,
+		eyeDepth = 0.8,
+	},
+	-- enrageHealthPercent is dormant with health itself: nothing damages an enemy,
+	-- so the threshold is never crossed. It is wired anyway, because the day a
+	-- weapon exists the Warden should already be the fight it was written to be.
+	-- perBuilding is the director's at E5.
 	behaviorConfig = {
 		shockwaveCooldown = 7,
 		shockwaveRadius = 14,
 		shockwaveWindup = 1,
 		alertRadius = 100,
+		alertSeconds = 8,
 		enrageHealthPercent = 0.35,
 		enrageSpeedMultiplier = 1.2,
 		perBuilding = 1,
@@ -686,6 +935,30 @@ types.Splitter = {
 	knockback = 4,
 	spawnCost = 7,
 	color = Color3.fromRGB(170, 220, 90),
+	-- Round, and carrying two motes big enough to read as halves rather than as
+	-- sparks. Four small eyes across it, which is two faces' worth on one body.
+	look = {
+		scale = 1.05,
+		bobScale = 0.85,
+		bobRate = 1.5,
+		head = 1.4,
+		headOffset = 1.5,
+		hood = Vector3.new(2.9, 2.5, 2.6),
+		hoodOffset = 1.4,
+		hoodTransparency = 0.32,
+		core = 1,
+		hands = 0.45,
+		handSpread = 1.45,
+		handHeight = 0.35,
+		tail = {
+			{ size = 1.3, y = -0.5 },
+			{ size = 0.8, y = -1.15 },
+		},
+		motes = { count = 2, size = 0.75, radius = 1.7, height = 0.9, rate = 1.1 },
+		eyeCount = 4,
+		eyeSize = 0.24,
+		eyeSpread = 0.24,
+	},
 	behaviorConfig = {
 		childType = "SplitterChild",
 		childCount = 2,
@@ -751,8 +1024,38 @@ types.Shadow = {
 	knockback = 5,
 	spawnCost = 7,
 	color = Color3.fromRGB(85, 65, 110),
+	-- Tall, narrow and the least transparent hood in the roster, because the whole
+	-- type turns on a material change and a translucent statue does not read as
+	-- stone. Bright eyes on a dark body so that the thing which is definitely not
+	-- moving is still definitely looking.
+	look = {
+		scale = 1.05,
+		bobScale = 0.6,
+		bobRate = 0.9,
+		head = Vector3.new(1, 1.4, 1),
+		headOffset = 2,
+		hood = Vector3.new(1.7, 3.2, 1.7),
+		hoodOffset = 1.9,
+		hoodTransparency = 0.12,
+		core = 0.5,
+		hands = 0.34,
+		handSpread = 0.85,
+		handHeight = 0.2,
+		tail = {
+			{ size = Vector3.new(1, 1.2, 1), y = -0.5 },
+			{ size = Vector3.new(0.7, 0.9, 0.7), y = -1.35 },
+			{ size = Vector3.new(0.45, 0.6, 0.45), y = -2 },
+		},
+		eyeSize = 0.26,
+		eyeSpread = 0.2,
+		eyeDepth = 0.55,
+	},
 	-- Character facing, server side. There is no client look-direction remote at
 	-- all, so there is nothing to validate and nothing to spoof.
+	--
+	-- minimumMoveDistanceWhileUnseen is what stops it stuttering on the threshold:
+	-- once it starts moving it covers at least this far before being allowed to
+	-- freeze again, so glancing away and back does not produce a twitch.
 	behaviorConfig = {
 		lookDotThreshold = 0.75,
 		minimumMoveDistanceWhileUnseen = 4,
@@ -780,6 +1083,30 @@ types.Trapper = {
 	knockback = 2,
 	spawnCost = 6,
 	color = Color3.fromRGB(230, 170, 70),
+	-- Low, wide, big-handed, with four tendrils hanging under it. It is the shape of
+	-- something that keeps reaching down to the floor, which is where everything it
+	-- does happens.
+	look = {
+		scale = 0.95,
+		bobScale = 0.55,
+		bobRate = 1.2,
+		head = Vector3.new(1.5, 1.1, 1.3),
+		headOffset = 1.3,
+		hood = Vector3.new(2.8, 1.7, 2.4),
+		hoodOffset = 1.25,
+		hoodTransparency = 0.3,
+		core = 0.75,
+		hands = 0.62,
+		handSpread = 1.6,
+		handHeight = 0.05,
+		tail = {
+			{ size = 1.2, y = -0.4 },
+		},
+		crown = { count = 4, size = Vector3.new(0.2, 1.2, 0.2), radius = 1.1, height = -1.1, tilt = -0.2 },
+		eyeCount = 3,
+		eyeSize = 0.24,
+		eyeSpread = 0.26,
+	},
 	behaviorConfig = {
 		trapCooldown = 5,
 		maxTraps = 3,
@@ -812,6 +1139,30 @@ types.Burrower = {
 	knockback = 8,
 	spawnCost = 6,
 	color = Color3.fromRGB(150, 110, 80),
+	-- The only rig that hovers lower than the baseline, drawn forward along its own
+	-- horns so they read as claws rather than as a crest. No tail: there is nothing
+	-- trailing behind something that spends half its time under the floor.
+	look = {
+		scale = 1.05,
+		bobScale = 0.3,
+		bobRate = 1,
+		hover = 1.6,
+		head = Vector3.new(1.3, 1.1, 1.8),
+		headOffset = 1.1,
+		hood = Vector3.new(2.4, 1.5, 2.8),
+		hoodOffset = 1.05,
+		hoodTransparency = 0.22,
+		core = 0.8,
+		coreOffset = Vector3.new(0, 0.2, -0.35),
+		hands = 0.6,
+		handSpread = 1.3,
+		handHeight = -0.15,
+		tail = {},
+		horns = { size = Vector3.new(0.32, 0.7, 1.6), spread = 0.75, height = 0.9, forward = 0.85, tilt = 0.35 },
+		eyeSize = 0.24,
+		eyeSpread = 0.26,
+		eyeHeight = -0.05,
+	},
 	behaviorConfig = {
 		burrowCooldown = 6,
 		burrowDuration = 2,
@@ -828,6 +1179,14 @@ types.Gatekeeper = {
 	behavior = Behavior.Guard,
 	role = Role.Heavy,
 	walkSpeed = 8,
+	-- It hurries back to its post and nowhere else, which is what makes going around
+	-- one work: the door closes behind you rather than following you through.
+	--
+	-- A row field rather than a behaviorConfig multiplier, and for the reason
+	-- unwatchedSpeed is one: a second sustained speed has to go through
+	-- EnemyFactory's clamp and the difficulty pass like the first, and a multiplier
+	-- sitting in a behavior block would reach the humanoid without either.
+	returnSpeed = 11,
 	damage = 24,
 	health = 130,
 	leash = 65,
@@ -842,8 +1201,29 @@ types.Gatekeeper = {
 	knockback = 12,
 	spawnCost = 7,
 	color = Color3.fromRGB(135, 135, 125),
-	behaviorConfig = {
-		returnSpeedMultiplier = 1.3,
+	-- Tall, flat and plated, with a short crown and four eyes across it: a door
+	-- standing in a doorway. No tail, because nothing about it is going anywhere.
+	look = {
+		scale = 1.2,
+		bobScale = 0.2,
+		bobRate = 0.45,
+		head = Vector3.new(1.5, 1.3, 1.2),
+		headOffset = 1.35,
+		hood = Vector3.new(3.2, 2.6, 2),
+		hoodOffset = 1.3,
+		hoodTransparency = 0.16,
+		core = 1.1,
+		coreOffset = Vector3.new(0, 0.3, -0.2),
+		hands = 0.6,
+		handSpread = 1.9,
+		handHeight = 0.1,
+		tail = {},
+		plates = { size = Vector3.new(0.6, 2, 1.6), spread = 1.75, height = 1.05 },
+		crown = { count = 3, size = Vector3.new(0.3, 0.9, 0.3), radius = 0.8, height = 2.4, tilt = 0.2 },
+		eyeCount = 4,
+		eyeSize = 0.22,
+		eyeSpread = 0.26,
+		eyeDepth = 0.65,
 	},
 }
 

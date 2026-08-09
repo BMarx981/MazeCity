@@ -9,44 +9,44 @@
 --             undoes exactly what it did. Nil for a status that is only ever read.
 --
 -- The one rule the shape enforces: a status never writes a permanent value. It
--- records what it found, applies its own, and puts back what it recorded. Two
--- systems that each set WalkSpeed absolutely will eventually overlap, and the
--- loser leaves a player slowed for the rest of the session. PickupService's Speed
--- boost is the system it will overlap with, and it uses the same discipline.
+-- records what it found, applies its own, and puts back what it recorded.
 --
--- Two rows, and that is deliberate. The brief also names Reveal and Marked, and
--- both arrive with the type that applies them (a Watcher marks, a Shrieker
--- reveals) at E4. A status nothing applies is a row nobody can check.
+-- Both shipped rows are read rather than applied, and the row that is not here is
+-- the reason worth reading. E2 wrote a Slow that scaled a Humanoid's WalkSpeed and
+-- restored the value it found. Sprint landed after it and brought WalkSpeedResolver,
+-- which is now the only writer of a player's WalkSpeed and the only reason Fast
+-- Feet, a Speed orb, a phase and a sprint compose; a status doing its own
+-- record-and-restore beside it is exactly the last-writer-wins the resolver exists
+-- to end. So E4's Spitter and Trapper, the first things in the game that slow
+-- anybody, spend a named resolver factor in EnemyCombat instead, and Slow is not a
+-- row. onApply stays supported for a status that genuinely owns its own value; the
+-- test for a new one is whether anything else already owns the thing it writes.
+--
+-- The brief also names Marked, and it is deliberately not here either. Nothing E4
+-- ships applies one: a Watcher that spots you tells the floor where you are, which
+-- is EnemyAlert, and a status nothing applies is a row nobody can check.
 
 local StatusDefinitions = {}
 
 local statuses = {}
 
--- Scales walk speed by magnitude and restores the value it found rather than
--- recomputing one. The value found may itself be a powerup's, and dividing back
--- out gets that wrong the moment the powerup expires first.
-statuses.Slow = {
-	target = "Humanoid",
-	stacks = "Replace",
-	onApply = function(instance, magnitude)
-		local humanoid = instance:IsA("Humanoid") and instance or instance:FindFirstChildOfClass("Humanoid")
-		if not humanoid then
-			return nil
-		end
-		local was = humanoid.WalkSpeed
-		humanoid.WalkSpeed = was * math.clamp(magnitude or 0.5, 0, 1)
-		return function()
-			if humanoid.Parent then
-				humanoid.WalkSpeed = was
-			end
-		end
-	end,
-}
-
 -- Read rather than applied: EnemyController halts a stunned rig and skips its
 -- behavior for the duration. Nothing is written to the Humanoid, because a stun
 -- that sets WalkSpeed fights whatever the behavior sets on the tick it ends.
 statuses.Stun = {
+	target = "Any",
+	stacks = "Refresh",
+}
+
+-- A Shrieker's answer to hiding. Read in exactly one place, EnemyTargeting's
+-- visibility test, where it overrides the Ghost powerup and the Cloak ability for
+-- as long as it lasts.
+--
+-- It is Refresh rather than Replace because two Shriekers on a floor should extend
+-- one reveal rather than restart it, and it is short and telegraphed on purpose:
+-- cancelling something a player bought is fair only while they can see what did it
+-- and walk away from that instead.
+statuses.Revealed = {
 	target = "Any",
 	stacks = "Refresh",
 }

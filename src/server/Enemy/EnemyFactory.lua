@@ -51,7 +51,7 @@ PhysicsService:CollisionGroupSetCollidable(EnemyFactory.CollisionGroup, MazeGene
 -- cap. Named rather than inferred from the field name, because "anything ending
 -- in Speed" would silently start clamping a multiplier the day somebody adds
 -- sprintSpeedMultiplier to a row instead of to its behaviorConfig.
-local SUSTAINED_SPEEDS = { "walkSpeed", "unwatchedSpeed" }
+local SUSTAINED_SPEEDS = { "walkSpeed", "unwatchedSpeed", "returnSpeed" }
 local BURST_SPEEDS = { "chargeSpeed" }
 
 -- Always a table on a runtime copy, so a behaviour can read

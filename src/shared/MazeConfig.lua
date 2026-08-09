@@ -913,6 +913,11 @@ Config.Sounds = {
 	EnemyGrowl = "rbxasset://sounds/bass.mp3", -- looping low drone, louder and higher the closer the enemy is
 	EnemyAlert = "rbxasset://sounds/impact_water.mp3", -- one-shot on acquiring a target, and on a Lurker revealing
 	EnemyCharge = "rbxasset://sounds/action_jump.mp3", -- one-shot under a Charger's windup, pitched down
+	-- The two E4 types that make a noise nothing else makes. Everything else added
+	-- in that phase reuses one of the three above, pitched: a Spitter and a Blinker
+	-- both read as an alert, and a Warden's slam is the charge thump.
+	EnemyShriek = "rbxasset://sounds/impact_water.mp3", -- one-shot at the end of a Shrieker's windup, pitched hard down
+	EnemySlam = "rbxasset://sounds/action_jump.mp3", -- one-shot as a Warden's shockwave lands
 	PhantomPass = "rbxasset://sounds/impact_water.mp3", -- soft bloop on phasing through a phantom wall
 	CoinPickup = "rbxasset://sounds/electronicpingshort.wav", -- the same ping, pitched well up so a coin never reads as a floor clear
 	PowerupPickup = "rbxasset://sounds/electronicpingshort.wav",
@@ -980,6 +985,17 @@ Config.Juice = {
 	EnemyWispTexture = "rbxasset://textures/particles/smoke_main.dds",
 	EnemyWispRate = 7,
 	EnemyLurkerHiddenTransparency = 0.88, -- what an unrevealed Lurker fades its body to
+	-- The things E4's types leave lying around: a Spitter's bolt, a Trapper's
+	-- snare, a Blinker's arrival mark, a Burrower's mound, a Warden's ring. Their
+	-- sizes and lifetimes are on the rows, since a trap's radius is what the type
+	-- is; only how they are drawn is here, and every one of them is drawn in its
+	-- own enemy's colour so that a thing on the floor names what put it there.
+	EnemyProjectileTransparency = 0.1,
+	EnemyTrapTransparency = 0.42,
+	EnemyTrapHeight = 0.4, -- studs above the slab a snare disc sits
+	EnemyMarkerTransparency = 0.55, -- blink arrival marks and burrow mounds
+	EnemyShockwaveSeconds = 0.35, -- how long the ring is drawn for after it lands
+	EnemyStatueMaterial = Enum.Material.Slate, -- a Shadow held still by being watched
 	PhantomSparkleVolume = 0.35,
 	PhantomSparkleSeconds = 0.7,
 	PhantomSparkleParticles = 28,

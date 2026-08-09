@@ -27,6 +27,8 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Config = require(ReplicatedStorage:WaitForChild("MazeConfig"))
 
+local EnemyStatusService = require(script.Parent:WaitForChild("EnemyStatusService"))
+
 local EnemyTargeting = {}
 
 -- One shared RaycastParams rewritten per call. Safe for the same reason
@@ -88,9 +90,18 @@ end
 -- Both are deliberately not walk-through-walls: in a game with no combat, not
 -- being chased is the whole of what hiding needs to be, and it cannot strand a
 -- player outside the maze.
+--
+-- The Revealed status is the one thing that beats either, and it is the whole of
+-- what a Shrieker does. It is checked first rather than folded into the same
+-- expression so that the precedence is stated: a reveal outranks hiding, it does
+-- not clear it, so an orb taken before the shriek is still running when the reveal
+-- lapses. Neither writer ever sees the other's flag.
 function EnemyTargeting.isCharacterVisible(character, humanoid)
 	if humanoid == nil or humanoid.Health <= 0 then
 		return false
+	end
+	if EnemyStatusService.has(character, "Revealed") then
+		return true
 	end
 	return not character:GetAttribute("Unseen") and not character:GetAttribute("Cloaked")
 end

@@ -33,6 +33,7 @@ local EnemyTypes = require(ReplicatedStorage:WaitForChild("EnemyTypes"))
 local ModelGenerator = require(ReplicatedStorage:WaitForChild("ModelGenerator"))
 
 local EnemyCombat = require(script.Parent:WaitForChild("EnemyCombat"))
+local EnemyFactory = require(script.Parent:WaitForChild("EnemyFactory"))
 local EnemyPathfinding = require(script.Parent:WaitForChild("EnemyPathfinding"))
 local EnemyRig = require(script.Parent:WaitForChild("EnemyRig"))
 local EnemyStateMachine = require(script.Parent:WaitForChild("EnemyStateMachine"))
@@ -42,16 +43,25 @@ local EnemyTargeting = require(script.Parent:WaitForChild("EnemyTargeting"))
 local Behaviors = script.Parent:WaitForChild("Behaviors")
 local BaseBehavior = require(Behaviors:WaitForChild("BaseBehavior"))
 
--- Keyed by EnemyTypes.Behavior. Nine of the fourteen names have no module yet;
--- a row naming one gets BaseBehavior, which chases and hits like the baseline
--- rather than standing there, and warns once so a missing module is a message and
--- not a mystery.
+-- Keyed by EnemyTypes.Behavior, and complete as of E4: all fourteen names have a
+-- module. The fallback stays, because a row naming a behavior this table has no
+-- entry for should chase and hit like the baseline rather than stand there, and
+-- warn once so a missing module is a message and not a mystery.
 local MODULES = {
 	[EnemyTypes.Behavior.Chaser] = require(Behaviors:WaitForChild("Chaser")),
 	[EnemyTypes.Behavior.Guard] = require(Behaviors:WaitForChild("Guard")),
 	[EnemyTypes.Behavior.Swarmer] = require(Behaviors:WaitForChild("Swarmer")),
 	[EnemyTypes.Behavior.Ambusher] = require(Behaviors:WaitForChild("Ambusher")),
 	[EnemyTypes.Behavior.Charger] = require(Behaviors:WaitForChild("Charger")),
+	[EnemyTypes.Behavior.Ranged] = require(Behaviors:WaitForChild("Ranged")),
+	[EnemyTypes.Behavior.Blinker] = require(Behaviors:WaitForChild("Blinker")),
+	[EnemyTypes.Behavior.Shrieker] = require(Behaviors:WaitForChild("Shrieker")),
+	[EnemyTypes.Behavior.Mimic] = require(Behaviors:WaitForChild("Mimic")),
+	[EnemyTypes.Behavior.Splitter] = require(Behaviors:WaitForChild("Splitter")),
+	[EnemyTypes.Behavior.Shadow] = require(Behaviors:WaitForChild("Shadow")),
+	[EnemyTypes.Behavior.Trapper] = require(Behaviors:WaitForChild("Trapper")),
+	[EnemyTypes.Behavior.Burrower] = require(Behaviors:WaitForChild("Burrower")),
+	[EnemyTypes.Behavior.Warden] = require(Behaviors:WaitForChild("Warden")),
 }
 local warnedMissing = {}
 
@@ -113,6 +123,13 @@ function EnemyController.new(model, stats, context)
 	self.lastSeen = nil
 	self.searchUntil = nil
 	self.leashMultiplier = 1
+	-- What a behavior scales its own chase speed by, for the length of whatever it
+	-- is doing. A Sprinter's burst and its exhaustion are both this, and it is a
+	-- multiplier the controller owns rather than a WalkSpeed a module writes for the
+	-- same reason WalkSpeedResolver exists on the player side: the product has to go
+	-- through EnemyFactory's clamp, and a module that writes the humanoid directly
+	-- is a module that can put an enemy past the player's own speed.
+	self.speedMultiplier = 1
 	self.windingUp = false
 	self.flashing = false
 	self.hidden = false
@@ -212,6 +229,9 @@ end
 
 function EnemyController:stop()
 	self.alive = false
+	-- Before the connections go, because a behavior tearing down what it left in the
+	-- world may want to read the rig it left it around.
+	self.behavior.onStopped(self)
 	for _, connection in ipairs(self.connections) do
 		connection:Disconnect()
 	end
@@ -283,12 +303,25 @@ end
 -- Walk speed for this tick. An unwatchedSpeed on the row is the whole of what
 -- makes a Stalker a Stalker: it is data rather than a behavior branch, so
 -- Sprinter and Brute ride the same module without one.
+--
+-- The clamp is applied to the product and not just to the row, which is the point
+-- of taking the multiplier here: a Sprinter's 1.35 over an already capped 15 would
+-- otherwise be the one thing in the game that outruns a player without ever having
+-- shown them a line to sidestep.
 function EnemyController:chaseSpeed(target)
 	local stats = self.stats
+	local speed = stats.walkSpeed
 	if stats.unwatchedSpeed and not EnemyTargeting.isWatched(self, target) then
-		return stats.unwatchedSpeed
+		speed = stats.unwatchedSpeed
 	end
-	return stats.walkSpeed
+	return EnemyFactory.clampSpeed(speed * (self.speedMultiplier or 1))
+end
+
+-- The walk back to its marker. A row may name its own, which is how a Gatekeeper
+-- shuts its door faster than it patrols it; everything else walks home at the speed
+-- it walks everywhere else.
+function EnemyController:returnSpeed()
+	return self.stats.returnSpeed or self.stats.walkSpeed
 end
 
 function EnemyController:acquire(target)
@@ -411,7 +444,7 @@ function EnemyController:tick(dt)
 
 	if flatTo(self.root.Position, self.home).Magnitude > RETURN_RADIUS then
 		self.machine:transition(State.Return)
-		self.humanoid.WalkSpeed = stats.walkSpeed
+		self.humanoid.WalkSpeed = self:returnSpeed()
 		self.path:moveTo(self.home)
 		if self.path:isStuck() then
 			self:goHome()

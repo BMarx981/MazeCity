@@ -6,8 +6,9 @@
 -- freeze deadline, the stun and the attack tell are written once and cannot be
 -- forgotten by a module that only meant to change how something walks.
 --
--- The hook set was written at E0 from the brief and revised at E2 against the
--- five behaviors the game actually ships. Four hooks were added and one changed
+-- The hook set was written at E0 from the brief, revised at E2 against the five
+-- behaviors the game shipped then, and gained onStopped at E4 when behaviors
+-- started leaving things in the world. Four hooks were added at E2 and one changed
 -- meaning, and both are worth knowing about:
 --
 --   update now returns a claim. A Charger mid-rush owns its ticks outright and
@@ -78,6 +79,16 @@ end
 function BaseBehavior.onDamaged(_controller, _amount, _source) end
 
 function BaseBehavior.onDeath(_controller, _source) end
+
+-- The rig is going away: destroy anything this behavior left in the world that is
+-- not part of it. Added at E4, which is the phase that gave behaviors things to
+-- leave: a Trapper's snares, a Spitter's bolts in flight, a Blinker's arrival mark.
+--
+-- It runs from the controller's stop, so it covers the ordinary case as well as
+-- death. That is the case that matters: a player walking away is how almost every
+-- enemy in the city ends, and a snare outliving the thing that set it is a snare
+-- nobody can connect to anything.
+function BaseBehavior.onStopped(_controller) end
 
 -- A concrete behavior writes only what makes it different. The result is a flat
 -- copy rather than an __index chain so that every hook is present on every

@@ -9,6 +9,7 @@
 --   ReplicatedStorage.ModelGenerator     the rig builder
 --   ReplicatedStorage.EnemyTypes         the names, states and roles
 --   Enemy/EnemyFactory                   template, runtime stats, the speed cap
+--   Enemy/EnemySpawner                   the one way an enemy comes to life
 --   Enemy/EnemyController                one per rig: the tick and the state
 --   Enemy/Behaviors/*                    what each type does with that tick
 --   Enemy/EnemyRegistry                  every live controller, keyed by marker
@@ -34,10 +35,9 @@ local RunService = game:GetService("RunService")
 local Config = require(ReplicatedStorage:WaitForChild("MazeConfig"))
 
 local Enemy = script.Parent:WaitForChild("Enemy")
-local EnemyController = require(Enemy:WaitForChild("EnemyController"))
-local EnemyFactory = require(Enemy:WaitForChild("EnemyFactory"))
 local EnemyRegistry = require(Enemy:WaitForChild("EnemyRegistry"))
 local EnemyRig = require(Enemy:WaitForChild("EnemyRig"))
+local EnemySpawner = require(Enemy:WaitForChild("EnemySpawner"))
 
 -- Every marker in the city, whether or not it currently holds a rig, and the
 -- markers whose enemy died and are serving out their respawn delay.
@@ -65,41 +65,24 @@ local function spawnFromMarker(marker)
 	local level = marker:GetAttribute("Level") or 0
 	local enemyType = Config.resolveEnemyType(section, marker:GetAttribute("EnemyType"))
 
-	-- The rig, its joint data, and a stat copy with the speed cap and the difficulty
-	-- multipliers already spent. Every read downstream goes through that copy: a
-	-- walkSpeed read off the definitions row is the design value and eleven percent
-	-- fast.
-	local model, anim, stats = EnemyFactory.create(enemyType, marker.CFrame, { section = section, level = level })
-	if not model then
-		return false
-	end
-
-	local controller = EnemyController.new(model, stats, {
-		anim = anim,
+	-- Arming the respawn is this file's business and not the controller's: the
+	-- controller knows it died, this knows that a marker is now empty and for how
+	-- long. An ordinary walk-away despawn goes through despawn() and never gets here,
+	-- so a player who steps off a floor and comes straight back does not find it
+	-- empty for the whole delay.
+	local controller = EnemySpawner.spawn(enemyType, marker.CFrame, {
+		key = marker,
 		marker = marker,
 		home = marker.Position,
 		section = section,
 		building = building,
 		level = level,
+		onDied = function()
+			deadUntil[marker] = os.clock() + Config.Enemies.RespawnSeconds
+			despawn(marker)
+		end,
 	})
-	if not controller then
-		model:Destroy()
-		return false
-	end
-
-	-- Arming the respawn is the registry's business and not the controller's: the
-	-- controller knows it died, this knows that a marker is now empty and for how
-	-- long. An ordinary walk-away despawn goes through despawn() and never gets here,
-	-- so a player who steps off a floor and comes straight back does not find it
-	-- empty for the whole delay.
-	controller.onDied = function()
-		deadUntil[marker] = os.clock() + Config.Enemies.RespawnSeconds
-		despawn(marker)
-	end
-
-	EnemyRegistry.add(marker, controller)
-	controller:start()
-	return true
+	return controller ~= nil
 end
 
 -- ============================================================

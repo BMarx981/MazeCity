@@ -39,6 +39,56 @@ local STUCK_GIVE_UP = 4
 local EnemyPathfinding = {}
 EnemyPathfinding.__index = EnemyPathfinding
 
+-- ============================================================
+-- Where a thing may appear
+-- ============================================================
+-- Two questions the types that arrive somewhere rather than walk there have to
+-- ask: is the line to it clear, and is there floor under it. A Blinker, a Burrower
+-- and a Trapper all ask, and they ask here rather than each raycasting for
+-- themselves, because a destination check written four times is three chances to
+-- forget the filter and put an enemy inside a wall.
+--
+-- It is not a contradiction of the note above about teleporting. That one is about
+-- the give-up teleport home, which is a last resort and not navigation; these are
+-- how a move that is supposed to cross a wall proves it may.
+--
+-- E5's safe zones are the third question and belong in exactly these two functions:
+-- nothing may arrive inside one, and there is nowhere else every arrival passes
+-- through.
+
+local reachParams = RaycastParams.new()
+reachParams.FilterType = Enum.RaycastFilterType.Exclude
+reachParams.RespectCanCollide = true
+
+-- Rebuilt per call and each entry guarded, on the same reasoning as
+-- EnemyTargeting's: a nil in this list is a hole in an array the engine reads by
+-- length, and it drops whatever came after it out of the filter.
+local function worldFilter()
+	local filter = {}
+	for _, name in ipairs({ "LiveEnemies", "LivePets", "EnemyEffects" }) do
+		local folder = workspace:FindFirstChild(name)
+		if folder then
+			table.insert(filter, folder)
+		end
+	end
+	return filter
+end
+
+function EnemyPathfinding.isClearBetween(from, to)
+	reachParams.FilterDescendantsInstances = worldFilter()
+	return workspace:Raycast(from, to - from, reachParams) == nil
+end
+
+-- The point of floor under a position, or nil if there is none within `drop`
+-- studs. nil is the answer that matters: it is a stairwell shaft, the gap outside
+-- the facade, or thin air over the plaza, and something about to appear there
+-- should not.
+function EnemyPathfinding.groundBelow(position, drop)
+	reachParams.FilterDescendantsInstances = worldFilter()
+	local hit = workspace:Raycast(position, Vector3.new(0, -(drop or 12), 0), reachParams)
+	return hit and hit.Position or nil
+end
+
 function EnemyPathfinding.new(controller)
 	local self = setmetatable({}, EnemyPathfinding)
 	self.controller = controller
