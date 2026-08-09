@@ -144,7 +144,7 @@ Exit: equip the ward pet, walk a floor with enemies on it, watch them turn aroun
 
 - Pet **release** does not exist, so a full pet shelf is unblocked only by raising the cap. `Inventory.setLocked` is in place for the day it does.
 - Nicknames cannot be tested in a Studio session without text filtering: `TextService:FilterStringAsync` failing is treated as a refusal, which is the safe direction for a string other players read.
-- `ServerStorage/Pets/<model>` is empty, so every pet is a coloured placeholder. That is the same bargain enemies strike and needs no code change to undo.
+- `ServerStorage/Pets/<model>` is empty, so every pet is a coloured placeholder. That is the same bargain enemies strike and needs no code change to undo. PET_LOOKS_PLAN.md now covers replacing the placeholder side of that bargain with procedural rigs, the way ModelGenerator did for enemies; the artist-model-wins-by-name half is unchanged.
 
 ## Later clutches (unscheduled)
 
