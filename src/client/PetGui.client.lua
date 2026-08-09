@@ -124,9 +124,9 @@ end
 -- notices that in Studio with chat closed.
 --
 -- Mid-left is the corner-free spot on every device. The rest of the screen is
--- spoken for: TimerGui's chips and the sprint meter run down the right edge, the
--- floor panel is top centre, the ability bar is bottom centre, and on a phone the
--- bottom two corners are the thumbstick and the jump button.
+-- spoken for: TimerGui's chips and the ability bar run down the right edge, the
+-- floor panel is top centre, the sprint meter is the bottom right corner, and on
+-- a phone the bottom two corners are the thumbstick and the jump button.
 
 local toggle = button(gui, UDim2.fromOffset(112, 40), UDim2.new(0, 16, 0.5, 0), "PETS", PANEL)
 toggle.AnchorPoint = Vector2.new(0, 0.5)

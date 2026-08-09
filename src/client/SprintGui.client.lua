@@ -12,7 +12,10 @@
 -- shift-lock camera for anyone who has that switch enabled.
 --
 -- Unlike the Wall Walker chip this one never hides. Sprint is not bought, so
--- there is no unowned state and no capacity of zero to key visibility off.
+-- there is no unowned state and no capacity of zero to key visibility off. That
+-- is also why it sits in its own corner rather than in the right column: the
+-- column is readouts and bought things, and the ability bar now holds the slot
+-- this chip used to.
 
 local ContextActionService = game:GetService("ContextActionService")
 local Players = game:GetService("Players")
@@ -27,6 +30,7 @@ local intents = ReplicatedStorage:WaitForChild("SprintIntent")
 local player = Players.LocalPlayer
 
 local ACTION = "Sprint"
+local LABEL = "Sprint gauge"
 local COLOR = Config.Sprint.Color
 local SPENT = Color3.fromRGB(230, 80, 80)
 local ACTIVE = Color3.fromRGB(255, 240, 150)
@@ -37,11 +41,13 @@ gui.ResetOnSpawn = false
 gui.IgnoreGuiInset = true
 gui.Parent = player:WaitForChild("PlayerGui")
 
--- Fifth chip down the right edge, under WallWalkGui's. Same 40px pitch as
--- TimerGui's score, coins and powerup above it.
+-- Bottom right corner, anchored to it rather than positioned from the top left,
+-- so the chip stays put on a tall phone as well as a wide monitor. Same 16px
+-- margin the right column above it uses.
 local chip = Instance.new("Frame")
 chip.Size = UDim2.fromOffset(178, 34)
-chip.Position = UDim2.new(1, -194, 0, 176)
+chip.AnchorPoint = Vector2.new(1, 1)
+chip.Position = UDim2.new(1, -16, 1, -16)
 chip.BackgroundColor3 = Color3.fromRGB(16, 16, 20)
 chip.BackgroundTransparency = 0.25
 chip.BorderSizePixel = 0
@@ -59,7 +65,7 @@ title.Font = Enum.Font.GothamBold
 title.TextSize = 12
 title.TextColor3 = COLOR
 title.TextXAlignment = Enum.TextXAlignment.Left
-title.Text = "HOLD [SHIFT]"
+title.Text = LABEL
 title.Parent = chip
 
 local track = Instance.new("Frame")
@@ -123,20 +129,19 @@ RunService.RenderStepped:Connect(function()
 	end
 	local left = shown()
 	fill.Size = UDim2.fromScale(math.clamp(left / capacity, 0, 1), 1)
+	-- The text is the name of the gauge and nothing else; state is the bar and the
+	-- colour it is drawn in. Three states, three colours: running, winded, ready.
+	-- The loop still writes the colour every frame rather than on the transition,
+	-- because a colour set once at build time is the same hint nobody sees that
+	-- the old per-branch text was written to avoid.
 	if sprinting then
 		fill.BackgroundColor3 = ACTIVE
-		title.Text = string.format("SPRINTING  %.1fs", left)
 		title.TextColor3 = ACTIVE
 	elseif left < Config.Sprint.MinimumToStart then
 		fill.BackgroundColor3 = SPENT
-		-- The key name stays in the text on every branch, the lesson WallWalkGui's
-		-- loop learned the hard way: a label written once at build time is a hint
-		-- nobody ever sees, because the first visible frame overwrites it.
-		title.Text = "HOLD [SHIFT]  winded"
 		title.TextColor3 = SPENT
 	else
 		fill.BackgroundColor3 = COLOR
-		title.Text = string.format("HOLD [SHIFT]  %.1fs", left)
 		title.TextColor3 = COLOR
 	end
 end)

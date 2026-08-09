@@ -3,11 +3,12 @@
 -- the charge they all spend. Replaces WallWalkGui, which was a chip for the one
 -- ability there used to be.
 --
--- **Bottom centre, not a sixth chip down the right edge.** The right column is
--- score, coins, powerup and sprint already, and a selector is not a readout: it
--- is the one thing on screen the player is meant to reach for and press, which
--- is where every game puts an action bar. It also leaves the corners alone,
--- which on a phone are the thumbstick and the jump button.
+-- **The right column, under the powerup chip.** The bought things live together:
+-- score, coins and powerup read down the right edge and the bar continues that
+-- column, while the sprint meter, which is free and permanent, sits on its own in
+-- the bottom right corner. The bar is anchored to the right edge rather than
+-- positioned from the left, because it is as wide as the number of abilities
+-- owned and only the edge it grows away from is fixed.
 --
 -- **Ownership is read off replicated attributes, not off the remote.**
 -- SaveService stamps AbilityTier_<Key> and AbilityService stamps
@@ -74,8 +75,8 @@ end
 
 local bar = Instance.new("Frame")
 bar.Name = "AbilityBar"
-bar.AnchorPoint = Vector2.new(0.5, 1)
-bar.Position = UDim2.new(0.5, 0, 1, -18)
+bar.AnchorPoint = Vector2.new(1, 0)
+bar.Position = UDim2.new(1, -16, 0, 136)
 bar.Size = UDim2.fromOffset(0, 0)
 bar.BackgroundColor3 = PANEL
 bar.BackgroundTransparency = 0.25
