@@ -191,6 +191,15 @@ progress.Event:Connect(function(payload)
 	local boost = Inventory.equippedAbility(data, "HatchBoost")
 	local amount = boost and (boost.params.rate or 1) * boost.multiplier or 1
 
+	-- Gear is the second source and, until a HatchBoost pet exists, the only one
+	-- that ever moves this off 1. Read straight off the resolver rather than off
+	-- an attribute, because this script already requires PetInventory: an
+	-- attribute would be a second copy of a number with a single reader.
+	local hatch = Inventory.wornEffects(data).HatchProgress or 0
+	if hatch > 0 then
+		amount = amount * (1 + hatch)
+	end
+
 	local ok, result = Inventory.addMazeProgress(data, amount)
 	if not ok then
 		return

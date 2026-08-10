@@ -95,13 +95,13 @@ So SaveService keeps writing `MagnetRange` and never learns that gear exists; Pe
 
 The attribute changed shape after this was written and the addend still works, but read it before using the number. `MagnetRange` is the pull in absolute studs rather than studs added to `PickupRadius`, and it drives a coins-only second query that tests no line of sight; an unbought magnet is a zero, so gear alone has to clear `PickupRadius` before it reaches anything, which is the honest answer for a +5 trinket and not a bug to route around.
 
-Walk speed is the exception, and deliberately. `BaseWalkSpeed` is an absolute number that two services restore against (`PickupService.server.lua:139`, `WallWalkService.server.lua:133`), and that property is what keeps a Speed powerup and a phase from undoing each other. So:
+Walk speed is the exception, and deliberately. `BaseWalkSpeed` is an absolute number that everything wanting the player faster multiplies, and that property is what keeps a Speed powerup and a phase from undoing each other. (When this was written they restored against it by hand, one at a time; `WalkSpeedResolver` has since made itself the only writer of `humanoid.WalkSpeed` and owns the product. That strengthens the rule below rather than replacing it: the resolver multiplies a baseline it never writes, and this is about who writes the baseline.) So:
 
 > **`BaseWalkSpeed` has exactly one writer, SaveService.** Anything else that wants to move it publishes an addend and SaveService folds it in.
 
-PetService writes `PetWalkSpeed` on the player; SaveService binds `player:GetAttributeChangedSignal("PetWalkSpeed")` to its existing `applyStats`. Nothing about the two restore sites changes.
+PetService writes `PetWalkSpeed` on the player; SaveService binds `player:GetAttributeChangedSignal("PetWalkSpeed")` to its existing `applyStats`. Nothing about the other sources changes.
 
-That recompute has one sharp edge to handle in Set 3: `applyStats` currently sets `humanoid.WalkSpeed` unconditionally (`SaveService.server.lua:50`), so re-running it mid Speed powerup cancels the boost the player is standing in. The fix is to always write the attribute and to write `humanoid.WalkSpeed` only when the humanoid is currently sitting at the old base, meaning nothing is modulating it; a running effect then restores to the new base when it ends, because it already restores against the attribute rather than against a remembered number.
+That recompute was going to have a sharp edge, and by the time Set 3 was built it did not: `applyStats` no longer writes `humanoid.WalkSpeed` at all, it calls `WalkSpeedResolver.apply`, which re-multiplies every live factor over the new baseline. Buying Fast Feet mid-sprint was the bug that fix was written for and the resolver already fixed it.
 
 ## Effect vocabulary
 
@@ -113,7 +113,7 @@ Every effect names exactly one integration site. An effect with no site is not i
 | `PickupRadius` | studs, additive | `PetMagnetBonus`, added to `MagnetRange` in PickupService's magnet pass | +5.0 |
 | `CoinMultiplier` | fraction | PickupService's `coinBonus` (`:247`), as a permanent addend beside the CoinBoost powerup | +0.5 |
 | `GlowRange` | studs, additive | PetService `applyGlow` (`:147`). A glow item lights a pet that has no Glow ability, so this is not dead on a Coin Bat. | +25 |
-| `WallWalkSeconds` | seconds, additive | `capacityFor` in WallWalkService (`:62`), which becomes tier seconds plus bonus, so gear alone gives a meter to a player who never bought the upgrade | +4.0 |
+| `WallWalkSeconds` | seconds, additive | `holdSeconds` in AbilityService, which becomes tier seconds plus bonus. Was `capacityFor` in WallWalkService, and the trailing claim that gear alone gives a meter to a player who never bought the upgrade died with that file; see Set 3. | +4.0 |
 | `PetXp` | fraction | `awardXp` in PetService (`:298`) | +0.35 |
 | `HatchProgress` | fraction | IncubatorService's boost resolve (`:182`), where `HatchBoost` already multiplies | +0.75 |
 | `RouteVision` | hops | Client. TimerGui already decodes `LevelTrigger.Route` for Reveal (`:520`); this draws the first N hops permanently. | 14 hops |
@@ -249,11 +249,31 @@ Harness now at 61 checks, covering the signature, slot ordering, the Aura-is-alw
 
 ### Set 3: Effects that are one addend each
 
-- [ ] `PetWalkSpeed` and the `BaseWalkSpeed` single-writer rule, including the mid-powerup recompute fix
-- [ ] `PetMagnetBonus` in the sweep, `CoinMultiplier` in the coin award, `PetXp` in `awardXp`, `HatchProgress` in the incubator resolve, `WallWalkSeconds` in `capacityFor`, `GlowRange` in `applyGlow`
-- [ ] Caps applied in the resolver, once, so no consumer clamps anything
+**Done.**
 
-Exit: each of the six is measurable in a Studio session, and a benched pet's gear measurably does nothing.
+- [x] `PetWalkSpeed` and the `BaseWalkSpeed` single-writer rule
+- [x] `PetMagnetBonus` in the sweep, `CoinMultiplier` in the coin award, `PetXp` in `awardXp`, `HatchProgress` in the incubator resolve, `WallWalkSeconds` in the Wall Walker's drain, `GlowRange` in `applyGlow`
+- [x] Caps applied in the resolver, once, so no consumer clamps anything (Set 1 already did this; Set 3 confirmed no consumer added a second clamp)
+
+Exit: each of the seven is measurable in a Studio session, and a benched pet's gear measurably does nothing.
+
+**Four attributes, not seven.** `Config.Accessories.Attributes` names the ones that cross a service boundary, and PetService's `publishEffects` is the single writer of all four. The other three need none: `GlowRange` and `PetXp` are spent inside PetService, and `HatchProgress` inside IncubatorService, all three of which already require `PetInventory`. An attribute for a number with one reader in the script that computed it would be a second copy of it. Publishing happens in `reconcileFollowers`, which is what every mutation that can move a total already calls (equip, bench, wear, unwear, a `PetsChanged` from another service, a profile landing, a respawn) and what renaming a pet correctly does not.
+
+Six things the implementation settled, and the first two are the plan being out of date rather than the plan being wrong:
+
+- **The mid-powerup recompute fix this set was scoped to write no longer exists to write.** `WalkSpeedResolver` landed between this plan and this set and made itself the only writer of `humanoid.WalkSpeed`; `applyStats` already stamps `BaseWalkSpeed` and then calls `Resolver.apply`, so re-running it under a live Speed orb re-multiplies rather than cancels. The conditional write specified above ("write `humanoid.WalkSpeed` only when the humanoid is sitting at the old base") would now be a second writer racing the resolver, which is the exact bug the resolver exists to end. Folding one addend into `BaseWalkSpeed` was the whole edit.
+
+- **`WallWalkSeconds` no longer gives a meter to a player who never bought the upgrade.** `WallWalkService` and its per-floor `capacityFor` were replaced by `AbilityService` and one charge shared by three abilities, so what a Phase Pack buys now is a slower drain on that charge: two more seconds of phase out of the same bar. Granting seconds at tier zero would be seconds on a key the HUD does not draw and the selection refuses to point at, because a tier of zero is what makes an ability selectable at all. The bonus is therefore added after the zero check, and `Config.Accessories.WallWalkAbility` names which of the three keys it lands on, since the effect names exactly one.
+
+- **The client adds the same seconds off the same attribute.** `AbilityGui` computes the bar's fall between pushes from the tier rate rather than being sent it, so a server draining the geared rate while the client drew the tier rate would run the bar ahead and yank it back at `PushSeconds`. It reads `PetWallWalkSeconds` directly, which costs nothing: ownership already reaches that HUD as replicated attributes and this is one more.
+
+- **Coin fractions are carried between pickups, not rounded at each one.** `CoinValue` is 1 and `leaderstats.Coins` is an IntValue, so a +20% chain rounded per coin pays either nothing or double. `PickupService` keeps the remainder per player and pays it out when it reaches a whole coin, so five coins pay six. Powerup multipliers are whole numbers and leave nothing behind, which is why this did not need to exist before gear did.
+
+- **`GlowRange` is added to the ability's range rather than multiplied into it.** So a Lantern Hat is the same ten studs on a Solar Firefly as on a fresh one, and the evolution multiplier stays a property of the pet. `applyGlow` now runs for a pet with no Glow ability at all when the bonus is non-zero, which is the case the effect table already promised: a lantern hat on a Coin Bat is a lantern hat.
+
+- **`PetXp` is floored and `HatchProgress` is not.** A level is drawn as a whole number of XP into a whole number needed, so 16.2 of 60 is a number nobody can act on; incubator progress was already fractional for `HatchBoost` and is already floored at the two places it is shown.
+
+Checked with the same kind of stub-prelude harness Sets 1 and 2 used, at 70 checks: the caps, the benched-pet rule, fractions summing rather than chaining, every catalogue effect having both a cap and a label, an unknown id scoring nothing, and the coin carry paying five coins as six. It is a scratchpad artifact for the same reason theirs were, and it reaches only the resolver: the seven integration sites live in Scripts, and whether a crown actually makes a player faster is a Studio session.
 
 ### Set 4: Clarity
 

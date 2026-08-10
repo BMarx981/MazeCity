@@ -19,6 +19,12 @@ local ServerScriptService = game:GetService("ServerScriptService")
 local Config = require(ReplicatedStorage:WaitForChild("MazeConfig"))
 local WalkSpeed = require(ServerScriptService:WaitForChild("WalkSpeedResolver"))
 
+-- Gear worn by an equipped pet, published by PetService. Read rather than
+-- required, so this script still knows nothing about pets. Hoisted because the
+-- coin handler is the hottest path in the file and reads one of them per pickup.
+local COIN_BONUS = Config.Accessories.Attributes.CoinMultiplier
+local MAGNET_BONUS = Config.Accessories.Attributes.PickupRadius
+
 local remote = ReplicatedStorage:FindFirstChild("PickupUpdate")
 if not remote then
 	remote = Instance.new("RemoteEvent")
@@ -38,6 +44,13 @@ local active = {}
 -- because the coin handler is the hottest path in this script and should not
 -- have to know what a powerup is.
 local coinBonus = {}
+-- The fraction of a coin a payout left behind, carried to the next one. Gear's
+-- CoinMultiplier is a fraction and CoinValue is 1, so rounding each pickup on
+-- its own would turn +20% into either nothing or double; carried, five coins pay
+-- six and the number a player was promised is the number they get. Powerup
+-- multipliers are whole and leave nothing here, which is why this did not exist
+-- before gear did.
+local coinCarry = {}
 
 -- What an orb turns out to be is decided here, at the moment it is touched,
 -- rather than by MazeGenerator when it was built. Runtime randomness, so it is
@@ -245,9 +258,15 @@ local function bindTag(tag, handler)
 end
 
 bindTag("Coin", function(player, part)
-	local multiplier = coinBonus[player] or 1
+	-- Added, never chained: a CoinBoost orb worth 2x with a Gilded Crown's +25%
+	-- pays 2.25, not 2.5. Every multiplier in this system sums its bonus fraction
+	-- and is applied once, which is the version a player can predict.
+	local multiplier = (coinBonus[player] or 1) + (player:GetAttribute(COIN_BONUS) or 0)
 	local coins = statValue(player, "Coins")
-	coins.Value = coins.Value + Config.Collectibles.CoinValue * multiplier
+	local owed = Config.Collectibles.CoinValue * multiplier + (coinCarry[player] or 0)
+	local paid = math.floor(owed)
+	coinCarry[player] = owed - paid
+	coins.Value = coins.Value + paid
 	consume(part, Config.Collectibles.CoinRespawnSeconds)
 	-- The part itself rather than its position, because the client draws the
 	-- magnet's flight by cloning it: the disc that flies in is then the disc that
@@ -337,7 +356,14 @@ local function sweep(player)
 	--
 	-- Nothing here tests line of sight, which is the feature: a magnet stops at a
 	-- wall only if somebody writes the raycast, and none is written.
-	local range = player:GetAttribute("MagnetRange") or 0
+	--
+	-- The shop's tier and gear's studs add rather than either one winning, which
+	-- is the only rule that lets SaveService keep writing MagnetRange without ever
+	-- hearing about a Coin Chain. The guard is deliberately against the sum: a +2
+	-- trinket on a player who never bought the magnet does not reach past the
+	-- radius they already sweep, and that is the honest answer for a +2 trinket
+	-- rather than a case to route around.
+	local range = (player:GetAttribute("MagnetRange") or 0) + (player:GetAttribute(MAGNET_BONUS) or 0)
 	if range <= collectibles.PickupRadius then
 		return
 	end
@@ -378,4 +404,5 @@ Players.PlayerAdded:Connect(bindPlayer)
 Players.PlayerRemoving:Connect(function(player)
 	active[player] = nil
 	coinBonus[player] = nil
+	coinCarry[player] = nil
 end)

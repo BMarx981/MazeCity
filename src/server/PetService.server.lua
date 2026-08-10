@@ -10,6 +10,10 @@
 -- every intent is validated against the profile, nothing is trusted, and a
 -- player who floods gets their extra intents dropped.
 --
+-- Gear leaves this script as four player attributes rather than as calls into
+-- four services, which is the same channel the shop's upgrades already use. See
+-- publishEffects: this is the one writer of all four and every reader adds.
+--
 -- Followers are anchored parts moved by CFrame, not humanoids. A pathfinding pet
 -- in a maze whose walls move is a pet stuck behind one, and a physics pet is one
 -- more thing that can shove a player off a parapet. Nothing here is ever
@@ -76,6 +80,28 @@ end
 
 local function deny(player, action, reason)
 	remote:FireClient(player, { kind = "denied", action = action, reason = reason })
+end
+
+-- ============================================================
+-- Gear that reaches another service
+-- ============================================================
+-- Four of the eleven accessory effects are spent somewhere this script has no
+-- business writing: a humanoid's walk speed, a coin payout, a magnet radius, a
+-- charge drain. They cross the same way the shop's upgrades cross and the Ghost
+-- powerup crosses, as an attribute, and the rule that keeps them composable is
+-- the plan's: **one attribute, one writer, readers add.** This is the writer of
+-- all four; SaveService and PickupService keep owning BaseWalkSpeed and
+-- MagnetRange and never learn that gear exists.
+--
+-- Stamped as numbers rather than left absent at zero, for the reason the ability
+-- tiers are: an absent attribute is indistinguishable from a profile that has
+-- not landed, and a reader that adds nil would have to know that.
+local function publishEffects(player, data)
+	local effects = Inventory.wornEffects(data)
+	for effectType, name in pairs(Config.Accessories.Attributes) do
+		player:SetAttribute(name, effects[effectType] or 0)
+	end
+	return effects
 end
 
 -- ============================================================
@@ -291,18 +317,28 @@ end
 -- is how much maze the pet lights; brightness at 2.5x is a Solar Firefly that
 -- blows out the corridor and the player standing in it, which is the same
 -- failure Config.World.LampBrightness documents at the other end of the city.
-local function applyGlow(primary, petConfig, stage)
-	if petConfig.ability.type ~= "Glow" then
+--
+-- A GlowRange item adds studs to whatever the ability was worth, which is why
+-- this can fire on a pet with no Glow ability at all: a lantern hat on a Coin
+-- Bat is a lantern hat. The bonus is added rather than multiplied, so the
+-- evolution multiplier stays a property of the pet and not of its hat.
+local function applyGlow(primary, petConfig, stage, effects)
+	local glowing = petConfig.ability.type == "Glow"
+	local bonus = effects.GlowRange or 0
+	if not glowing and bonus <= 0 then
 		return
 	end
 	local params = petConfig.ability.params
-	local multiplier = Inventory.abilityMultiplier(petConfig, stage)
+	local range = bonus
+	if glowing then
+		range = range + (params.radius or 12) * Inventory.abilityMultiplier(petConfig, stage)
+	end
 
 	local light = Instance.new("PointLight")
 	light.Name = "PetGlow"
 	light.Color = Inventory.look(petConfig, stage).primary
-	light.Range = (params.radius or 12) * multiplier
-	light.Brightness = params.brightness or 1
+	light.Range = range
+	light.Brightness = (glowing and params.brightness) or 1
 	light.Shadows = false
 	light.Parent = primary
 end
@@ -438,7 +474,7 @@ local function spawnFollower(player, data, pet, index, worn)
 		worn = worn,
 	}
 	attachWorn(entry, data, pet)
-	applyGlow(entry.primary, petConfig, pet.stage)
+	applyGlow(entry.primary, petConfig, pet.stage, Inventory.wornEffects(data))
 	applyWard(entry, petConfig, pet.stage)
 
 	local char = player.Character
@@ -460,6 +496,12 @@ local function reconcileFollowers(player)
 	if not data then
 		return
 	end
+
+	-- Here rather than beside pushState, because this is what every mutation that
+	-- can move a total already calls: equipping, benching, wearing, unwearing, a
+	-- PetsChanged from another service, a profile landing, a respawn. Renaming a
+	-- pet calls neither, which is correct.
+	publishEffects(player, data)
 
 	local wanted = {}
 	for index, petUid in ipairs(data.equipped) do
@@ -573,6 +615,15 @@ local function awardXp(player, amount)
 	local data = Profiles.data(player)
 	if not data or amount <= 0 then
 		return
+	end
+
+	-- Gear pays here rather than at either call site, so a future third source of
+	-- XP is boosted by having gone through this function. Floored: a level is
+	-- drawn as a whole number of XP into a whole number needed, and 16.2 of 60 is
+	-- a number nobody can act on.
+	local bonus = Inventory.wornEffects(data).PetXp or 0
+	if bonus > 0 then
+		amount = math.floor(amount * (1 + bonus))
 	end
 
 	local rigDirty = false

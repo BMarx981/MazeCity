@@ -253,8 +253,21 @@ end
 -- rate from the row. That is also what lets the number fall smoothly between
 -- pushes instead of stepping four times a second.
 
+-- Gear's seconds are added the same way the server adds them, off the same
+-- replicated attribute, because this number is what the bar falls at between
+-- pushes: a client extrapolating the tier rate while the server drains the
+-- geared one would run the bar ahead and be yanked back four times a second.
+-- Nothing new crosses the wire for it, which is the whole reason ownership is
+-- published as attributes rather than pushed.
 local function holdSeconds(key, def)
-	return perTier(def.SecondsPerTier, tierOf(key)) or 0
+	local seconds = perTier(def.SecondsPerTier, tierOf(key)) or 0
+	if seconds <= 0 then
+		return 0
+	end
+	if key == Config.Accessories.WallWalkAbility then
+		seconds = seconds + (player:GetAttribute(Config.Accessories.Attributes.WallWalkSeconds) or 0)
+	end
+	return seconds
 end
 
 local function shownCharge()

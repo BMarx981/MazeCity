@@ -12,6 +12,12 @@
 -- and one AbilityTier_<Key> per ability (AbilityService sizes the drain by it,
 -- AbilityGui draws the bar from it).
 --
+-- Traffic goes the other way exactly once: PetWalkSpeed, which PetService
+-- publishes for gear worn by an equipped pet and applyStats folds into
+-- BaseWalkSpeed. That is the plan's one-attribute-one-writer rule paid for. This
+-- service still owns BaseWalkSpeed outright and no second writer exists, which
+-- is what keeps it the absolute baseline WalkSpeedResolver multiplies.
+--
 -- The stall sells two kinds of row and this file knows the difference in exactly
 -- one place, the AbilityTier loop in applyStats: a row with a Mode is an ability,
 -- is bound to a key and competes for the selection, and everything about that
@@ -74,7 +80,15 @@ local function applyStats(player)
 		return
 	end
 
-	local walk = shop.BaseWalkSpeed + tier(data, "Speed") * shop.Upgrades.Speed.WalkSpeedPerTier
+	-- BaseWalkSpeed has exactly one writer and this is it. Anything else that
+	-- wants the player faster publishes an addend and is folded in here, which is
+	-- what keeps the attribute an absolute number the WalkSpeedResolver can
+	-- multiply: two writers racing on it is the bug the resolver exists to end,
+	-- one level up. PetWalkSpeed is gear worn by an equipped pet, capped in
+	-- PetInventory.wornEffects, and zero for every player who owns none.
+	local walk = shop.BaseWalkSpeed
+		+ tier(data, "Speed") * shop.Upgrades.Speed.WalkSpeedPerTier
+		+ (player:GetAttribute(Config.Accessories.Attributes.WalkSpeed) or 0)
 	char:SetAttribute("BaseWalkSpeed", walk)
 	-- Through the resolver rather than straight onto the humanoid. This runs on
 	-- every purchase, and writing the bare baseline here would cancel a sprint or
@@ -180,6 +194,12 @@ CollectionService:GetInstanceAddedSignal("TowerStart"):Connect(bindTowerStart)
 local function bindPlayer(player)
 	player.CharacterAdded:Connect(function(char)
 		char:WaitForChild("Humanoid", 5)
+		applyStats(player)
+	end)
+	-- The addend moves when a pet is equipped, benched, dressed or undressed, none
+	-- of which this service is told about any other way. applyStats derives
+	-- everything from tiers and the attribute, so re-running it is idempotent.
+	player:GetAttributeChangedSignal(Config.Accessories.Attributes.WalkSpeed):Connect(function()
 		applyStats(player)
 	end)
 	if player.Character then

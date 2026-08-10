@@ -114,8 +114,23 @@ end
 -- Seconds of Hold a full charge buys at this tier, and the drain rate's
 -- reciprocal. Zero means unowned or misconfigured, and is refused rather than
 -- divided by.
+--
+-- Gear adds seconds to the one ability its effect is named for, as an addend on
+-- top of the tier rather than a meter of its own: what a Phase Pack buys is a
+-- slower drain on the charge every ability already shares. It is added after the
+-- zero check on purpose, so it cannot conjure a Wall Walker for a player who
+-- never bought one. A tier of zero is what makes a key selectable at all, so
+-- gear that granted seconds without one would be seconds on a key the HUD does
+-- not draw and the selection refuses to point at.
 local function holdSeconds(player, key, def)
-	return perTier(def.SecondsPerTier, tierOf(player, key)) or 0
+	local seconds = perTier(def.SecondsPerTier, tierOf(player, key)) or 0
+	if seconds <= 0 then
+		return 0
+	end
+	if key == Config.Accessories.WallWalkAbility then
+		seconds = seconds + (player:GetAttribute(Config.Accessories.Attributes.WallWalkSeconds) or 0)
+	end
+	return seconds
 end
 
 local function push(player, event)

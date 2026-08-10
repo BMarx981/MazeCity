@@ -688,6 +688,30 @@ Config.Accessories = {
 	-- is refused rather than sold for nothing.
 	SellFraction = 0.5,
 
+	-- Where the effects that land in another service are published. PetService is
+	-- the only writer of all four and the reader adds one to whatever it already
+	-- had, which is the plan's one-attribute-one-writer rule: SaveService keeps
+	-- owning BaseWalkSpeed and MagnetRange and never learns that gear exists.
+	-- Named here rather than spelled out at five call sites so a rename is one
+	-- edit, and listed as a table so PetService stamps them in a loop.
+	--
+	-- The other effects need no attribute, because their reader is already a
+	-- script that requires PetInventory: GlowRange and PetXp are PetService's
+	-- own, HatchProgress is IncubatorService's, and the two clarity effects are
+	-- client draws that come off the projection.
+	Attributes = {
+		WalkSpeed = "PetWalkSpeed",
+		PickupRadius = "PetMagnetBonus",
+		CoinMultiplier = "PetCoinBonus",
+		WallWalkSeconds = "PetWallWalkSeconds",
+	},
+	-- WallWalkSeconds is the one effect that lands on an ability rather than on a
+	-- stat, and this is which one. It buys seconds of phase out of the same
+	-- charge every ability shares, so it is a slower drain rather than a second
+	-- meter, and it is worth nothing to a player who has not bought the ability:
+	-- a tier of zero is what makes a key selectable at all.
+	WallWalkAbility = "WallWalker",
+
 	-- The ceiling on all gear combined, applied once in Inventory.wornEffects so
 	-- that no consumer clamps anything.
 	--
