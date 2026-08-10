@@ -19,6 +19,7 @@ local Config = require(ReplicatedStorage:WaitForChild("MazeConfig"))
 local PetCatalog = require(ReplicatedStorage:WaitForChild("PetCatalog"))
 local EggCatalog = require(ReplicatedStorage:WaitForChild("EggCatalog"))
 local AccessoryCatalog = require(ReplicatedStorage:WaitForChild("AccessoryCatalog"))
+local PetModelGenerator = require(ReplicatedStorage:WaitForChild("PetModelGenerator"))
 
 local Inventory = {}
 
@@ -120,6 +121,14 @@ end
 function Inventory.placeholder(petConfig, stage)
 	local evolution = Inventory.stageData(petConfig, stage)
 	return (evolution and evolution.placeholder) or petConfig.placeholder
+end
+
+-- The resolved look for a stage, which is what a caller wanting one colour off a
+-- pet should read. The rig itself comes from PetModelGenerator.build, and this is
+-- deliberately not that: a Glow light and a ward ring want the stage's colour
+-- without building a model to sample it from.
+function Inventory.look(petConfig, stage)
+	return PetModelGenerator.lookFor(petConfig.id, stage)
 end
 
 function Inventory.displayName(pet, petConfig)

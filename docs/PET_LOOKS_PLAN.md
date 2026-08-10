@@ -53,19 +53,17 @@ Same construction as the enemy recipes, restated because the details are the con
 
 Vocabulary, all optional except the first four:
 
-- `scale`, `primary`, `secondary`, `accent`: the whole-rig multiplier and the three colours. `primary` is the body, `secondary` the belly/inner-wing/muzzle, `accent` the one neon part.
+- `scale`, `primary`, `secondary`, `accent`: the whole-rig multiplier and the three colours. `primary` is the body, `secondary` the soft parts (belly, wings, muzzle, beak), `accent` the one neon group. Every part takes its colour from exactly one of the three, so recolouring a pet is naming three colours.
 - `body`: the torso ellipsoid (number for a sphere, Vector3 for an ellipsoid, same rule as enemy sizes).
+- `belly`: a secondary-coloured ellipsoid sunk into the body, showing only underneath (the Hound).
 - `head`, `headOffset`: a second ball, or 0 for the one-ball pets whose face sits on the body.
-- `eyes`: count, size, spread, height, depth, plus `pupil` size, drawn as a dark ball proud of a light one, the inversion of the enemy eye.
-- `ears`: symmetric pair with size, spread, height, tilt (the Hound and the Bat).
-- `wings`: symmetric pair of flat ellipsoids with size, spread, height, tilt (the Firefly, Moth, Bat, Crow). Built on Motor6Ds so Set 4 can flap them.
-- `antennae`: symmetric thin pair (the Moth).
-- `beak`, `muzzle`: single forward part (the Crow; the Hound).
-- `tail`: single part with size and offset, jointed for the future wag. Not the enemy's fading segment chain: pet tails are solid.
-- `collar`: a torus-read ring around the neck seam (the Hound's accent).
-- `halo`: one ring above, the evolved Firefly's crown.
-- `crest`: single upright part on the head (the Crow's compass needle).
-- `motes`: satellites on a ring, same as the enemy group (the Solar Firefly's sparks).
+- `eyeCount`, `eyeSize`, `eyeSpread`, `eyeHeight`, `eyeDepth`, `pupilSize`: a dark ball proud of a light one, the inversion of the enemy eye. The two colours are fixed in the generator rather than per-pet, because a recipe that could opt out of them could build a pet that reads as a Kept.
+- `ears`, `wings`, `antennae`: symmetric pairs, `{ size, spread, height, z, tilt, sweep, pitch, forward, color }`. Anchor, orient, then push out along the part's own axis, same order as the enemy pairs and for the same reason.
+- `beak`, `muzzle`: a single part forward of the head (the Crow; the Hound).
+- `tail`: one solid part with size and offset. Not the enemy's fading segment chain: a pet tail is a tail rather than a thing trailing into smoke.
+- `crest`: a single upright accent on the head (the Crow's compass needle).
+- `collar`, `halo`, `motes`: one ring builder, three uses, `{ count, radius, size, height, z, tilt, upright }`. Flat by default, which is a halo above the head or a dial at a needle's base; `upright` stands the ring in the XY plane, which is a collar around a neck. **The plane is the whole difference between an accent that reads and one that is buried**, and it cost a fix in Set 1: a flat ring wide enough to clear the Hound's chest at the sides puts its rear beads inside the ribs, where they read as parts coming loose. The same trap took the Wayfinder's compass ring back into the shoulders, which is why it ended up a dial above the skull instead.
+- `charms`: a list of accent props the pet carries rather than wears, each `{ size, offset, color }`. The Firefly's lantern and the Coin Bat's coin. A list because a stage can add a second one, which is how Gilded reads: two coins is a thing you can count from across a room and 20% more coin is not.
 
 `look.primary` is the stage's colour in the world, and the two runtime reads move to it: the Glow light colour ([PetService.server.lua:156](src/server/PetService.server.lua#L156)) and the ward ring colour ([PetService.server.lua:201](src/server/PetService.server.lua#L201)). One colour source per stage; `placeholder` is deleted, not left beside it to drift.
 
@@ -103,9 +101,13 @@ The generator being shared is the whole reason this set is small. The client req
 
 ### Set 1: The generator and the recipes
 
-`PetModelGenerator.lua` with `DEFAULT_LOOK`, `lookFor`, `build`, `rigOf`; `look` on all five catalogue entries and six stages; `Inventory.look` beside the not-yet-deleted `Inventory.placeholder`.
+**Done.** `PetModelGenerator.lua` with `DEFAULT_LOOK`, `lookFor`, `build`, `rigOf`; `look` on all five catalogue entries and six stages; `Inventory.look` beside the not-yet-deleted `Inventory.placeholder`; `PetLookPreview.server.lua`, which is the temporary `RunService:IsStudio()` branch CLAUDE.md already names as the way to eyeball generated geometry, and which is **deleted before this branch merges**.
 
-Done looks like: all eleven looks build without error and read distinctly side by side. Eyeballing them without owning them is the trick CLAUDE.md already names for geometry: a temporary `RunService:IsStudio()` branch that builds all eleven in a row in workspace, deleted before the branch merges.
+Checked two ways, and the cheap one found the bug. `build` touches no service and yields nothing, so it runs outside Roblox: `tools/petlooks/check.sh` stubs Color3/Vector3/CFrame/Instance under the `luau` CLI already in the toolchain, builds all eleven looks, and reports each one's part count and bounding box. That caught three accents sitting inside the body they were meant to hang off, including the Ward Hound's collar, which is the accent that *is* its ability. The check is now in the harness (an accent's centre inside the body or head ellipsoid is a failure, and the run exits non-zero), so a future recipe cannot reintroduce it silently.
+
+`tools/` sits outside the three `src/` folders Rojo maps, so like `docs/` it reaches nothing in the place file.
+
+Worth keeping in mind for anything else in this repo that is pure geometry: `MazeGenerator` is the same shape of function and the same trick would run it.
 
 ### Set 2: The follower wears it
 

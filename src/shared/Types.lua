@@ -34,12 +34,75 @@ export type Placeholder = {
 	size: number,
 }
 
+-- The recipe PetModelGenerator builds a rig from. Every field is optional: the
+-- generator's DEFAULT_LOOK is the baseline, a pet merges over it, and a stage
+-- merges over the pet. Sizes are a number for a sphere or a Vector3 for an
+-- ellipsoid, and every part takes its colour from primary (body), secondary
+-- (soft parts) or accent (the one neon group, which is always the ability made
+-- visible).
+export type SymmetricGroup = {
+	size: number | Vector3,
+	spread: number,
+	height: number,
+	z: number?,
+	tilt: number?,
+	sweep: number?,
+	pitch: number?,
+	forward: number?,
+	color: Color3?,
+}
+
+export type RingGroup = {
+	count: number,
+	radius: number,
+	size: number | Vector3,
+	height: number,
+	z: number?,
+	tilt: number?,
+	color: Color3?,
+}
+
+export type Charm = {
+	size: number | Vector3,
+	offset: Vector3,
+	color: Color3?,
+}
+
+export type PetLook = {
+	scale: number?,
+	primary: Color3?,
+	secondary: Color3?,
+	accent: Color3?,
+	body: (number | Vector3)?,
+	belly: { size: number | Vector3, offset: Vector3? }?,
+	head: (number | Vector3)?,
+	headOffset: Vector3?,
+	eyeCount: number?,
+	eyeSize: number?,
+	eyeSpread: number?,
+	eyeHeight: number?,
+	eyeDepth: number?,
+	pupilSize: number?,
+	ears: SymmetricGroup?,
+	wings: SymmetricGroup?,
+	antennae: SymmetricGroup?,
+	beak: { size: number | Vector3, height: number?, forward: number?, tilt: number?, color: Color3? }?,
+	muzzle: { size: number | Vector3, height: number?, forward: number?, tilt: number?, color: Color3? }?,
+	tail: { size: number | Vector3, offset: Vector3?, tilt: number?, color: Color3? }?,
+	crest: { size: number | Vector3, height: number?, z: number?, color: Color3? }?,
+	collar: RingGroup?,
+	halo: RingGroup?,
+	motes: RingGroup?,
+	charms: { Charm }?,
+}
+
 export type EvolutionStage = {
 	level: number,
 	model: string,
 	displaySuffix: string?,
 	abilityMultiplier: number,
 	placeholder: Placeholder?,
+	look: PetLook?,
 }
 
 export type PetConfig = {
@@ -48,6 +111,7 @@ export type PetConfig = {
 	rarity: Rarity,
 	model: string,
 	placeholder: Placeholder,
+	look: PetLook?,
 	ability: Ability,
 	evolutions: { EvolutionStage },
 	maxLevel: number,
