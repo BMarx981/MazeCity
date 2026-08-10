@@ -166,7 +166,14 @@ function EnemyPathfinding:repath(goal)
 end
 
 -- One step of "walk toward goal". Returns true while there is still a plan to
--- follow. Nothing here yields.
+-- follow.
+--
+-- This is the one yielding call in a tick, and only on the ticks that replan:
+-- ComputeAsync is a yielding function, so a rig drawing a new plan parks its own
+-- think thread until the engine answers. Bounded by PathReplanSeconds per rig,
+-- harmless to every behavior's timing (they are deadlines, not waits), and the
+-- reason each controller owns a thread rather than being ticked from one shared
+-- slice loop: a shared loop would stall on whichever rig was replanning.
 function EnemyPathfinding:moveTo(goal)
 	if self:needsReplan(goal) and not self:repath(goal) then
 		-- No route. Hold rather than walking the straight line into whatever wall is

@@ -11,8 +11,11 @@
 -- The children are the reason EnemySpawner exists. An enemy that no marker placed
 -- has no marker to be keyed by, so it is keyed by its own rig: it is never
 -- respawned, it does not hold a marker's slot, and it goes for good when the player
--- walks far enough away. All three are right for something that only exists because
--- something else died.
+-- walks far enough away, or when it dies itself. All four are right for something
+-- that only exists because something else died, and the last of them is the
+-- spawner's default onDied rather than anything this file passes: E6's cleanup
+-- audit found a child dying with nobody listening stayed in the registry with a
+-- corpse standing in the maze.
 --
 -- They also arrive outside the spawn scan, so they are the one thing in the city
 -- that can push the live count past Config.Enemies.GlobalCap. Two children of a

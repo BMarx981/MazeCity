@@ -15,6 +15,15 @@
 -- the player walks away, which is exactly right for something that only exists
 -- because something else died.
 --
+-- Registering is why the default onDied is here too. This module is what puts a
+-- controller in the registry, so it is what owes the registry a way out of it, and
+-- a caller with no bookkeeping of its own (a Splitter's children, a debug spawn)
+-- should not have to know that. Without it the E6 cleanup audit found what it
+-- found: a rig that died with nobody listening stayed registered with a corpse
+-- standing in the maze, holding a slot against Config.Enemies.GlobalCap for the
+-- rest of the session. EnemyService passes its own, because a marker's death also
+-- arms a respawn, and that is bookkeeping this module knows nothing about.
+--
 -- EnemyController is required lazily rather than at the top. Behaviors are required
 -- by the controller, the Splitter is a behavior, and the Splitter needs this
 -- module: requiring the controller here would close that ring at load time. Inside
@@ -24,6 +33,11 @@ local EnemyFactory = require(script.Parent:WaitForChild("EnemyFactory"))
 local EnemyRegistry = require(script.Parent:WaitForChild("EnemyRegistry"))
 
 local EnemySpawner = {}
+
+-- How long a rig nobody is bookkeeping stays standing after it dies. Long enough
+-- to read as having died rather than as having been deleted, short enough that it
+-- is not still counting against the caps when the next one arrives.
+local DEAD_LINGER = 2
 
 -- options: key (registry identity, defaults to the model), marker, home, section,
 -- building, level, onDied. Returns the controller, or nil if the rig could not be
@@ -54,11 +68,19 @@ function EnemySpawner.spawn(typeName, spawnCFrame, options)
 		return nil
 	end
 
+	local key = options.key or model
+
 	-- Set before start rather than after, because a rig that dies inside its first
 	-- tick would otherwise die with nobody listening.
 	controller.onDied = options.onDied
+		or function()
+			task.delay(DEAD_LINGER, function()
+				EnemyRegistry.remove(key)
+				controller:destroy()
+			end)
+		end
 
-	EnemyRegistry.add(options.key or model, controller)
+	EnemyRegistry.add(key, controller)
 	controller:start()
 	return controller
 end

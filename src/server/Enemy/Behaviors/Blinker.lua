@@ -130,10 +130,6 @@ local Blinker = BaseBehavior.extend({
 		blink(controller, destination)
 		return true
 	end,
-
-	onStopped = function(controller)
-		EnemyCombat.clearRuntime(controller)
-	end,
 })
 
 return Blinker

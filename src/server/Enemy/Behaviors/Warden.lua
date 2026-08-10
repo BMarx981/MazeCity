@@ -105,10 +105,6 @@ local Warden = BaseBehavior.extend({
 		EnemyCombat.tryMelee(controller, character, { knockback = controller.stats.knockback })
 		return true
 	end,
-
-	onStopped = function(controller)
-		EnemyCombat.clearRuntime(controller)
-	end,
 })
 
 return Warden

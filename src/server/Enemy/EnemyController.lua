@@ -12,13 +12,20 @@
 -- wrapped in filterTarget and the two transition hooks, growl, then chase or
 -- search or return or idle. Three hooks can claim a tick and end it there.
 --
--- tick never yields. It matters twice. The Charger's windup used to be a
--- task.wait inside the think loop, which parked the thread for its whole length
--- and meant a Freeze powerup landing during a windup did not stop the charge
--- until after it had already started; it is a deadline on the AttackWindup state
--- now. And a tick that cannot yield is a tick that could be driven from one
--- shared slice loop instead of a thread per rig, which is the shape E6's stagger
--- audit should measure before anybody writes it.
+-- No behavior in a tick parks its own thread, and that is the half of "tick never
+-- yields" that is load-bearing. The Charger's windup used to be a task.wait inside
+-- the think loop, which held the thread for its whole length and meant a Freeze
+-- powerup landing during a windup did not stop the charge until after it had
+-- already started; every timed move in the roster is a deadline on a state now,
+-- and a new one must be written the same way.
+--
+-- E6 corrected the stronger claim that used to stand here. A tick does yield, in
+-- exactly one place: EnemyPathfinding's ComputeAsync, when a plan is replanned.
+-- That is at most once per Config.Enemies.PathReplanSeconds per rig and it parks
+-- nothing but the rig's own thread, so the deadlines above are unaffected. It does
+-- rule out the thing the old comment offered: one shared slice loop over every
+-- controller would be a loop that stalls on whichever rig is replanning, so the
+-- thread per rig stays until pathfinding is asked for asynchronously.
 --
 -- Dormancy is not here. A rig only exists while somebody is near enough to meet
 -- it, so the cheap-poll-when-nobody-is-looking layer the brief describes is
@@ -200,6 +207,10 @@ function EnemyController:start()
 			end
 			self.alive = false
 			self.machine:transition(State.Dead)
+			-- Silenced here rather than in stop, because a rig that dies is allowed to
+			-- stand for a moment before it is destroyed and a growling corpse is the
+			-- wrong read for every one of those moments.
+			self.growl.Playing = false
 			self.behavior.onDeath(self, self.lastDamageSource)
 			if self.onDied then
 				self.onDied(self)
@@ -234,10 +245,17 @@ function EnemyController:stop()
 	-- Before the connections go, because a behavior tearing down what it left in the
 	-- world may want to read the rig it left it around.
 	self.behavior.onStopped(self)
+	-- And then unconditionally, whatever the behavior did or forgot to do. Every
+	-- bolt, snare, mark and ring in the world is filed under this controller, so
+	-- the one place that knows the controller is finished is the one place that
+	-- should empty the file. It used to be four behaviors each remembering to call
+	-- it, which is four chances for the fifth to be written without it.
+	EnemyCombat.clearRuntime(self)
 	for _, connection in ipairs(self.connections) do
 		connection:Disconnect()
 	end
 	table.clear(self.connections)
+	self.growl.Playing = false
 	self.path:destroy()
 	self.thread = nil
 end

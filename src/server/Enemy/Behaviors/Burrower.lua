@@ -162,12 +162,12 @@ local Burrower = BaseBehavior.extend({
 		return true
 	end,
 
-	-- Despawning underground would leave an anchored invisible rig and a mound, and
-	-- the rig is destroyed by the controller either way. The anchor is put back
-	-- regardless so that a rig handed anywhere else is a rig with physics.
+	-- The mound is EnemyCombat's and the controller's stop clears it. The anchor is
+	-- this type's alone and is the reason this is the one behavior in the roster
+	-- that still needs the hook: a rig handed on anchored is a rig with no physics,
+	-- and nothing else in the system knows it was ever turned off.
 	onStopped = function(controller)
 		controller.root.Anchored = false
-		EnemyCombat.clearRuntime(controller)
 	end,
 })
 

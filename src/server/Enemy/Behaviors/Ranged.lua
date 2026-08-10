@@ -122,10 +122,6 @@ local Ranged = BaseBehavior.extend({
 
 		return false
 	end,
-
-	onStopped = function(controller)
-		EnemyCombat.clearRuntime(controller)
-	end,
 })
 
 return Ranged

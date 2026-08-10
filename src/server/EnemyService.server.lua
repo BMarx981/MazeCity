@@ -157,9 +157,16 @@ end
 
 -- Whether any player has a clear line to the marker. One raycast per player,
 -- and only ever asked about a marker the caps have already agreed to spend on.
+--
+-- Asked from the player toward the marker and not the other way round, which is
+-- not arbitrary: isClearBetween also refuses a destination inside a safe zone, so
+-- with the arguments reversed a player standing on a plaza pad answered "no clear
+-- line" for every marker around them and enemies materialised in front of them.
+-- The marker is the thing whose visibility is in question, so the marker is the
+-- `to`.
 local function inViewOfAny(pos, positions)
 	for _, p in ipairs(positions) do
-		if EnemyPathfinding.isClearBetween(pos, p) then
+		if EnemyPathfinding.isClearBetween(p, pos) then
 			return true
 		end
 	end

@@ -31,6 +31,7 @@ local StatusDefinitions = require(ReplicatedStorage:WaitForChild("StatusDefiniti
 local EnemyStatusService = {}
 
 local records = setmetatable({}, { __mode = "k" })
+local destroyers = setmetatable({}, { __mode = "k" })
 local nextToken = 0
 
 -- The Freeze powerup, stored as a deadline rather than a flag so two players
@@ -40,12 +41,18 @@ function EnemyStatusService.isFrozen()
 	return until_ ~= nil and os.clock() < until_
 end
 
+-- The Destroying connection is held beside the bucket and dropped with it. Left
+-- unheld it was one new connection every time a status arrived on an instance
+-- whose bucket had been cleared, which is the cheapest possible leak and the
+-- hardest to see: nothing misbehaves, the tally just climbs all session. Beside
+-- rather than inside because a bucket is keyed by status name and everything in
+-- it is a record.
 local function forInstance(instance, create)
 	local bucket = records[instance]
 	if not bucket and create then
 		bucket = {}
 		records[instance] = bucket
-		instance.Destroying:Connect(function()
+		destroyers[instance] = instance.Destroying:Connect(function()
 			EnemyStatusService.clearAll(instance)
 		end)
 	end
@@ -163,6 +170,11 @@ function EnemyStatusService.clearAll(instance)
 		bucket[name] = nil
 	end
 	records[instance] = nil
+	local destroying = destroyers[instance]
+	if destroying then
+		destroying:Disconnect()
+		destroyers[instance] = nil
+	end
 end
 
 return EnemyStatusService

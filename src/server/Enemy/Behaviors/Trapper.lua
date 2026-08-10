@@ -87,10 +87,6 @@ local Trapper = BaseBehavior.extend({
 		)
 		return false
 	end,
-
-	onStopped = function(controller)
-		EnemyCombat.clearRuntime(controller)
-	end,
 })
 
 return Trapper

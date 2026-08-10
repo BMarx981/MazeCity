@@ -80,14 +80,20 @@ function BaseBehavior.onDamaged(_controller, _amount, _source) end
 
 function BaseBehavior.onDeath(_controller, _source) end
 
--- The rig is going away: destroy anything this behavior left in the world that is
--- not part of it. Added at E4, which is the phase that gave behaviors things to
--- leave: a Trapper's snares, a Spitter's bolts in flight, a Blinker's arrival mark.
+-- The rig is going away: undo anything this behavior did to the world or to the
+-- rig that the rig going away does not undo by itself. Added at E4, which is the
+-- phase that gave behaviors things to leave behind.
 --
 -- It runs from the controller's stop, so it covers the ordinary case as well as
 -- death. That is the case that matters: a player walking away is how almost every
--- enemy in the city ends, and a snare outliving the thing that set it is a snare
--- nobody can connect to anything.
+-- enemy in the city ends.
+--
+-- Everything filed with EnemyCombat (a Spitter's bolts, a Trapper's snares, a
+-- Blinker's mark, a Warden's ring) is *not* this hook's job any more. Four of the
+-- five behaviors that had one used it for exactly that call and nothing else, so
+-- E6 moved it into the controller's stop where it cannot be forgotten. What is
+-- left here is the case the controller cannot know about: the Burrower unanchors
+-- the root it anchored to travel under the floor.
 function BaseBehavior.onStopped(_controller) end
 
 -- A concrete behavior writes only what makes it different. The result is a flat

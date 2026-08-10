@@ -262,9 +262,10 @@ local function disown(controller, handle)
 	end
 end
 
--- Called from a behavior's onStopped, which the controller runs on despawn as well
--- as on death. Despawn is the case that matters: walking away is how nearly every
--- enemy in this city ends.
+-- Called from EnemyController:stop, which runs on despawn as well as on death.
+-- Despawn is the case that matters: walking away is how nearly every enemy in this
+-- city ends. It was four behaviors each remembering to call it from onStopped
+-- until E6, which is four chances for a fifth to be written without one.
 function EnemyCombat.clearRuntime(controller)
 	local set = runtime[controller]
 	if not set then

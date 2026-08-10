@@ -42,7 +42,6 @@ local SpawnDirector = require(Enemy:WaitForChild("SpawnDirector"))
 
 local REDRAW_INTERVAL = 0.25
 local RING_THICKNESS = 0.15
-local DEAD_LINGER = 2
 
 local show = { detect = false, leash = false, paths = false, labels = false }
 
@@ -79,20 +78,14 @@ end
 -- Spawning
 -- ============================================================
 
+-- No onDied and no key: the spawner keys it by its own rig and installs the
+-- default teardown, which is exactly what a debug spawn wants. It used to pass
+-- both, written out here, and E6 found the same three lines missing from the
+-- Splitter's children; the spawner owns them for everybody now.
 local function debugSpawn(typeName, position)
 	local ground = EnemyPathfinding.groundBelow(position + Vector3.new(0, 2, 0), 14)
 	local at = (ground or position) + Vector3.new(0, 3, 0)
-	local controller
-	controller = EnemySpawner.spawn(typeName, CFrame.new(at), {
-		home = at,
-		onDied = function()
-			task.delay(DEAD_LINGER, function()
-				EnemyRegistry.remove(controller.model)
-				controller:destroy()
-			end)
-		end,
-	})
-	return controller
+	return EnemySpawner.spawn(typeName, CFrame.new(at), { home = at })
 end
 
 local function spawnRing(typeNames, center)
