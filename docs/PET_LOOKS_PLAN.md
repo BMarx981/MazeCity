@@ -25,6 +25,7 @@ PETS_PLAN records the gap this closes: "`ServerStorage/Pets/<model>` is empty, s
 | `src/server/PetInventory.lua` | `Inventory.look(petConfig, stage)` replaces `Inventory.placeholder`, same stage-override resolution. |
 | `src/server/PetService.server.lua` | `buildRig` falls back to `PetModelGenerator.build` instead of `makePlaceholder`; the Glow light and the ward ring read `look.primary`. |
 | `src/client/PetGui.client.lua` | Portraits: a viewport in each pet row, the model in the hatch reveal. |
+| `src/shared/PortraitGenerator.lua` | Set 3. Gains `of(model, opts)`, which frames a model somebody else built; `portrait(typeName, opts)` becomes the enemy convenience over it. Framing a rig is geometry and had nothing enemy-shaped in it. |
 | `src/server/IncubatorService.server.lua` | The `hatched` payload gains `petId` and `stage` so the reveal can build the model it is announcing. |
 
 No `Config` changes. The recipe vocabulary and its defaults live in `PetModelGenerator` the way `DEFAULT_LOOK` lives in `ModelGenerator`: they are structural, and editing one is editing how a pet is built, not turning a knob between playtests.
@@ -94,7 +95,7 @@ Where the enemy rig is a Humanoid with unanchored skin, a pet follower is anchor
 The generator being shared is the whole reason this set is small. The client requires `PetModelGenerator`, builds the same model the server built, and parents it to a ViewportFrame with its own camera.
 
 - **Inventory rows**: a square viewport at the left edge of each pet row, the rarity swatch staying beside it. The projection already carries `petId` and `stage`, so there is nothing to add server-side.
-- **Hatch reveal**: the model centred under the name, slowly turning (camera orbit on RenderStepped while the reveal is up, torn down with it). The rays and the arpeggio stay; the payload gains `petId` and `stage`, which is the one server edit in the set.
+- **Hatch reveal**: the model centred under the name, slowly turning, torn down with the reveal. The rays and the arpeggio stay; the payload gains `petId` and `stage`, which is the one server edit in the set. Set 3 turns the model rather than orbiting the camera, which is the same picture and is what `PortraitGenerator` already did for the bestiary; the teardown is guarded against a second hatch landing inside the first reveal, because a spinning viewport left on a hidden frame is a connection running for the session.
 - **The caveat, recorded and accepted**: a portrait always draws the *generated* look. An artist model in `ServerStorage/Pets` is invisible to clients, so a pet whose follower is artist-made still shows its generated silhouette in the UI until a replicated template folder exists, which is a different bargain and out of scope. Same trade the bestiary portraits made.
 
 ## Sets
@@ -123,7 +124,15 @@ Done looks like: equip each pet, watch it follow, slide, zipline and respawn; a 
 
 ### Set 3: Portraits
 
-The viewport in `petRow`, the model in `showReveal`, `petId` and `stage` on the `hatched` payload.
+**Done.** A 58 pixel viewport in `petRow` beside the rarity swatch, the model in `showReveal`, `petId` and `stage` on the `hatched` payload. The projection already carried both fields, so the shelf costs the server nothing at all and the one server edit in the set is the four-line payload change.
+
+The set was smaller than planned because the framing already existed. `PortraitGenerator` was written for the bestiary and every line of it except one was generator-agnostic, so it split into `of(model, opts)` and a two-line `portrait(typeName, opts)` over `ModelGenerator`, and the pets went through `of`. That is deliberately the opposite call to the one this plan makes about the *model* generators, and the two are consistent: a camera framed off a bounding box is the same job for any silhouette, where a shared `skinPart` would have coupled what the two families look like.
+
+Three things worth knowing before touching it:
+
+- **The rows do not spin, the reveal does.** A spin is a RenderStepped connection per portrait and a shelf holds twenty five of them, so the picture on a row is a picture. The reveal is the one a player is watching rather than reading.
+- **Rows are rebuilt, not cached.** `refresh` returns early with the panel closed, so portraits are built only while the Pets tab is open and only when the projection changes, which is an equip, a wear or a tower. Cheap enough to leave alone; the place to look first if it ever is not is a cache keyed by `petId .. stage`, which is at most eleven models for a shelf of twenty five.
+- **The text column went from 190 pixels to 132** and the name truncates, because the picture took the left edge and the button column at x=218 is where it always was.
 
 Done looks like: the shelf shows eleven distinguishable pets at a glance with no server round-trip beyond the projection it already had; a hatch shows the hatched pet turning.
 
@@ -143,7 +152,7 @@ Wing flap, tail sway, ear twitch, blink, keyed off the joints `rigOf` returns. T
 ## Open decisions
 
 - Where Set 4's animation loop runs: the server beside the follow Heartbeat (replicated, costs the server per pet) or each client (free to the server, needs the recipes' motion params replicated, which they are, being shared). Leaning client, deciding when Set 4 is scheduled.
-- Whether the portrait camera is one framing for all looks or a per-look override key. Start with one; add the key only when a wing clips.
+- ~~Whether the portrait camera is one framing for all looks or a per-look override key.~~ Settled in Set 3: one framing, `PortraitGenerator`'s, which sizes the distance off each model's own bounding box and so already handles the Lumen Moth being three times wider than its body. No look has needed an override; add the key when one clips.
 
 ## What is not covered
 

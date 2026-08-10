@@ -1,9 +1,16 @@
 -- PortraitGenerator (ModuleScript) -> ReplicatedStorage.PortraitGenerator
--- A ViewportFrame of any enemy type, drawn from the same ModelGenerator recipes
--- the server spawns from. This is the payoff of the generator living in
--- src/shared (plan decision D11): the client builds the rig locally, so a
--- bestiary card, a warning toast or a menu costs the server nothing and needs
--- no replicated template folder.
+-- A ViewportFrame of a model a client built for itself, drawn from the same
+-- recipes the server spawns from. This is the payoff of the generators living
+-- in src/shared (plan decision D11): the client builds the rig locally, so a
+-- bestiary card, an inventory row or a hatch reveal costs the server nothing
+-- and needs no replicated template folder.
+--
+-- Two entry points and the split is the whole design. `of` frames a model that
+-- is already built and knows nothing about what made it; `portrait` is the
+-- enemy convenience over ModelGenerator. Pets go through `of` with a
+-- PetModelGenerator rig, which is why this module requires one generator and
+-- not both: framing a model is geometry, and coupling it to every generator in
+-- the game would be a require per silhouette family for no shared code.
 --
 -- The frame is self-contained: its own WorldModel, its own Camera framed off
 -- the model's bounding box at a three-quarter angle, lit from the camera's
@@ -11,7 +18,7 @@
 -- cut when the frame is destroyed, and asking for one on the server is an
 -- error because RenderStepped is a client clock.
 --
--- The Humanoid and the billboard are stripped from the clone. Neither renders
+-- The Humanoid and any billboard are stripped from the model. Neither renders
 -- in a viewport, and a portrait is a picture rather than a thing that could
 -- wake up.
 
@@ -30,14 +37,14 @@ local SPIN_RATE = math.rad(40)
 
 local PortraitGenerator = {}
 
--- Returns a ViewportFrame showing typeName. opts.spin turns the model slowly;
--- everything else about the frame (size, position, background) is the
--- caller's to set, which is why none of it is set here.
-function PortraitGenerator.portrait(typeName, opts)
+-- Returns a ViewportFrame showing model, which this takes ownership of.
+-- opts.spin turns it slowly; everything else about the frame (size, position,
+-- background) is the caller's to set, which is why none of it is set here.
+function PortraitGenerator.of(model, opts)
 	opts = opts or {}
 
 	local frame = Instance.new("ViewportFrame")
-	frame.Name = typeName .. "Portrait"
+	frame.Name = model.Name .. "Portrait"
 	frame.BackgroundTransparency = 1
 	frame.Ambient = Color3.fromRGB(140, 140, 150)
 	frame.LightColor = Color3.fromRGB(255, 255, 245)
@@ -45,7 +52,6 @@ function PortraitGenerator.portrait(typeName, opts)
 	local world = Instance.new("WorldModel")
 	world.Parent = frame
 
-	local model = ModelGenerator.build(typeName)
 	local humanoid = model:FindFirstChildOfClass("Humanoid")
 	if humanoid then
 		humanoid:Destroy()
@@ -53,6 +59,12 @@ function PortraitGenerator.portrait(typeName, opts)
 	for _, descendant in ipairs(model:GetDescendants()) do
 		if descendant:IsA("BillboardGui") then
 			descendant:Destroy()
+		end
+		-- A viewport steps no physics, so this changes nothing today. It is here
+		-- because both generators hand back loose parts on joints and a portrait
+		-- that ever did fall apart would do it once, in a menu, on one machine.
+		if descendant:IsA("BasePart") then
+			descendant.Anchored = true
 		end
 	end
 	model:PivotTo(CFrame.new())
@@ -85,6 +97,10 @@ function PortraitGenerator.portrait(typeName, opts)
 	end
 
 	return frame
+end
+
+function PortraitGenerator.portrait(typeName, opts)
+	return PortraitGenerator.of(ModelGenerator.build(typeName), opts)
 end
 
 return PortraitGenerator

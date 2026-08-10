@@ -137,6 +137,11 @@ local function resolveHatch(player, quiet)
 	announce(player, {
 		kind = "hatched",
 		petUid = result.uid,
+		-- The reveal draws the pet, and it draws it from the same recipes the
+		-- follower is built from, so the payload carries the two things
+		-- PetModelGenerator.build takes and no geometry at all.
+		petId = result.petId,
+		stage = result.stage,
 		name = Inventory.displayName(result, petConfig),
 		rarity = petConfig.rarity,
 		ability = petConfig.ability.type,

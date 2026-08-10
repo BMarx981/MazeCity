@@ -24,6 +24,11 @@ local TweenService = game:GetService("TweenService")
 
 local Config = require(ReplicatedStorage:WaitForChild("MazeConfig"))
 local EggCatalog = require(ReplicatedStorage:WaitForChild("EggCatalog"))
+-- Portraits are built here, from the recipes, not sent: the projection already
+-- names the pet and the stage, so a row draws the same rig the follower is
+-- without one extra byte over the remote.
+local PetModelGenerator = require(ReplicatedStorage:WaitForChild("PetModelGenerator"))
+local PortraitGenerator = require(ReplicatedStorage:WaitForChild("PortraitGenerator"))
 
 local remote = ReplicatedStorage:WaitForChild("PetUpdate")
 local intents = ReplicatedStorage:WaitForChild("PetIntent")
@@ -44,6 +49,12 @@ local ROW_H = 62
 -- Taller than the rest, because a pet row carries a strip of worn-gear chips
 -- under its XP bar that nothing else has.
 local PET_ROW_H = 78
+-- The portrait square and where the text starts once it is in. A row is 390
+-- wide and its right hand button column begins at 218, so the text column is
+-- 132 rather than the 190 it had before the picture took the left edge.
+local PORTRAIT = 58
+local PET_TEXT_X = 82
+local PET_TEXT_W = 132
 
 -- Distance at which the Place button lights up. The server re-checks this with
 -- its own slack, so being generous here only ever costs a refusal the player
@@ -124,6 +135,23 @@ local function playSound(assetId, volume, playbackSpeed)
 	sound.Parent = SoundService
 	sound:Play()
 	Debris:AddItem(sound, sound.TimeLength > 0 and sound.TimeLength + 1 or 5)
+end
+
+-- A ViewportFrame of the pet at that stage, or nil for a petId this client's
+-- catalogue does not have. Nil rather than a fallback square: a row missing its
+-- picture still says everything it said before Set 3, and the caller only has
+-- to not parent it.
+--
+-- The caveat PET_LOOKS_PLAN records and accepts: this is always the generated
+-- silhouette. An artist's model in ServerStorage/Pets is invisible to a client,
+-- so it wins in the world and loses in the UI until a replicated template
+-- folder exists, which is a different bargain. Same trade the bestiary made.
+local function petPortrait(petId, stage, spin)
+	local model = PetModelGenerator.build(petId, stage or 0)
+	if not model then
+		return nil
+	end
+	return PortraitGenerator.of(model, { spin = spin })
 end
 
 -- ============================================================
@@ -303,9 +331,36 @@ revealTitle.ZIndex = 11
 local revealSub = label(reveal, UDim2.new(1, 0, 0, 30), UDim2.new(0, 0, 0.42, 62), Enum.Font.GothamBold, 20, WHITE)
 revealSub.ZIndex = 11
 
-local function showReveal(name, rarity, ability)
+local REVEAL_PORTRAIT = 240
+
+-- The portrait currently on screen. Held rather than looked up, because it is
+-- torn down from a delayed callback and from the next hatch, and a spinning
+-- viewport left parented to a hidden frame is a RenderStepped connection
+-- running for the rest of the session.
+local revealPortrait = nil
+
+local function clearRevealPortrait()
+	if revealPortrait then
+		revealPortrait:Destroy()
+		revealPortrait = nil
+	end
+end
+
+local function showReveal(name, rarity, ability, petId, stage)
 	local color = Config.rarityColor(rarity)
 	local rays = 6 + Config.rarityIndex(rarity) * 6
+
+	clearRevealPortrait()
+	if petId then
+		revealPortrait = petPortrait(petId, stage, true)
+	end
+	if revealPortrait then
+		revealPortrait.Size = UDim2.fromOffset(REVEAL_PORTRAIT, REVEAL_PORTRAIT)
+		revealPortrait.Position = UDim2.new(0.5, -REVEAL_PORTRAIT / 2, 0.42, 96)
+		revealPortrait.ZIndex = 11
+		revealPortrait.ImageTransparency = 1
+		revealPortrait.Parent = reveal
+	end
 
 	reveal.Visible = true
 	reveal.BackgroundTransparency = 0.35
@@ -335,18 +390,31 @@ local function showReveal(name, rarity, ability)
 
 	tween(revealTitle, 0.35, { TextTransparency = 0 })
 	tween(revealSub, 0.35, { TextTransparency = 0 })
+	if revealPortrait then
+		tween(revealPortrait, 0.35, { ImageTransparency = 0 })
+	end
 	for _, note in ipairs(Config.Sounds.TowerClearArpeggio) do
 		task.delay(note[1], function()
 			playSound(Config.Sounds.PowerupPickup, Config.Juice.PowerupVolume, note[2])
 		end)
 	end
 
+	-- Compared rather than captured and destroyed outright, because a second
+	-- hatch inside the reveal of the first has already replaced this one and
+	-- must not have its picture taken down by its predecessor's timer.
+	local mine = revealPortrait
 	task.delay(Config.Pets.HatchRevealSeconds, function()
 		tween(reveal, 0.5, { BackgroundTransparency = 1 })
 		tween(revealTitle, 0.5, { TextTransparency = 1 })
 		tween(revealSub, 0.5, { TextTransparency = 1 })
+		if mine and revealPortrait == mine then
+			tween(mine, 0.5, { ImageTransparency = 1 })
+		end
 		task.delay(0.55, function()
-			reveal.Visible = false
+			if revealPortrait == mine then
+				clearRevealPortrait()
+				reveal.Visible = false
+			end
 		end)
 	end)
 end
@@ -433,8 +501,8 @@ local function nearRoost()
 end
 
 -- One chip per worn slot, in the rarity colour of what is in it, under the XP
--- bar. The initial rather than the name: four items in 190 pixels is four
--- letters, and the Gear tab beside this is where the names are.
+-- bar. The initial rather than the name: four items in a text column this
+-- narrow is four letters, and the Gear tab beside this is where the names are.
 local function wornChips(frame, worn)
 	local index = 0
 	for _, slot in ipairs(Config.Accessories.Slots) do
@@ -442,7 +510,7 @@ local function wornChips(frame, worn)
 		if item then
 			local chip = Instance.new("Frame")
 			chip.Size = UDim2.fromOffset(30, 16)
-			chip.Position = UDim2.new(0, 22 + index * 34, 0, 56)
+			chip.Position = UDim2.new(0, PET_TEXT_X + index * 34, 0, 56)
 			chip.BackgroundColor3 = Config.rarityColor(item.rarity)
 			chip.BorderSizePixel = 0
 			chip.Parent = frame
@@ -466,20 +534,38 @@ local function petRow(pet, order)
 	swatch.Parent = frame
 	rounded(swatch, 3)
 
-	local name = label(frame, UDim2.new(0, 190, 0, 20), UDim2.new(0, 22, 0, 8), Enum.Font.GothamBold, 15, WHITE)
+	-- The pet itself, beside its rarity rather than instead of it: the swatch,
+	-- the XP bar and the reveal text are Config.rarityColor and the picture is
+	-- look.primary, and the two never read each other. Not spun, unlike the
+	-- reveal and the bestiary: twenty five rows are twenty five RenderStepped
+	-- connections, and a shelf is read rather than watched.
+	local portrait = petPortrait(pet.petId, pet.stage, false)
+	if portrait then
+		portrait.Size = UDim2.fromOffset(PORTRAIT, PORTRAIT)
+		portrait.Position = UDim2.new(0, 18, 0, (PET_ROW_H - PORTRAIT) / 2)
+		portrait.Parent = frame
+	end
+
+	local name =
+		label(frame, UDim2.new(0, PET_TEXT_W, 0, 20), UDim2.new(0, PET_TEXT_X, 0, 8), Enum.Font.GothamBold, 15, WHITE)
 	name.TextXAlignment = Enum.TextXAlignment.Left
+	-- A nickname can be twenty characters and the column is now 132 pixels, so
+	-- it elides rather than running under the buttons.
+	name.TextTruncate = Enum.TextTruncate.AtEnd
 	name.Text = (pet.locked and "[L] " or "") .. pet.name
 
-	local sub = label(frame, UDim2.new(0, 190, 0, 16), UDim2.new(0, 22, 0, 28), Enum.Font.Gotham, 12, DIM)
+	local sub =
+		label(frame, UDim2.new(0, PET_TEXT_W, 0, 16), UDim2.new(0, PET_TEXT_X, 0, 28), Enum.Font.Gotham, 12, DIM)
 	sub.TextXAlignment = Enum.TextXAlignment.Left
+	sub.TextTruncate = Enum.TextTruncate.AtEnd
 	local multiplier = pet.multiplier > 1 and string.format("  x%.1f", pet.multiplier) or ""
 	sub.Text = string.format("Lv %d  |  %s%s", pet.level, pet.ability, multiplier)
 
 	-- A pet at max level has no xpNeed, which draws as a full bar rather than an
 	-- empty one: the alternative reads as a pet that stopped earning by mistake.
 	local track = Instance.new("Frame")
-	track.Size = UDim2.new(0, 190, 0, 4)
-	track.Position = UDim2.new(0, 22, 0, 48)
+	track.Size = UDim2.new(0, PET_TEXT_W, 0, 4)
+	track.Position = UDim2.new(0, PET_TEXT_X, 0, 48)
 	track.BackgroundColor3 = Color3.fromRGB(50, 52, 62)
 	track.BorderSizePixel = 0
 	track.Parent = frame
@@ -1132,7 +1218,7 @@ local function playEvent(event)
 	end
 
 	if event.kind == "hatched" then
-		showReveal(event.name, event.rarity, event.ability)
+		showReveal(event.name, event.rarity, event.ability, event.petId, event.stage)
 	elseif event.kind == "levelup" then
 		local what = event.pet.evolved and "evolved!" or string.format("reached level %d", event.pet.level)
 		showBanner(event.pet.name .. " " .. what, "", Config.rarityColor(event.pet.rarity), 2)
