@@ -238,6 +238,32 @@ export type PlayerStats = {
 	eggsHatched: number,
 }
 
+-- The Codex, four chapters of unlock state, per docs/LORE.md Section 7.
+--
+-- Three of them are sets keyed by the id of the thing unlocked, and `kept` is a
+-- stage rather than a flag because a Kept entry unlocks twice: the silhouette
+-- and name on first encounter, the lore line on surviving one. What the stage
+-- numbers mean is the unlock service's to name; this is only room for them.
+--
+-- The journal chapter is the one with a shape of its own. Its fragments unlock
+-- strictly in order, so the whole of "which are known" is how far the count has
+-- got, and there is no way to represent a gap that cannot happen. `banked` is
+-- the other half of that: an Event trigger fired before its fragment came up
+-- leaves nothing behind to find later, so it is remembered here until its turn.
+-- A Stat trigger banks nothing, `PlayerStats` being a running total that is
+-- still true whenever the fragment gets around to asking.
+export type JournalState = {
+	unlocked: number,
+	banked: { [string]: boolean },
+}
+
+export type CodexState = {
+	pets: { [string]: boolean },
+	kept: { [string]: number },
+	relics: { [string]: boolean },
+	journal: JournalState,
+}
+
 -- The saved profile, whole. `upgrades` and `furthestSection` predate the pet
 -- system and are listed here because there is one profile, not two.
 export type PlayerData = {
@@ -255,6 +281,7 @@ export type PlayerData = {
 	incubator: IncubatorState?,
 	daily: DailyState,
 	stats: PlayerStats,
+	codex: CodexState,
 	gamepasses: { [string]: boolean },
 	starterGranted: boolean,
 }

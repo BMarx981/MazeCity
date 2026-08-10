@@ -75,6 +75,11 @@ local function defaults()
 		incubator = nil,
 		daily = { lastClaimDayUtc = 0, streak = 0 },
 		stats = { mazesCompleted = 0, floorsCleared = 0, summitsReached = 0, eggsHatched = 0 },
+		-- The Codex, four chapters of unlock state; Types.CodexState is where the
+		-- shape is explained. The journal chapter is a count rather than a set
+		-- because its fragments unlock strictly in order, plus the bank of the
+		-- accomplishments that happened before the fragment owed them came up.
+		codex = { pets = {}, kept = {}, relics = {}, journal = { unlocked = 0, banked = {} } },
 		gamepasses = {},
 		starterGranted = false,
 	}
@@ -176,6 +181,20 @@ local function adopt(data, result)
 	-- Added after stats itself was, so an otherwise current profile can still be
 	-- missing exactly this one.
 	data.stats.floorsCleared = data.stats.floorsCleared or 0
+	-- Chapter by chapter rather than handed over whole, so a codex written before
+	-- a chapter existed gains that chapter empty instead of nil. The type checks
+	-- are because this is the one field indexed into on the way in, and adopt runs
+	-- after entry.loaded is already true: an error here would leave a profile that
+	-- is allowed to save holding nothing but defaults, which is the wipe the whole
+	-- failure posture exists to prevent.
+	local codex = type(result.codex) == "table" and result.codex or {}
+	local journal = type(codex.journal) == "table" and codex.journal or {}
+	data.codex = {
+		pets = codex.pets or {},
+		kept = codex.kept or {},
+		relics = codex.relics or {},
+		journal = { unlocked = journal.unlocked or 0, banked = journal.banked or {} },
+	}
 	data.gamepasses = result.gamepasses or {}
 	data.starterGranted = result.starterGranted == true
 end
@@ -243,6 +262,7 @@ function Profiles.save(player)
 		incubator = data.incubator,
 		daily = data.daily,
 		stats = data.stats,
+		codex = data.codex,
 		gamepasses = data.gamepasses,
 		starterGranted = data.starterGranted,
 		savedAt = os.time(),
