@@ -2,7 +2,16 @@
 -- CLI. Enough to execute build() and read the geometry back out.
 
 local V = {}
-V.__index = V
+V.__index = function(self, key)
+	if key == "Magnitude" then
+		return math.sqrt(self.X * self.X + self.Y * self.Y + self.Z * self.Z)
+	end
+	if key == "Unit" then
+		local length = self.Magnitude
+		return Vector3.new(self.X / length, self.Y / length, self.Z / length)
+	end
+	return rawget(V, key)
+end
 function V.__mul(a, b)
 	if type(b) == "number" then
 		return Vector3.new(a.X * b, a.Y * b, a.Z * b)
@@ -82,6 +91,24 @@ function C.__mul(a, b)
 	return cframe(r, p)
 end
 
+-- The transpose plus the negated, rotated position, which is the whole of a
+-- rigid inverse. PetRigDriver needs it to turn a pose it wants into the Transform
+-- that produces it.
+function C.Inverse(self)
+	local r = {}
+	for i = 1, 3 do
+		r[i] = {}
+		for j = 1, 3 do
+			r[i][j] = self.r[j][i]
+		end
+	end
+	local p = {}
+	for i = 1, 3 do
+		p[i] = -(r[i][1] * self.p[1] + r[i][2] * self.p[2] + r[i][3] * self.p[3])
+	end
+	return cframe(r, p)
+end
+
 CFrame = {}
 function CFrame.new(x, y, z)
 	if type(x) == "table" and x.__t == "Vector3" then
@@ -121,6 +148,9 @@ CREATED = {}
 Instance = {}
 function Instance.new(className)
 	local inst = {
+		-- typeof(x) == "Instance" is how rigOf tells a single joint from the list
+		-- of them it keeps under the same key, so the stub has to answer it.
+		__t = "Instance",
 		ClassName = className,
 		Name = className,
 		CFrame = CFrame.new(0, 0, 0),

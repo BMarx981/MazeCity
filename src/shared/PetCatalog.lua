@@ -34,6 +34,7 @@ Pets.firefly = {
 	name = "Firefly",
 	rarity = "Common",
 	model = "Firefly",
+	ability = { type = "Glow", params = { radius = 14, brightness = 1.1 } },
 	-- The smallest pet in the catalogue and the only one whose accent is most of
 	-- its silhouette: the lantern is the Glow, so it grows at every stage.
 	look = {
@@ -48,6 +49,11 @@ Pets.firefly = {
 		eyeDepth = 0.42,
 		wings = { size = Vector3.new(0.85, 0.12, 1), spread = 0.72, height = 0.42, z = 0.15, tilt = 0.35 },
 		charms = { { size = 0.8, offset = Vector3.new(0, -0.1, 1.05) } },
+		-- A blur rather than a beat: the fastest wings in the catalogue and the
+		-- shallowest, which is the other half of reading as a point of light. The
+		-- lantern breathes slowly underneath them, and the driver breathes it
+		-- further still on this pet, the lantern being the Glow.
+		motion = { flapRate = 14, flapAngle = 0.26, charmRate = 0.9, blinkEvery = 3.4 },
 	},
 	evolutions = {
 		{
@@ -87,6 +93,7 @@ Pets.lumen_moth = {
 	name = "Lumen Moth",
 	rarity = "Uncommon",
 	model = "LumenMoth",
+	ability = { type = "Glow", params = { radius = 22, brightness = 1.4 } },
 	-- Almost all wing. The body is the smallest here and the wings are wider than
 	-- any other pet is long, which is the whole read at corridor distance: the
 	-- Firefly is a point of light, this is a shape crossing in front of one.
@@ -110,6 +117,10 @@ Pets.lumen_moth = {
 			pitch = 0.75,
 			tilt = 0.35,
 		},
+		-- The opposite corner from the Firefly on the same two numbers: slow and
+		-- deep, which is what a moth does and what makes a shape crossing in front
+		-- of a light read as a shape rather than as a second light.
+		motion = { flapRate = 2.4, flapAngle = 0.62, antennaRate = 0.8, antennaAngle = 0.3 },
 	},
 	evolutions = {
 		{
@@ -122,6 +133,10 @@ Pets.lumen_moth = {
 				primary = Color3.fromRGB(220, 244, 255),
 				secondary = Color3.fromRGB(250, 253, 255),
 				wings = { size = Vector3.new(3.1, 0.14, 2.5), spread = 1.4, height = 0.28, z = 0.1, tilt = 0.2 },
+				-- Wider wings beat slower. Naming only the rate is the whole point
+				-- of motion merging key by key: the deep angle the pet already had
+				-- is what this stage is keeping.
+				motion = { flapRate = 1.9 },
 			},
 		},
 	},
@@ -150,6 +165,7 @@ Pets.ward_hound = {
 	name = "Ward Hound",
 	rarity = "Rare",
 	model = "WardHound",
+	ability = { type = "Ward", params = { radius = 16, activeSeconds = 6, rechargeSeconds = 10 } },
 	-- The one pet that stands near enemies on purpose, so it is the one that most
 	-- has to not read as one: the stoutest body in the catalogue, a muzzle, ears
 	-- and a tail, and none of the tapering the Kept are built out of. It floats
@@ -177,6 +193,11 @@ Pets.ward_hound = {
 		-- It dips a little into the ribs down there, which is what a collar
 		-- resting on a dog does.
 		collar = { count = 12, radius = 1, size = 0.17, height = 0.35, z = -0.85, upright = true },
+		-- The only pet with no wings, so all of its motion is the dog: a tail that
+		-- wags rather than sways, ears that flick twice as often as anything else
+		-- twitches, and a collar the driver runs off the ward rather than off a
+		-- clock. Everything else here is the baseline.
+		motion = { swayRate = 3.4, swayAngle = 0.5, twitchEvery = 1.9, twitchAngle = 0.4 },
 	},
 	evolutions = {
 		{
@@ -194,6 +215,9 @@ Pets.ward_hound = {
 				-- Clear of the body all the way round, which is what makes it a
 				-- shoulder ring rather than a bigger collar.
 				collar = { count = 16, radius = 1.35, size = 0.2, height = 0.3, z = -0.55, upright = true },
+				-- Ears up and steady rather than flicking every two seconds. The
+				-- same dog, listening, in motion as well as in geometry.
+				motion = { twitchEvery = 4.6, twitchAngle = 0.22 },
 			},
 		},
 	},
@@ -211,6 +235,7 @@ Pets.coin_bat = {
 	name = "Coin Bat",
 	rarity = "Rare",
 	model = "CoinBat",
+	ability = { type = "CoinMagnet", params = { radius = 6 } },
 	-- Ears and membrane wings, and the coin it carries is the magnet. The
 	-- evolution gets a second one rather than a bigger one, because two coins is
 	-- a thing you can count from across a room and 20% more coin is not.
@@ -227,6 +252,10 @@ Pets.coin_bat = {
 		ears = { size = Vector3.new(0.48, 1.15, 0.26), spread = 0.42, height = 1.1, z = -0.78, tilt = 0.16 },
 		wings = { size = Vector3.new(2.2, 0.12, 1.45), spread = 1.15, height = 0.15, z = 0.1, tilt = -0.12 },
 		charms = { { size = Vector3.new(0.85, 0.85, 0.16), offset = Vector3.new(0, -1.15, 0.1) } },
+		-- Fast and shallow, and the ears twitch with it: a bat is a flicker. The
+		-- coin swings under it on its own slower clock, which is what stops the
+		-- whole silhouette reading as one vibrating object.
+		motion = { flapRate = 9, flapAngle = 0.34, twitchEvery = 2.4, charmRate = 2.2, charmBob = 0.22 },
 	},
 	evolutions = {
 		{
@@ -264,6 +293,7 @@ Pets.compass_crow = {
 	name = "Compass Crow",
 	rarity = "Epic",
 	model = "CompassCrow",
+	ability = { type = "DeadEndPing", params = { cooldown = 30, range = 40 } },
 	-- The only slate pet, and the only beak: the rarest thing in the catalogue
 	-- should not also be the third round yellow one. The crest is a compass
 	-- needle, which is the ability, and the evolution rings it.
@@ -281,6 +311,11 @@ Pets.compass_crow = {
 		wings = { size = Vector3.new(1.9, 0.14, 1.6), spread = 1, height = 0.25, z = 0.05, tilt = 0.12 },
 		tail = { size = Vector3.new(1.25, 0.14, 1.15), offset = Vector3.new(0, 0.12, 1.45), tilt = -0.2 },
 		crest = { size = Vector3.new(0.13, 0.85, 0.13), height = 0.72 },
+		-- A glide, not a flap: the slowest wings here and the widest tail sway,
+		-- which is the bird steering rather than climbing. The needle leans on its
+		-- base at its own rate, so the crest reads as an instrument settling and
+		-- not as a feather.
+		motion = { flapRate = 3.2, flapAngle = 0.3, swayRate = 1.4, swayAngle = 0.26, crestRate = 1.4 },
 	},
 	evolutions = {
 		{

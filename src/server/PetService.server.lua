@@ -88,10 +88,31 @@ end
 -- change. The generator replaced the neon cube every pet used to be, not the
 -- artist, so the name still wins.
 
+-- Anchored except for the skin, which hangs off the root on Motor6Ds so the
+-- client's PetAnimator can pose it. The root itself is never a joint's Part1, so
+-- it anchors, and an anchored root makes the whole thing one anchored assembly:
+-- PivotTo carries it rigidly, the joints pose it, and no part of it is ever
+-- simulated. Gear and the ward ring carry no joint and stay anchored, which is
+-- what they were.
+--
+-- An artist's model gets the same treatment and it is the right one: its
+-- PrimaryPart anchors, its limbs hang off whatever joints it shipped with, and a
+-- rig with no joints at all comes out exactly as anchored as it used to be.
+local function jointed(model)
+	local held = {}
+	for _, item in ipairs(model:GetDescendants()) do
+		if (item:IsA("Motor6D") or item:IsA("WeldConstraint")) and item.Part1 then
+			held[item.Part1] = true
+		end
+	end
+	return held
+end
+
 local function sterilise(model)
+	local held = jointed(model)
 	for _, part in ipairs(model:GetDescendants()) do
 		if part:IsA("BasePart") then
-			part.Anchored = true
+			part.Anchored = not held[part] or part == model.PrimaryPart
 			part.CanCollide = false
 			part.CanTouch = false
 			part.CanQuery = false

@@ -48,11 +48,14 @@
 -- against it, which is what PivotTo carries rigidly.
 --
 -- Each skin part is *also* given a Motor6D whose C0 is the offset it was placed
--- at. On an anchored part that motor does nothing at all today, and it is built
--- anyway: it is the difference between the motion set being a driver module that
--- reads rigOf and writes C0, the way EnemyRig drives ModelGenerator's output,
--- and being a rebuild of this file. Unanchoring the skin is the one edit it
--- needs.
+-- at, and since the motion set those motors are live: PetService sterilises the
+-- root anchored and leaves the skin unanchored on them, so the rig is one
+-- anchored assembly that PivotTo carries and the joints pose. PetRigDriver is
+-- what poses them, the way EnemyRig drives ModelGenerator's output.
+--
+-- It writes Motor6D.Transform and never C0, which is what keeps rigOf's bases
+-- honest forever: C0 is the as-built offset and stays it, so a driver cannot
+-- leave drift behind in the thing the next readback measures from.
 --
 -- build writes the rig and rigOf reads it back, and they are the only two
 -- functions that know the part and joint names. An accessory lands on one of the
@@ -131,6 +134,16 @@ local DEFAULT_LOOK = {
 	-- Accent props a pet carries rather than wears: the Firefly's lantern, the
 	-- Coin Bat's coin. A list, so a stage can add a second one.
 	charms = nil,
+
+	-- How the rig moves, read by PetRigDriver: flapRate, flapAngle, swayRate,
+	-- swayAngle, twitchEvery, ringRate, blinkEvery and the rest of that module's
+	-- DEFAULT_MOTION. The numbers live there for the same reason the geometry
+	-- baseline lives here, next to the code that spends it.
+	--
+	-- The one group merged key by key rather than replaced whole (see lookFor),
+	-- and the one whose defaults are not here: an absent key is PetRigDriver's
+	-- baseline, which is where every number it spends already lives.
+	motion = nil,
 }
 
 -- The evolution stage's own overrides, resolved here rather than through
@@ -148,6 +161,12 @@ end
 -- are replaced whole rather than merged key by key, because a stage that
 -- overrides its wings means different wings and not the old ones with one field
 -- edited.
+--
+-- `motion` is the one exception and it is exempt at every level: it holds only
+-- scalars, so a stage naming a flap rate means that rate and the rest of what the
+-- pet already was. Replacing it whole would silently drop every other number the
+-- pet had tuned, which is a bug that looks like a pet reverting to the baseline
+-- the moment it evolves.
 function PetModelGenerator.lookFor(petId, stage)
 	local petConfig = PetCatalog[petId]
 	if not petConfig then
@@ -155,13 +174,26 @@ function PetModelGenerator.lookFor(petId, stage)
 	end
 
 	local look = table.clone(DEFAULT_LOOK)
-	for key, value in pairs(petConfig.look or {}) do
-		look[key] = value
+	local motion = nil
+
+	local function merge(source)
+		for key, value in pairs(source) do
+			if key == "motion" then
+				motion = motion or {}
+				for name, number in pairs(value) do
+					motion[name] = number
+				end
+			else
+				look[key] = value
+			end
+		end
 	end
+
+	merge(petConfig.look or {})
 	local evolution = stageData(petConfig, stage)
-	for key, value in pairs((evolution and evolution.look) or {}) do
-		look[key] = value
-	end
+	merge((evolution and evolution.look) or {})
+
+	look.motion = motion
 	return look
 end
 
@@ -170,13 +202,6 @@ local function sizeOf(value, scale)
 		return value * scale
 	end
 	return Vector3.new(value, value, value) * scale
-end
-
-local function weld(a, b)
-	local w = Instance.new("WeldConstraint")
-	w.Part0 = a
-	w.Part1 = b
-	w.Parent = a
 end
 
 -- Block parts wearing a Sphere SpecialMesh rather than Shape = Ball, because a
@@ -254,19 +279,27 @@ function PetModelGenerator.build(petId, stage)
 	bodyJoint.C0 = CFrame.new()
 	bodyJoint.Parent = root
 
+	-- Every motor is parented to the body whatever it joins, so rigOf reads them
+	-- all back out of one place: a Motor6D poses its Part1 from wherever it is
+	-- parented, and the alternative is a readback that has to know which part
+	-- each joint hangs off before it can look for it.
+	local function joint(name, part0, part1, c0)
+		local motor = Instance.new("Motor6D")
+		motor.Name = name .. "Joint"
+		motor.Part0 = part0
+		motor.Part1 = part1
+		motor.C0 = c0
+		motor.Parent = body
+		return motor
+	end
+
 	-- Everything else joints to the body rather than to the root, so the motion
 	-- set can lean or bounce one part and carry the whole pet with it.
 	local function place(name, size, color, offset, angles, material)
 		local part = skinPart(model, name, size, color, material)
 		local c0 = CFrame.new(offset) * (angles or CFrame.new())
 		part.CFrame = body.CFrame * c0
-
-		local motor = Instance.new("Motor6D")
-		motor.Name = name .. "Joint"
-		motor.Part0 = body
-		motor.Part1 = part
-		motor.C0 = c0
-		motor.Parent = body
+		joint(name, body, part, c0)
 
 		noteBounds(offset.Y, size.Y)
 		return part
@@ -383,20 +416,28 @@ function PetModelGenerator.build(petId, stage)
 	end
 
 	-- Laid out in a row and centred, so one is a cyclops and four are a thing
-	-- that is not a pet. Welded rather than jointed: they belong to the face,
-	-- whether that is a head or the body of a pet that has none.
+	-- that is not a pet. Jointed to the face, whether that is a head or the body
+	-- of a pet that has none, and jointed rather than welded because the joint is
+	-- the blink: the driver sinks the eye back into the skull for a tenth of a
+	-- second, and a pet with no eyelids blinks by taking its eyes away.
 	for index = 1, look.eyeCount do
-		local offset = (index - (look.eyeCount + 1) / 2) * look.eyeSpread * 2 * scale
+		local offset = Vector3.new(
+			(index - (look.eyeCount + 1) / 2) * look.eyeSpread * 2 * scale,
+			look.eyeHeight * scale,
+			-look.eyeDepth * scale
+		)
 		local eyeSize = sizeOf(look.eyeSize, scale)
 		local eye = skinPart(model, "Eye" .. index, eyeSize, EYE_WHITE)
-		eye.CFrame = face.CFrame * CFrame.new(offset, look.eyeHeight * scale, -look.eyeDepth * scale)
-		weld(face, eye)
+		eye.CFrame = face.CFrame * CFrame.new(offset)
+		joint("Eye" .. index, face, eye, CFrame.new(offset))
 
 		-- Proud of the eye rather than inside it. A pupil flush with the sphere
-		-- is a pupil that disappears at every angle but dead on.
+		-- is a pupil that disappears at every angle but dead on. On the eye's own
+		-- joint, so it goes in with it when the eye blinks.
+		local pupilOffset = Vector3.new(0, 0, -eyeSize.Z * 0.34)
 		local pupil = skinPart(model, "Pupil" .. index, sizeOf(look.pupilSize, scale), PUPIL_DARK)
-		pupil.CFrame = eye.CFrame * CFrame.new(0, 0, -eyeSize.Z * 0.34)
-		weld(eye, pupil)
+		pupil.CFrame = eye.CFrame * CFrame.new(pupilOffset)
+		joint("Pupil" .. index, eye, pupil, CFrame.new(pupilOffset))
 	end
 
 	-- The four accessory slots, placed against what the rig actually came out as
@@ -459,6 +500,7 @@ function PetModelGenerator.rigOf(model)
 		halo = {},
 		motes = {},
 		charms = {},
+		eyes = {},
 	}
 
 	-- Counted up from 1 rather than read off GetChildren, because child order is
@@ -476,14 +518,15 @@ function PetModelGenerator.rigOf(model)
 	collect(joints.halo, "Halo")
 	collect(joints.motes, "Mote")
 	collect(joints.charms, "Charm")
+	collect(joints.eyes, "Eye")
 
-	local bases = { collar = {}, halo = {}, motes = {}, charms = {} }
+	local bases = { collar = {}, halo = {}, motes = {}, charms = {}, eyes = {} }
 	for key, motor in pairs(joints) do
 		if typeof(motor) == "Instance" then
 			bases[key] = motor.C0
 		end
 	end
-	for _, key in ipairs({ "collar", "halo", "motes", "charms" }) do
+	for _, key in ipairs({ "collar", "halo", "motes", "charms", "eyes" }) do
 		for index, motor in ipairs(joints[key]) do
 			bases[key][index] = motor.C0
 		end

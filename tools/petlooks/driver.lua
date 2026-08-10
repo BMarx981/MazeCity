@@ -87,6 +87,103 @@ for _, petId in ipairs(ids) do
 			end
 		end
 
+		-- Motion, checked against the same silhouette the geometry was. A minute of
+		-- it runs here in milliseconds because animate reads no clock of its own,
+		-- and the two things it can get wrong are both caught by asking where a
+		-- part actually ends up: an accent that swings into the chest it was placed
+		-- to clear, and a hinge with a sign error that throws one across the room.
+		--
+		-- The tell is driven through every state a pet can be in rather than left
+		-- at rest, because a running ward is the one that moves furthest.
+		local rig = PetModelGenerator.rigOf(model)
+		check(rig ~= nil, label .. ": rigOf read back nothing from a rig this module built")
+		if rig then
+			local body = model:FindFirstChild("Body")
+			-- Accents are tested for burying themselves as well as for leaving the
+			-- silhouette; a wing is not, its root being inside the body by design.
+			-- Eyes are left out of both: a blink is an eye going inside the head on
+			-- purpose.
+			local watched = {}
+			local function watch(motors, motorBases, accent)
+				for index, motor in ipairs(motors) do
+					table.insert(watched, { motor = motor, base = motorBases[index], accent = accent })
+				end
+			end
+			local function watchOne(motor, base, accent)
+				if motor then
+					table.insert(watched, { motor = motor, base = base, accent = accent })
+				end
+			end
+			watch(rig.joints.collar, rig.bases.collar, true)
+			watch(rig.joints.halo, rig.bases.halo, true)
+			watch(rig.joints.motes, rig.bases.motes, true)
+			watch(rig.joints.charms, rig.bases.charms, true)
+			watchOne(rig.joints.crest, rig.bases.crest, true)
+			watchOne(rig.joints.wingL, rig.bases.wingL, false)
+			watchOne(rig.joints.wingR, rig.bases.wingR, false)
+			watchOne(rig.joints.earL, rig.bases.earL, false)
+			watchOne(rig.joints.earR, rig.bases.earR, false)
+			watchOne(rig.joints.antennaL, rig.bases.antennaL, false)
+			watchOne(rig.joints.antennaR, rig.bases.antennaR, false)
+			watchOne(rig.joints.tail, rig.bases.tail, false)
+
+			local function poseAt(clock, tell)
+				PetRigDriver.animate(rig, clock, tell)
+				local at = {}
+				for index, item in ipairs(watched) do
+					at[index] = (body.CFrame * (item.base * item.motor.Transform)).Position
+				end
+				return at
+			end
+
+			-- Two frames two milliseconds apart, ten hours into a session, with a
+			-- ward recharging across them. Nothing may have moved more than a tenth
+			-- of a stud, and this is the only check here that would have caught the
+			-- driver's first draft: it slowed the collar as the ward drained, and a
+			-- phase of `clock * rate` with a rate that moves has an angular speed of
+			-- `rate + clock * rateChange`, which at ten hours is thousands of turns a
+			-- second. From a clock starting at zero it looks perfectly correct, which
+			-- is why the pass below is not enough on its own.
+			local HOURS = 36000
+			local STEP = 0.002
+			local before = poseAt(HOURS, { glow = true, ward = { up = false, charge = 0.5 } })
+			local after = poseAt(HOURS + STEP, { glow = true, ward = { up = false, charge = 0.5 + STEP / 10 } })
+			for index, item in ipairs(watched) do
+				local moved = (after[index] - before[index]).Magnitude
+				check(
+					finite(moved) and moved < 0.1,
+					label .. ": " .. item.motor.Name .. string.format(" moved %.2f studs in 2ms ten hours in", moved)
+				)
+			end
+
+			for step = 0, 240 do
+				local clock = step / 4
+				local ward = { up = step % 8 < 3, charge = (step % 40) / 40 }
+				PetRigDriver.animate(rig, clock, { glow = true, ward = ward })
+
+				for _, item in ipairs(watched) do
+					local at = (body.CFrame * (item.base * item.motor.Transform)).Position
+					local name = item.motor.Name
+					check(
+						finite(at.X) and finite(at.Y) and finite(at.Z),
+						label .. ": " .. name .. " reaches NaN at " .. clock .. "s"
+					)
+					if item.accent then
+						check(
+							not insideSolid(at),
+							label .. ": accent " .. name .. " swings inside the body at " .. clock .. "s"
+						)
+					end
+					-- A stud of slack on the silhouette it was built with. Motion is
+					-- meant to be read at corridor distance, not to redraw the pet.
+					check(
+						at.X > minX - 1 and at.X < maxX + 1 and at.Y > minY - 1 and at.Y < maxY + 1,
+						label .. ": " .. name .. " leaves the silhouette at " .. clock .. "s"
+					)
+				end
+			end
+		end
+
 		check(model.PrimaryPart ~= nil, label .. ": no PrimaryPart")
 		check(attachments == 4, label .. ": " .. attachments .. " slot attachments, expected 4")
 		check(model:GetAttribute("PetId") == petId, label .. ": PetId attribute missing")

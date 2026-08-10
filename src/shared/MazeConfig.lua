@@ -592,6 +592,13 @@ Config.Pets = {
 	BobHeight = 0.45,
 	BobSeconds = 2.6,
 	SpinDegreesPerSecond = 45,
+	-- Studs from the camera past which a client stops posing a follower's joints.
+	-- The whole-rig bob and spin above are the server's and never stop; this is
+	-- only the wing flap and the blink, which are unreadable at this distance and
+	-- are the one part of a pet that costs a machine anything per frame. The rest
+	-- of how a rig moves is PetRigDriver's DEFAULT_MOTION, next to the geometry
+	-- baseline it moves.
+	AnimateRange = 140,
 
 	PromptDistance = 12,
 	PromptHoldSeconds = 0.25,

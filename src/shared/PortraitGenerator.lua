@@ -60,9 +60,11 @@ function PortraitGenerator.of(model, opts)
 		if descendant:IsA("BillboardGui") then
 			descendant:Destroy()
 		end
-		-- A viewport steps no physics, so this changes nothing today. It is here
-		-- because both generators hand back loose parts on joints and a portrait
-		-- that ever did fall apart would do it once, in a menu, on one machine.
+		-- Both generators hand back loose parts on joints and a viewport steps no
+		-- physics to hold them together, so anchoring is what makes a portrait a
+		-- picture. A follower in the world is posed by PetRigDriver writing those
+		-- joints; a portrait deliberately is not, being a thing a player reads
+		-- rather than watches. The reveal turns the model instead.
 		if descendant:IsA("BasePart") then
 			descendant.Anchored = true
 		end
