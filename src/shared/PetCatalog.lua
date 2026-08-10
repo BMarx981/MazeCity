@@ -23,8 +23,9 @@
 -- always the ability made visible, which is what lets a stage read as stronger
 -- without a label. See docs/PET_LOOKS_PLAN.md for the art direction and the
 -- rule that an evolution must add or change a group rather than only scale and
--- tint. `placeholder` is what PetService drew before the generator and is
--- deleted in Set 2 of that plan.
+-- tint. A stage's `look.primary` is also its one colour in the world: the Glow
+-- light and the ward ring are tinted from it, so there is no second colour field
+-- here for either to drift against.
 
 local Pets = {}
 
@@ -33,7 +34,6 @@ Pets.firefly = {
 	name = "Firefly",
 	rarity = "Common",
 	model = "Firefly",
-	placeholder = { color = Color3.fromRGB(255, 236, 150), shape = "Ball", size = 1.6 },
 	-- The smallest pet in the catalogue and the only one whose accent is most of
 	-- its silhouette: the lantern is the Glow, so it grows at every stage.
 	look = {
@@ -55,7 +55,6 @@ Pets.firefly = {
 			model = "FireflyRadiant",
 			displaySuffix = "Radiant",
 			abilityMultiplier = 1.5,
-			placeholder = { color = Color3.fromRGB(255, 214, 90), shape = "Ball", size = 1.9 },
 			look = {
 				scale = 1.08,
 				primary = Color3.fromRGB(255, 214, 90),
@@ -68,7 +67,6 @@ Pets.firefly = {
 			model = "FireflySolar",
 			displaySuffix = "Solar",
 			abilityMultiplier = 2.5,
-			placeholder = { color = Color3.fromRGB(255, 150, 60), shape = "Ball", size = 2.2 },
 			look = {
 				scale = 1.2,
 				primary = Color3.fromRGB(255, 150, 60),
@@ -89,7 +87,6 @@ Pets.lumen_moth = {
 	name = "Lumen Moth",
 	rarity = "Uncommon",
 	model = "LumenMoth",
-	placeholder = { color = Color3.fromRGB(190, 235, 255), shape = "Block", size = 1.8 },
 	-- Almost all wing. The body is the smallest here and the wings are wider than
 	-- any other pet is long, which is the whole read at corridor distance: the
 	-- Firefly is a point of light, this is a shape crossing in front of one.
@@ -120,7 +117,6 @@ Pets.lumen_moth = {
 			model = "LumenMothPale",
 			displaySuffix = "Pale",
 			abilityMultiplier = 1.6,
-			placeholder = { color = Color3.fromRGB(225, 245, 255), shape = "Block", size = 2.1 },
 			look = {
 				scale = 1.08,
 				primary = Color3.fromRGB(220, 244, 255),
@@ -154,7 +150,6 @@ Pets.ward_hound = {
 	name = "Ward Hound",
 	rarity = "Rare",
 	model = "WardHound",
-	placeholder = { color = Color3.fromRGB(140, 210, 235), shape = "Block", size = 2.1 },
 	-- The one pet that stands near enemies on purpose, so it is the one that most
 	-- has to not read as one: the stoutest body in the catalogue, a muzzle, ears
 	-- and a tail, and none of the tapering the Kept are built out of. It floats
@@ -189,7 +184,6 @@ Pets.ward_hound = {
 			model = "WardHoundBulwark",
 			displaySuffix = "Bulwark",
 			abilityMultiplier = 1.45,
-			placeholder = { color = Color3.fromRGB(180, 235, 255), shape = "Block", size = 2.4 },
 			look = {
 				scale = 1.1,
 				primary = Color3.fromRGB(180, 235, 255),
@@ -217,7 +211,6 @@ Pets.coin_bat = {
 	name = "Coin Bat",
 	rarity = "Rare",
 	model = "CoinBat",
-	placeholder = { color = Color3.fromRGB(255, 214, 110), shape = "Block", size = 2 },
 	-- Ears and membrane wings, and the coin it carries is the magnet. The
 	-- evolution gets a second one rather than a bigger one, because two coins is
 	-- a thing you can count from across a room and 20% more coin is not.
@@ -241,7 +234,6 @@ Pets.coin_bat = {
 			model = "CoinBatGilded",
 			displaySuffix = "Gilded",
 			abilityMultiplier = 1.5,
-			placeholder = { color = Color3.fromRGB(255, 236, 170), shape = "Block", size = 2.3 },
 			look = {
 				scale = 1.08,
 				primary = Color3.fromRGB(250, 214, 120),
@@ -272,7 +264,6 @@ Pets.compass_crow = {
 	name = "Compass Crow",
 	rarity = "Epic",
 	model = "CompassCrow",
-	placeholder = { color = Color3.fromRGB(120, 130, 170), shape = "Block", size = 2.2 },
 	-- The only slate pet, and the only beak: the rarest thing in the catalogue
 	-- should not also be the third round yellow one. The crest is a compass
 	-- needle, which is the ability, and the evolution rings it.
@@ -297,7 +288,6 @@ Pets.compass_crow = {
 			model = "CompassCrowWayfinder",
 			displaySuffix = "Wayfinder",
 			abilityMultiplier = 1.4,
-			placeholder = { color = Color3.fromRGB(150, 170, 220), shape = "Block", size = 2.5 },
 			look = {
 				scale = 1.08,
 				primary = Color3.fromRGB(150, 170, 220),

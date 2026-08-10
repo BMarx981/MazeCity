@@ -12,7 +12,8 @@
 --  2. `baseModelId`/`modelId` become `model`, a child name under
 --     ServerStorage/Pets rather than an rbxassetid. This project loads rigs the
 --     way EnemyService already does, so an asset id would be a field nothing
---     reads. `placeholder` is what gets drawn until an artist puts a rig there.
+--     reads. `look` is the recipe PetModelGenerator builds a rig from until an
+--     artist puts one at that name.
 
 local Types = {}
 
@@ -23,15 +24,6 @@ export type AbilityType = "Glow" | "DeadEndPing" | "CoinMagnet" | "CheckpointSav
 export type Ability = {
 	type: AbilityType,
 	params: { [string]: number },
-}
-
--- What the placeholder rig looks like until ServerStorage/Pets/<model> exists.
--- Every pet still reads as its own creature from across a corridor, which is
--- what keeps the system testable with zero Studio-side setup.
-export type Placeholder = {
-	color: Color3,
-	shape: "Ball" | "Block",
-	size: number,
 }
 
 -- The recipe PetModelGenerator builds a rig from. Every field is optional: the
@@ -101,7 +93,6 @@ export type EvolutionStage = {
 	model: string,
 	displaySuffix: string?,
 	abilityMultiplier: number,
-	placeholder: Placeholder?,
 	look: PetLook?,
 }
 
@@ -110,7 +101,8 @@ export type PetConfig = {
 	name: string,
 	rarity: Rarity,
 	model: string,
-	placeholder: Placeholder,
+	-- Optional, and the generator's DEFAULT_LOOK is why: a new pet with no recipe
+	-- is a plain rounded creature rather than nothing at all.
 	look: PetLook?,
 	ability: Ability,
 	evolutions: { EvolutionStage },
@@ -164,9 +156,11 @@ export type AccessoryEffect = {
 	value: number,
 }
 
--- Not the pet Placeholder: gear is worn, so proportion is the whole of whether
--- a cape reads as a cape, and a size scalar cannot say that. `rate` is read
--- only when shape is "Particle", which is what the Aura slot is made of.
+-- What PetService draws until ServerStorage/Accessories/<model> exists. Gear
+-- never grew a `look` recipe the way a pet did: it is worn, so proportion is the
+-- whole of whether a cape reads as a cape, and a size scalar cannot say that.
+-- `rate` is read only when shape is "Particle", which is what the Aura slot is
+-- made of.
 export type AccessoryPlaceholder = {
 	color: Color3,
 	shape: "Ball" | "Block" | "Cylinder" | "Particle",

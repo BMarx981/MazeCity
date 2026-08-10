@@ -109,9 +109,15 @@ Checked two ways, and the cheap one found the bug. `build` touches no service an
 
 Worth keeping in mind for anything else in this repo that is pure geometry: `MazeGenerator` is the same shape of function and the same trick would run it.
 
+**`PetLookPreview.server.lua` is still in the tree and is still flagged for deletion.** It outlived Set 1 deliberately: it is the only way to see eleven silhouettes side by side, and Set 2 was tuned against it. It goes when [PREVIEW_PLAN.md](PREVIEW_PLAN.md) Set 1 lands, which generalises exactly this file to enemies, gear and building styles and deletes it in the same change. Whoever removes it should also remove this paragraph.
+
 ### Set 2: The follower wears it
 
-`buildRig` falls back to `PetModelGenerator.build`; `makePlaceholder` deleted; the Glow light and ward ring read `look.primary`; `Inventory.placeholder` deleted; `placeholder` fields deleted from the catalogue. Verify the artist-model path still wins by dropping any Model into `ServerStorage/Pets/Firefly` in a play session.
+**Done.** `buildRig` falls back to `PetModelGenerator.build`; `makePlaceholder` deleted; the Glow light and ward ring read `look.primary` through `Inventory.look`; `Inventory.placeholder` deleted; `placeholder` deleted from all five catalogue entries and all six stages, and with it the `Placeholder` type in `Types.lua` (`AccessoryPlaceholder` is a different type and stays: gear never grew a recipe).
+
+The artist path is untouched and still checked the same way: drop any Model into `ServerStorage/Pets/Firefly` in a play session and the Firefly is that model.
+
+One thing the set surfaced and did not change: the bounding-box fallback in `slotCFrame` is now dead for every pet in the catalogue, because a generated rig authors all four slot attachments. It stays for an artist's model that authors none, which is the case it was always for.
 
 Done looks like: equip each pet, watch it follow, slide, zipline and respawn; a Glow pet lights the maze in its stage colour; a ward trigger draws the ring in the Hound's colour.
 

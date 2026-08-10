@@ -24,6 +24,7 @@ local ServerStorage = game:GetService("ServerStorage")
 local TextService = game:GetService("TextService")
 
 local Config = require(ReplicatedStorage:WaitForChild("MazeConfig"))
+local PetModelGenerator = require(ReplicatedStorage:WaitForChild("PetModelGenerator"))
 local Profiles = require(ServerScriptService:WaitForChild("PlayerProfiles"))
 local Inventory = require(ServerScriptService:WaitForChild("PetInventory"))
 
@@ -80,10 +81,12 @@ end
 -- ============================================================
 -- Follower rigs
 -- ============================================================
--- A rig is either a model an artist put in ServerStorage/Pets, or the
--- placeholder below, which is the same bargain EnemyService strikes: the game is
--- fully playable from a cold rojo build with zero Studio-side setup, and real
--- art drops in later by name with no code change.
+-- A rig is either a model an artist put in ServerStorage/Pets, or one
+-- PetModelGenerator builds from the stage's look recipe. That is the same bargain
+-- EnemyService strikes: the game is fully playable from a cold rojo build with
+-- zero Studio-side setup, and real art drops in later by name with no code
+-- change. The generator replaced the neon cube every pet used to be, not the
+-- artist, so the name still wins.
 
 local function sterilise(model)
 	for _, part in ipairs(model:GetDescendants()) do
@@ -96,25 +99,6 @@ local function sterilise(model)
 			part.Massless = true
 		end
 	end
-end
-
-local function makePlaceholder(petConfig, stage)
-	local look = Inventory.placeholder(petConfig, stage)
-	local model = Instance.new("Model")
-	model.Name = petConfig.id
-
-	local body = Instance.new("Part")
-	body.Name = "Body"
-	body.Shape = look.shape == "Ball" and Enum.PartType.Ball or Enum.PartType.Block
-	body.Size = Vector3.new(look.size, look.size, look.size)
-	body.Color = look.color
-	body.Material = Enum.Material.Neon
-	body.TopSurface = Enum.SurfaceType.Smooth
-	body.BottomSurface = Enum.SurfaceType.Smooth
-	body.Parent = model
-
-	model.PrimaryPart = body
-	return model
 end
 
 local function buildRig(petConfig, stage)
@@ -130,10 +114,13 @@ local function buildRig(petConfig, stage)
 				return clone
 			end
 			clone:Destroy()
-			warn("PetService: ServerStorage/Pets/" .. wanted .. " has no BasePart, using the placeholder")
+			warn("PetService: ServerStorage/Pets/" .. wanted .. " has no BasePart, building the look instead")
 		end
 	end
-	return makePlaceholder(petConfig, stage)
+	-- Built here rather than cloned from a template folder: at MaxEquipped of one
+	-- this is a handful of builds per session, which is cheaper than the folder
+	-- would be, and PetModelGenerator.build is pure so there is nothing to warm up.
+	return PetModelGenerator.build(petConfig.id, stage)
 end
 
 -- ============================================================
@@ -148,10 +135,10 @@ end
 -- resolved entries, which is the same rule the effects follow: one file knows
 -- what an accessoryId means.
 
--- An artist's rig, and a generated one once docs/PET_LOOKS_PLAN lands, authors a
--- <Slot>Attachment and that wins. The fallback is computed from the rig's own
--- bounding box, which is what puts a crown on the placeholder every pet is
--- today, at whatever size that placeholder happens to be.
+-- A <Slot>Attachment on the rig wins. A generated rig authors all four against
+-- the extent it actually came out as, which is why a crown lands on top of a
+-- Lumen Moth's head and not inside its wings; the bounding box fallback below is
+-- now only ever for an artist's model that authored none.
 local function slotCFrame(model, slot, boxCFrame, boxSize)
 	local attachment = model:FindFirstChild(slot .. "Attachment", true)
 	if attachment and attachment:IsA("Attachment") then
@@ -292,7 +279,7 @@ local function applyGlow(primary, petConfig, stage)
 
 	local light = Instance.new("PointLight")
 	light.Name = "PetGlow"
-	light.Color = Inventory.placeholder(petConfig, stage).color
+	light.Color = Inventory.look(petConfig, stage).primary
 	light.Range = (params.radius or 12) * multiplier
 	light.Brightness = params.brightness or 1
 	light.Shadows = false
@@ -337,7 +324,7 @@ local function applyWard(entry, petConfig, stage)
 	ring.Name = "WardRing"
 	ring.Shape = Enum.PartType.Cylinder
 	ring.Size = Vector3.new(0.2, radius * 2, radius * 2)
-	ring.Color = Inventory.placeholder(petConfig, stage).color
+	ring.Color = Inventory.look(petConfig, stage).primary
 	ring.Material = Enum.Material.Neon
 	ring.Transparency = 1
 	ring.Anchored = true

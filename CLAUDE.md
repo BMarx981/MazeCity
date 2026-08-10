@@ -35,6 +35,7 @@ maze-city/
       StatusDefinitions.lua   timed statuses the enemy system can apply
       ModelGenerator.lua      procedural enemy rigs, shared so the client can draw portraits
       PortraitGenerator.lua   ViewportFrame portraits over ModelGenerator, built client-side
+      PetModelGenerator.lua   procedural pet rigs from the `look` on a PetCatalog entry
     server/                 -> ServerScriptService
       MazeGenerator.lua       ModuleScript, all world generation
       PlayerProfiles.lua      ModuleScript, the saved profile and the only DataStore caller
@@ -88,7 +89,7 @@ The pinned rojo must match the Rojo Studio plugin's major line. Rojo changed its
 
 Studio's role is reduced to being the runner: press Play, the server builds the city, test, stop. In edit mode the workspace is empty except whatever Rojo syncs. Do not save generated geometry into the place file; it is a build artifact. If a play session leaves anything behind, delete `workspace.MazeCity`, `workspace.LiveEnemies`, `workspace.LivePets`, `workspace.EnemyEffects` and `ServerStorage.GeneratedEnemyModels`. The last of those is the one enemy rig template per type that `ModelGenerator` builds at startup; it rebuilds itself from scratch every run, so a stale copy is clutter rather than a bug.
 
-The one thing Studio is still needed for is content that is genuinely art. Rigs go in `ServerStorage/<Kind>/<Name>`: enemies at `ServerStorage/Enemies/<TypeName>` matching keys in `Config.EnemyProfiles`, pets at `ServerStorage/Pets/<model>` matching the `model` field of a `PetCatalog` entry or one of its evolution stages. Until they exist both services substitute placeholder rigs, so the game is fully playable from a cold `rojo build` with zero Studio-side setup.
+The one thing Studio is still needed for is content that is genuinely art. Rigs go in `ServerStorage/<Kind>/<Name>`: enemies at `ServerStorage/Enemies/<TypeName>` matching keys in `Config.EnemyProfiles`, pets at `ServerStorage/Pets/<model>` matching the `model` field of a `PetCatalog` entry or one of its evolution stages. Until they exist both services build a rig procedurally from that row's `look` recipe, so the game is fully playable from a cold `rojo build` with zero Studio-side setup and an artist's model wins by name whenever one arrives.
 
 ## Startup sequence
 

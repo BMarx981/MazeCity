@@ -118,11 +118,6 @@ function Inventory.modelName(petConfig, stage)
 	return evolution and evolution.model or petConfig.model
 end
 
-function Inventory.placeholder(petConfig, stage)
-	local evolution = Inventory.stageData(petConfig, stage)
-	return (evolution and evolution.placeholder) or petConfig.placeholder
-end
-
 -- The resolved look for a stage, which is what a caller wanting one colour off a
 -- pet should read. The rig itself comes from PetModelGenerator.build, and this is
 -- deliberately not that: a Glow light and a ward ring want the stage's colour
