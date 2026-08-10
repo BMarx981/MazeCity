@@ -28,6 +28,8 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Config = require(ReplicatedStorage:WaitForChild("MazeConfig"))
 
+local EnemySafeZones = require(script.Parent:WaitForChild("EnemySafeZones"))
+
 local WAYPOINT_REACHED = 4
 local REPLAN_DRIFT = 8
 
@@ -52,9 +54,9 @@ EnemyPathfinding.__index = EnemyPathfinding
 -- the give-up teleport home, which is a last resort and not navigation; these are
 -- how a move that is supposed to cross a wall proves it may.
 --
--- E5's safe zones are the third question and belong in exactly these two functions:
--- nothing may arrive inside one, and there is nowhere else every arrival passes
--- through.
+-- The safe zones landed here at E5 as the third question, and with the margin:
+-- nothing may arrive inside one or on its doorstep, and there is nowhere else
+-- every arrival passes through.
 
 local reachParams = RaycastParams.new()
 reachParams.FilterType = Enum.RaycastFilterType.Exclude
@@ -75,6 +77,9 @@ local function worldFilter()
 end
 
 function EnemyPathfinding.isClearBetween(from, to)
+	if EnemySafeZones.repels(to) then
+		return false
+	end
 	reachParams.FilterDescendantsInstances = worldFilter()
 	return workspace:Raycast(from, to - from, reachParams) == nil
 end
@@ -84,6 +89,9 @@ end
 -- the facade, or thin air over the plaza, and something about to appear there
 -- should not.
 function EnemyPathfinding.groundBelow(position, drop)
+	if EnemySafeZones.repels(position) then
+		return nil
+	end
 	reachParams.FilterDescendantsInstances = worldFilter()
 	local hit = workspace:Raycast(position, Vector3.new(0, -(drop or 12), 0), reachParams)
 	return hit and hit.Position or nil

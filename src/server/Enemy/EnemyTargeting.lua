@@ -11,9 +11,10 @@
 -- time and meant leaving somewhere never actually shook anything off. From the
 -- marker, an enemy owns a patch of maze and the player can leave it.
 --
--- The fourth is the safe zone and it is the one that is not here yet. It lands
--- in isEligible at E5 with the runtime zones themselves; there is nowhere else
--- it could go, which is why the stub said so.
+-- The fourth is the safe zone, landed at E5: a player standing on a plaza pad
+-- is not a candidate, and one who reaches it mid-chase stops being one on the
+-- next tick, which is the whole of "enemies abandon targets inside". There is
+-- nowhere else it could go, which is why the stub said so.
 --
 -- Stickiness is two mechanisms and they answer different questions. The retain
 -- multiplier widens the leash once a target is held, so a player standing on the
@@ -27,6 +28,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Config = require(ReplicatedStorage:WaitForChild("MazeConfig"))
 
+local EnemySafeZones = require(script.Parent:WaitForChild("EnemySafeZones"))
 local EnemyStatusService = require(script.Parent:WaitForChild("EnemyStatusService"))
 
 local EnemyTargeting = {}
@@ -127,6 +129,9 @@ function EnemyTargeting.isEligible(controller, character)
 		return false
 	end
 	if math.abs(hrp.Position.Y - controller.homeY) >= Config.Enemies.FloorBand then
+		return false
+	end
+	if EnemySafeZones.covers(hrp.Position) then
 		return false
 	end
 	return (hrp.Position - controller.home).Magnitude <= EnemyTargeting.leashFor(controller)

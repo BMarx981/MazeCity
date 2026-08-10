@@ -36,6 +36,7 @@ local RunService = game:GetService("RunService")
 
 local Config = require(ReplicatedStorage:WaitForChild("MazeConfig"))
 local EnemyRig = require(script.Parent:WaitForChild("EnemyRig"))
+local EnemySafeZones = require(script.Parent:WaitForChild("EnemySafeZones"))
 local EnemyStatusService = require(script.Parent:WaitForChild("EnemyStatusService"))
 local EnemyTargeting = require(script.Parent:WaitForChild("EnemyTargeting"))
 local EnemyWard = require(script.Parent:WaitForChild("EnemyWard"))
@@ -62,6 +63,12 @@ function EnemyCombat.canReach(controller, character)
 		return false
 	end
 	if (hrp.Position - controller.root.Position).Magnitude > Config.Juice.EnemyTellReach then
+		return false
+	end
+	-- Checked when the flash ends, like the wall: a player who reaches the pad
+	-- during the windup made it, and a swing that lands across the zone line is
+	-- the zone not existing.
+	if EnemySafeZones.covers(hrp.Position) then
 		return false
 	end
 	return EnemyTargeting.hasLineOfSight(controller.root.Position + EYE_OFFSET, hrp)
@@ -95,6 +102,11 @@ function EnemyCombat.canAttack(controller)
 		return false
 	end
 	if EnemyWard.covers(controller.root.Position) then
+		return false
+	end
+	-- Same edge as the ward: the Touched path fires between ticks, and an enemy
+	-- being backed off a plaza margin does not bite on the way out.
+	if EnemySafeZones.repels(controller.root.Position) then
 		return false
 	end
 	-- A Lurker that has not revealed itself does not bite, and neither does a Mimic
@@ -286,6 +298,13 @@ local function landOn(controller, character, spec)
 	if EnemyStatusService.isFrozen() then
 		return false
 	end
+	-- The zone protects from everything that lands, not just the swing: a trap
+	-- touched from inside it, a shockwave washing over the pad, a bolt that got
+	-- past the flight check on the same frame the player stepped in.
+	local hrp = character:FindFirstChild("HumanoidRootPart")
+	if hrp and EnemySafeZones.covers(hrp.Position) then
+		return false
+	end
 	EnemyCombat.applyDamage(controller, character, spec.damage or controller.stats.damage)
 	if spec.slowMultiplier then
 		EnemyCombat.applySlow(character, spec.slowMultiplier, spec.slowDuration or 0)
@@ -353,6 +372,12 @@ function EnemyCombat.launchProjectile(controller, direction, spec)
 		end
 		local was = bolt.Position
 		local now = was + step * dt
+		-- Dies at the boundary, not on a hit inside it: a bolt sailing over the
+		-- plaza pad ends there whether or not anybody is standing on it.
+		if EnemySafeZones.covers(now) then
+			finish()
+			return
+		end
 
 		-- Looked up per step and each one guarded, exactly as EnemyTargeting does it:
 		-- a nil in this list is a hole in an array the engine reads by length, and

@@ -772,18 +772,16 @@ Config.Accessories = {
 
 -- Section index -> enemy type that replaces whatever the building style picked.
 -- Leave a section out to keep per-building variety inside it.
+--
+-- Consumed by SpawnDirector as a hard filter: an overridden section's floors
+-- hold that one type and nothing else, whatever the budget would otherwise buy.
+-- The name is deliberately not validated here; EnemyDefinitions.get warns when
+-- it falls back, so a typo says so instead of being quietly skipped. The old
+-- Config.resolveEnemyType wrapper retired with the director, which reads this
+-- table directly.
 Config.SectionEnemyOverride = {
 	-- [2] = "Charger",
 }
-
--- Deliberately does not check that the name it returns is a real type. That is
--- EnemyDefinitions.get's job and it warns when it falls back, so a typo in the
--- override table above now says so instead of being quietly skipped in favour of
--- the building's own style. Checking here as well would need this file to require
--- the roster, and would put the fallback in two places.
-function Config.resolveEnemyType(sectionIndex, markerType)
-	return Config.SectionEnemyOverride[sectionIndex] or markerType or "Drifter"
-end
 
 -- The knobs that govern the enemy system as a whole, as opposed to what any one
 -- type is. Per-type numbers live on the ReplicatedStorage.EnemyDefinitions rows.
@@ -853,6 +851,12 @@ Config.Enemies = {
 	-- chased somebody across the floor is not deleted out from under them.
 	SpawnRange = 190,
 	DespawnRange = 260,
+	-- No rig materialises this close to a player, and none materialises in a
+	-- player's direct line of sight inside SpawnRange however far away. Both are
+	-- postponements rather than refusals: the marker stays a candidate and fills
+	-- on a later sweep, once the player has moved or looked away. A cell is 25
+	-- studs, so this is "never in the room with you".
+	MinSpawnDistance = 25,
 	-- Y slack that still counts as the same floor, for both target selection and
 	-- noticing that an enemy has fallen down a stairwell and has to walk home.
 	-- LEVEL_HEIGHT is 20.5, so this is comfortably inside one storey.
@@ -875,6 +879,46 @@ Config.Enemies = {
 		PerLevel = 1.1,
 		Max = 18,
 	},
+
+	-- How the spawn director spends that budget. A floor's roster is the
+	-- building's own style type (the anchor, always available and weighted up,
+	-- because an Ember tower promising Chargers from floor 1 is today's game)
+	-- plus every spawnable row whose role has unlocked by that floor. The gates
+	-- climb so the strange ones are met on the way up rather than at the door.
+	Director = {
+		-- Floor (0-9) at which a role may first be rolled. The anchor bypasses
+		-- its own gate; nothing else does.
+		RoleMinLevel = {
+			Basic = 0,
+			Fast = 2,
+			Heavy = 3,
+			Ambush = 4,
+			Ranged = 5,
+			Support = 6,
+			Unusual = 7,
+			Elite = 8,
+		},
+		-- Selection weight of the anchor against 1 for everything else. Early
+		-- floors are mostly anchor by construction: a small budget plus this is
+		-- what keeps day-one floor 1 feeling like the game before the director.
+		AnchorWeight = 4,
+		-- The brief's no-stack rule. At most one enemy per floor drawn from this
+		-- list or from the Elite role: each of these changes what a corridor
+		-- means, and two per floor is a puzzle stacked on a puzzle.
+		Disruptive = { "Blinker", "Shadow", "Trapper", "Shrieker" },
+		-- A Support type only ever spawns alongside at least one Basic one, so
+		-- the thing that makes other enemies worse never appears without the
+		-- enemy it is supposed to be making worse.
+		SupportNeedsBasic = true,
+		-- Live Elites per building, the Warden's rarity. Enforced here rather
+		-- than on the row because rarity is a property of what a floor may
+		-- contain, not of the type.
+		ElitePerBuilding = 1,
+	},
+
+	-- The client bestiary test screen over PortraitGenerator. Off in the shipped
+	-- game; flip it in Studio to eyeball all nineteen portraits on one grid.
+	BestiaryEnabled = false,
 
 	-- How often a controller thinks, and how often the scan decides which markers
 	-- should be holding a rig at all.

@@ -10,6 +10,7 @@
 --   ReplicatedStorage.EnemyTypes         the names, states and roles
 --   Enemy/EnemyFactory                   template, runtime stats, the speed cap
 --   Enemy/EnemySpawner                   the one way an enemy comes to life
+--   Enemy/SpawnDirector                  what a floor holds, inside its budget
 --   Enemy/EnemyController                one per rig: the tick and the state
 --   Enemy/Behaviors/*                    what each type does with that tick
 --   Enemy/EnemyRegistry                  every live controller, keyed by marker
@@ -21,11 +22,22 @@
 -- city carried 360 idle Humanoid state machines and the server had no frame left to
 -- move the handful that mattered.
 --
+-- What a marker holds is SpawnDirector's answer, since E5: the group of markers
+-- sharing a floor shares a budget, and typeFor is the whole of what this file
+-- knows about it. nil is a real answer, meaning the roll left that position
+-- empty, and it costs nothing against the caps.
+--
 -- The caps are enforced here and nowhere else, which is why the candidate markers
 -- are sorted before any of them is spent. A cap over an unordered sweep of a hash
 -- table gives you forty arbitrary enemies out of the hundred in range; sorted, the
 -- forty you get are the forty nearest, which is the same forty a player would say
 -- were there.
+--
+-- Two placement rules run inside the spend loop, and deliberately after the
+-- caps so their raycasts only fire for markers actually about to spawn: nothing
+-- materialises within Config.Enemies.MinSpawnDistance of a player, and nothing
+-- materialises in a player's direct line of sight. Both postpone rather than
+-- refuse; the marker stays a candidate for the sweep after the player moves on.
 
 local CollectionService = game:GetService("CollectionService")
 local Players = game:GetService("Players")
@@ -35,9 +47,12 @@ local RunService = game:GetService("RunService")
 local Config = require(ReplicatedStorage:WaitForChild("MazeConfig"))
 
 local Enemy = script.Parent:WaitForChild("Enemy")
+local EnemyPathfinding = require(Enemy:WaitForChild("EnemyPathfinding"))
 local EnemyRegistry = require(Enemy:WaitForChild("EnemyRegistry"))
 local EnemyRig = require(Enemy:WaitForChild("EnemyRig"))
+local EnemySafeZones = require(Enemy:WaitForChild("EnemySafeZones"))
 local EnemySpawner = require(Enemy:WaitForChild("EnemySpawner"))
+local SpawnDirector = require(Enemy:WaitForChild("SpawnDirector"))
 
 -- Every marker in the city, whether or not it currently holds a rig, and the
 -- markers whose enemy died and are serving out their respawn delay.
@@ -60,10 +75,13 @@ local function spawnFromMarker(marker)
 		return false
 	end
 
+	local enemyType = SpawnDirector.typeFor(marker)
+	if not enemyType then
+		return false
+	end
 	local section = marker:GetAttribute("Section") or 1
 	local building = marker:GetAttribute("Building") or 0
 	local level = marker:GetAttribute("Level") or 0
-	local enemyType = Config.resolveEnemyType(section, marker:GetAttribute("EnemyType"))
 
 	-- Arming the respawn is this file's business and not the controller's: the
 	-- controller knows it died, this knows that a marker is now empty and for how
@@ -137,6 +155,17 @@ local function nearestPlayerDistance(positions, pos)
 	return best
 end
 
+-- Whether any player has a clear line to the marker. One raycast per player,
+-- and only ever asked about a marker the caps have already agreed to spend on.
+local function inViewOfAny(pos, positions)
+	for _, p in ipairs(positions) do
+		if EnemyPathfinding.isClearBetween(pos, p) then
+			return true
+		end
+	end
+	return false
+end
+
 task.spawn(function()
 	local positions = {}
 	local candidates = {}
@@ -180,17 +209,26 @@ task.spawn(function()
 			local marker = candidate.marker
 			local section = marker:GetAttribute("Section") or 1
 			local building = marker:GetAttribute("Building") or 0
-			if EnemyRegistry.countInBuilding(section, building) < Config.Enemies.PerBuildingCap then
+			if
+				EnemyRegistry.countInBuilding(section, building) < Config.Enemies.PerBuildingCap
+				and candidate.distance >= Config.Enemies.MinSpawnDistance
+				and not EnemySafeZones.repels(marker.Position)
+				and not inViewOfAny(marker.Position, positions)
+			then
 				spawnFromMarker(marker)
 			end
 		end
 
 		-- Despawn is measured from the rig, not the marker, so an enemy that chased
-		-- somebody to the far side of the floor is not deleted mid chase.
+		-- somebody to the far side of the floor is not deleted mid chase. The
+		-- director hears about these and not about deaths: a walk-away ends the
+		-- visit and releases the floor's composition, a death holds it so the
+		-- respawn brings back the enemy the budget already paid for.
 		for marker, controller in pairs(EnemyRegistry.all()) do
 			local gone = not controller.root.Parent
 			if gone or nearestPlayerDistance(positions, controller.root.Position) > Config.Enemies.DespawnRange then
 				despawn(marker)
+				SpawnDirector.noteDespawned(marker)
 			end
 		end
 	end

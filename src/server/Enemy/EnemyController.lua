@@ -36,6 +36,7 @@ local EnemyCombat = require(script.Parent:WaitForChild("EnemyCombat"))
 local EnemyFactory = require(script.Parent:WaitForChild("EnemyFactory"))
 local EnemyPathfinding = require(script.Parent:WaitForChild("EnemyPathfinding"))
 local EnemyRig = require(script.Parent:WaitForChild("EnemyRig"))
+local EnemySafeZones = require(script.Parent:WaitForChild("EnemySafeZones"))
 local EnemyStateMachine = require(script.Parent:WaitForChild("EnemyStateMachine"))
 local EnemyStatusService = require(script.Parent:WaitForChild("EnemyStatusService"))
 local EnemyTargeting = require(script.Parent:WaitForChild("EnemyTargeting"))
@@ -394,9 +395,12 @@ function EnemyController:tick(dt)
 		return
 	end
 
-	-- Backed off by somebody's pet. It drops the target, forgets the position and
-	-- walks home, which is the Return branch below reached early; nothing takes
-	-- damage, nothing is stunned and nothing is moved by anything but its own legs.
+	-- Backed off by somebody's pet, or standing on a plaza safe zone's doorstep.
+	-- Either way it drops the target, forgets the position and walks home, which
+	-- is the Return branch below reached early; nothing takes damage, nothing is
+	-- stunned and nothing is moved by anything but its own legs. The zone check is
+	-- the margin one, which is what keeps an enemy from camping the line a player
+	-- has to cross to leave the pad.
 	--
 	-- It sits here rather than up with the freeze and stun gates, and the placement
 	-- is load-bearing twice over. A claimed tick is a move the player has already
@@ -404,7 +408,7 @@ function EnemyController:tick(dt)
 	-- would. And a Burrower under the floor is anchored: gated above, it would be
 	-- held mid-travel by a ward it is not allowed to finish crossing, and since it
 	-- cannot move it could never leave.
-	if EnemyWard.covers(self.root.Position) then
+	if EnemyWard.covers(self.root.Position) or EnemySafeZones.repels(self.root.Position) then
 		self:loseTarget()
 		self.lastSeen = nil
 		self.searchUntil = nil

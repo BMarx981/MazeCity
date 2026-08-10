@@ -69,13 +69,12 @@
 -- ============================================================
 -- What is dormant
 -- ============================================================
--- Every one of the nineteen has a behavior module and a silhouette as of E4. The
--- six the game meets today (Drifter, Stalker, Sentry, Swarmer, Lurker, Charger)
--- are still the only ones a generated marker can hold, because a marker's type
--- comes from its building's style and MazeGenerator names those six; the other
--- thirteen are reachable through Config.SectionEnemyOverride until E5's spawn
--- director decides what a floor is populated with. So they are written and
--- playable, and not yet met by accident.
+-- Every one of the nineteen has a behavior module and a silhouette as of E4,
+-- and all nineteen are met in play as of E5: a marker is a position now, and
+-- SpawnDirector rolls what stands on it from the whole spawnable roster. A
+-- building's style type is the roll's anchor rather than its whole answer, and
+-- the role gates in Config.Enemies.Director decide how far up the tower each
+-- of the other roles first appears.
 --
 -- Whole fields are dormant too, and the list is worth keeping honest because a
 -- number nobody reads looks exactly like a number that is not working:
@@ -93,7 +92,11 @@
 --   turnSpeed, acceleration, aggroDelay, stunDuration
 --           entered from the brief, read by nothing. Each needs a mechanic that
 --           does not exist yet rather than a line of plumbing.
---   spawnCost, role, spawnable  the spawn director's, at E5.
+--
+-- spawnCost, role and spawnable came off this list at E5: they are the spawn
+-- director's whole diet. What a floor holds is rolled against a budget of
+-- spawnCost, balanced across role, and never SplitterChild because of
+-- spawnable.
 --
 -- Two came off that list at E4 and are only partly read, which is worth saying
 -- exactly. attackRange is the Ranged behavior's firing range and is read on the
