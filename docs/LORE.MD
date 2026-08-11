@@ -39,7 +39,7 @@ Rule: **a pet's story explains its ability.** Lore and utility are the same sent
 > Hatched in the lightless lower floors, where the only way to survive was to become the light.
 
 - Evolution "Radiant": *The dark floors fear it now.*
-- Evolution "Solar": *Some say a piece of the sky got lost down there.*
+- Evolution "Solar": *Some say a piece of the sky got lost down there.* Written ahead of the game: `PetCatalog` ships one evolution per pet, so this line waits here and is deliberately absent from `Lore.lua`, which refuses an evolution line with no stage under it.
 
 **Compass Crow** (Epic, DeadEndPing, Wayfinding family)
 > It has flown every corridor the Maze has ever built. It remembers all of them, especially the ones that go nowhere.
@@ -249,7 +249,7 @@ Each seasonal egg ships with one new chapter: a new Kept, a new relic set, a new
 
 Flavor text lives in config keyed by the same ids as `Pets.luau` / `Eggs.luau` / the enemy config, so lore never migrates and Claude Code can extend it without touching gameplay code.
 
-`src/shared/Config/Lore.luau`
+**Shipped as `src/shared/Lore.lua`**, directly under `src/shared` and `.lua` rather than `.luau`, which is this repo's shared-module convention rather than the spec-generic path below. The sketch that follows is the shape; the file is the content, and it validates every key against the four real source tables at require time, so an id that does not exist is a startup error rather than a Codex row that never appears.
 
 ```luau
 local Lore = {
@@ -262,7 +262,7 @@ local Lore = {
 			},
 		},
 		compass_crow = {
-			hatchLine = "It has flown every corridor the Maze has ever built. It remembers the ones that go nowhere.",
+			hatchLine = "It has flown every corridor the Maze has ever built. It remembers all of them, especially the ones that go nowhere.",
 			evolutionLines = {
 				"It no longer follows the Maze. The Maze follows it.",
 			},
@@ -273,13 +273,13 @@ local Lore = {
 		summit_royal = { flavor = "The Maze rearranged three floors trying to stop this one from being found." },
 	},
 	kept = {
-		watcher = {
+		Watcher = {
 			loreLine = "The Maze cannot see. So it grew eyes in the corridors where climbers kept getting past.",
 		},
-		shadow = {
+		Shadow = {
 			loreLine = "The Maze taught it one rule: never move while a climber is watching. It has never broken it. It is very patient.",
 		},
-		warden = {
+		Warden = {
 			loreLine = "One to a building. It does not patrol its floors. It mourns them.",
 			survivalLine = "Something in it is still asleep. Do not be there when it wakes.",
 		},
@@ -295,7 +295,7 @@ local Lore = {
 return Lore
 ```
 
-Keys under `kept` must match the enemy config ids exactly. Codex unlock state in player data:
+Keys under `kept` must match the enemy config ids exactly, which is why they are PascalCase where the three catalogues are snake_case: a key mirrors the case of the table it points at. Codex unlock state in player data:
 
 ```luau
 codex = {
@@ -370,7 +370,7 @@ Notes:
 
 ### 9.3 Config pattern
 
-`src/shared/Config/Journal.luau`
+**Shipped as `src/shared/Journal.lua`**, on the same path convention as `Lore.lua`, and the module is the array itself so `#Journal` is the chapter's size. Its exported types live in `src/shared/Types.lua` beside the profile's `JournalState`, which is where this repo documents shapes. It checks itself at require time the way `Lore.lua` does: unique ids, well formed triggers, no two fragments on one event, and a `Stat` trigger may only name `floorsCleared` or `summitsReached`.
 
 ```luau
 export type JournalTrigger =
@@ -434,7 +434,7 @@ For PETS_PLAN.md, the lore system is its own Clutch, dependent on the enemy work
 
 Additions to the integration audit checklist, answered 2026-08-10 in PETS_PLAN.md's "Lore integration audit", which carries the file and line for each:
 - [x] Where each Kept detection/alert event fires server-side: five of seven are discrete server-side moments, the Shadow freeze is discrete but does not record which player caused it, and the Gatekeeper leash reset and Warden survival do not exist. None of the seven leaves the enemy system today, so all of them need a channel first.
-- [ ] What counts as "surviving" an encounter (leaving aggro radius? timer? maze completion after the event?): **still open, and the gate on fragments 9, 14 and 17.**
+- [x] What counts as "surviving" an encounter: **decided 2026-08-11. The enemy gives up while you are alive.** An encounter opens at a start moment the enemy system already holds and closes when that same rig loses you or walks away and despawns; a death between the two cancels it. Not a timer and not a maze completed afterward, both of which are equally true of a climber who was never in danger. Fragment 14 is the one this does not rescue, because it names *why* the enemy gave up and nothing distinguishes a leash from a lost line of sight.
 - [x] Login streak tracking: exists as `data.daily.streak`, but it counts daily *claims* rather than logins, and it wraps back to 1 past seven, so fragment 13 must be caught at the claim and can never be a poll.
 
 CLAUDE.md rule to add: **all player-facing lore text lives in this doc first, then in Lore/Journal configs.** Claude Code must not invent lore lines mid-task; new content means updating LORE.md in the same branch.

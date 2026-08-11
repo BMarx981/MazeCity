@@ -264,6 +264,53 @@ export type CodexState = {
 	journal: JournalState,
 }
 
+-- The content those chapters are unlock state over, per docs/LORE.MD Sections 7
+-- and 9.3. `Lore` is keyed by the ids of the things it describes and `Journal`
+-- is an array whose order is unlock order.
+--
+-- A trigger's two variants are the reason the unlock service has two code
+-- paths: a Stat trigger reads a running total in PlayerStats, so it needs no
+-- banking, while an Event trigger leaves nothing behind and banks a flag in
+-- JournalState the first time it fires.
+export type JournalTrigger = {
+	type: "Stat",
+	stat: string,
+	value: number,
+} | {
+	type: "Event",
+	event: string,
+}
+
+export type JournalFragment = {
+	id: string,
+	day: number,
+	text: string,
+	trigger: JournalTrigger,
+	spawnHint: string?,
+	nestOnly: boolean?,
+}
+
+export type PetLore = {
+	hatchLine: string,
+	evolutionLines: { string }?,
+}
+
+export type EggLore = {
+	flavor: string,
+}
+
+-- `survivalLine` is the Warden's alone: a second beat behind the lore line
+-- rather than a field every row is expected to carry.
+export type KeptLore = {
+	loreLine: string,
+	survivalLine: string?,
+}
+
+export type RelicLore = {
+	inscription: string,
+	set: string?,
+}
+
 -- The saved profile, whole. `upgrades` and `furthestSection` predate the pet
 -- system and are listed here because there is one profile, not two.
 export type PlayerData = {
