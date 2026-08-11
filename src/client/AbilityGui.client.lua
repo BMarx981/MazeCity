@@ -3,12 +3,26 @@
 -- the charge they all spend. Replaces WallWalkGui, which was a chip for the one
 -- ability there used to be.
 --
--- **The right column, under the powerup chip.** The bought things live together:
--- score, coins and powerup read down the right edge and the bar continues that
--- column, while the sprint meter, which is free and permanent, sits on its own in
--- the bottom right corner. The bar is anchored to the right edge rather than
--- positioned from the left, because it is as wide as the number of abilities
--- owned and only the edge it grows away from is fixed.
+-- **Two pieces, because only one of them grows.** A row of buttons wide enough
+-- to name every ability owned reached for the middle of the screen by the third
+-- purchase, and the middle of the screen is where the maze is. So the readout
+-- and the selector are split.
+--
+-- The readout is a fixed-width chip in the right column under the powerup chip,
+-- where the whole bar used to sit: the name of the selected ability, the charge
+-- they all spend, and what the key does with it. The bought things read down the
+-- right edge together (score, coins, powerup, this), while the sprint meter,
+-- free and permanent and belonging to no purchase, sits on its own in the bottom
+-- right corner. Nothing about the chip changes size with what is owned, so the
+-- column is the same width at one ability as at nine.
+--
+-- The selector is a row of small square boxes along the bottom edge, one per
+-- ability owned, each showing only its number key. That is the one part that
+-- grows, and it grows along the emptiest edge of the screen: the corners there
+-- are spoken for (thumbstick, jump button, sprint meter) and the centre is not.
+-- A box carries a digit rather than a label because the label is on the chip,
+-- and the selected box is the one with a border, which is the whole of what the
+-- row has to say.
 --
 -- **Ownership is read off replicated attributes, not off the remote.**
 -- SaveService stamps AbilityTier_<Key> and AbilityService stamps
@@ -17,9 +31,11 @@
 -- for. The remote carries the charge and the events, which are the two things an
 -- attribute is the wrong shape for.
 --
--- **The bar hides itself when nothing is owned**, the rule WallWalkGui had: a
--- player who has not been to the stall never learns there is a key, and the
--- first purchase is what teaches it.
+-- **Both pieces hide themselves when nothing is owned**, the rule WallWalkGui
+-- had: a player who has not been to the stall never learns there is a key, and
+-- the first purchase is what teaches it. They hide together and on the same
+-- count, because a name with no box to press is as useless as a box with nothing
+-- to name.
 
 local ContextActionService = game:GetService("ContextActionService")
 local Players = game:GetService("Players")
@@ -42,12 +58,15 @@ local GRACE = Config.Abilities.GraceColor
 local PANEL = Color3.fromRGB(16, 16, 20)
 local DIM = Color3.fromRGB(150, 160, 175)
 
-local BUTTON_W, BUTTON_H = 116, 34
-local GAP, PAD, METER_H = 6, 10, 22
+-- The chip is the width of the sprint meter and the powerup chip, which is what
+-- keeps the right column a column. The box is sized to a digit and nothing else.
+local CHIP_W, CHIP_H = 178, 52
+local BOX, GAP, PAD = 30, 6, 10
 
--- The number keys, in Config.Abilities.Order's order. Nine because the bar has
+-- The number keys, in Config.Abilities.Order's order. Nine because the row has
 -- no reason to be wider than a hand, and a tenth ability would want a different
--- selector rather than a longer row of keys.
+-- selector rather than a longer row of keys. A tenth box is still drawn and
+-- still tappable; it just carries no digit, because there is no key to print.
 local NUMBER_KEYS = {
 	Enum.KeyCode.One,
 	Enum.KeyCode.Two,
@@ -73,30 +92,38 @@ local function rounded(inst, radius)
 	return inst
 end
 
-local bar = Instance.new("Frame")
-bar.Name = "AbilityBar"
-bar.AnchorPoint = Vector2.new(1, 0)
-bar.Position = UDim2.new(1, -16, 0, 136)
-bar.Size = UDim2.fromOffset(0, 0)
-bar.BackgroundColor3 = PANEL
-bar.BackgroundTransparency = 0.25
-bar.BorderSizePixel = 0
-bar.Visible = false
-bar.Parent = gui
-rounded(bar, 10)
+local chip = Instance.new("Frame")
+chip.Name = "AbilityChip"
+chip.AnchorPoint = Vector2.new(1, 0)
+chip.Position = UDim2.new(1, -16, 0, 136)
+chip.Size = UDim2.fromOffset(CHIP_W, CHIP_H)
+chip.BackgroundColor3 = PANEL
+chip.BackgroundTransparency = 0.25
+chip.BorderSizePixel = 0
+chip.Visible = false
+chip.Parent = gui
+rounded(chip, 10)
 
-local row = Instance.new("Frame")
-row.Position = UDim2.fromOffset(PAD, PAD)
-row.Size = UDim2.fromOffset(0, BUTTON_H)
-row.BackgroundTransparency = 1
-row.Parent = bar
+-- Truncated rather than scaled or wrapped: the chip is a fixed width and a long
+-- name has to lose its tail rather than take the chip's shape with it.
+local nameLabel = Instance.new("TextLabel")
+nameLabel.Position = UDim2.fromOffset(PAD, 4)
+nameLabel.Size = UDim2.new(1, -PAD * 2, 0, 16)
+nameLabel.BackgroundTransparency = 1
+nameLabel.Font = Enum.Font.GothamBold
+nameLabel.TextSize = 14
+nameLabel.TextColor3 = DIM
+nameLabel.TextXAlignment = Enum.TextXAlignment.Left
+nameLabel.TextTruncate = Enum.TextTruncate.AtEnd
+nameLabel.Text = ""
+nameLabel.Parent = chip
 
 local track = Instance.new("Frame")
-track.Position = UDim2.new(0, PAD, 0, PAD + BUTTON_H + 8)
+track.Position = UDim2.fromOffset(PAD, 24)
 track.Size = UDim2.new(1, -PAD * 2, 0, 6)
 track.BackgroundColor3 = Color3.fromRGB(50, 52, 62)
 track.BorderSizePixel = 0
-track.Parent = bar
+track.Parent = chip
 rounded(track, 3)
 
 local fill = Instance.new("Frame")
@@ -107,15 +134,27 @@ fill.Parent = track
 rounded(fill, 3)
 
 local hint = Instance.new("TextLabel")
-hint.Position = UDim2.new(0, PAD, 0, PAD + BUTTON_H + 16)
-hint.Size = UDim2.new(1, -PAD * 2, 0, 16)
+hint.Position = UDim2.fromOffset(PAD, 33)
+hint.Size = UDim2.new(1, -PAD * 2, 0, 15)
 hint.BackgroundTransparency = 1
 hint.Font = Enum.Font.GothamBold
 hint.TextSize = 12
 hint.TextColor3 = DIM
-hint.TextXAlignment = Enum.TextXAlignment.Center
+hint.TextXAlignment = Enum.TextXAlignment.Left
 hint.Text = ""
-hint.Parent = bar
+hint.Parent = chip
+
+-- Bottom edge, centred, anchored to that edge so the row stays on it whatever
+-- the screen is. The margin matches the sprint meter's, which is the nearest
+-- thing to it and the one it must not read as part of.
+local keys = Instance.new("Frame")
+keys.Name = "AbilityKeys"
+keys.AnchorPoint = Vector2.new(0.5, 1)
+keys.Position = UDim2.new(0.5, 0, 1, -16)
+keys.Size = UDim2.fromOffset(0, BOX)
+keys.BackgroundTransparency = 1
+keys.Visible = false
+keys.Parent = gui
 
 -- ============================================================
 -- Server truth
@@ -177,15 +216,16 @@ local function paintButtons()
 		local isSelected = key == selected
 		local color = colorOf(key)
 		button.BackgroundColor3 = isSelected and color or Color3.fromRGB(38, 38, 46)
-		button.BackgroundTransparency = isSelected and 0.15 or 0.35
+		button.BackgroundTransparency = isSelected and 0.15 or 0.45
 		button.TextColor3 = isSelected and Color3.fromRGB(20, 20, 24) or color
-		-- The selected one is the only thing on the bar drawn in its own colour at
-		-- full strength, because at a glance the bar has exactly one question to
-		-- answer and it is which key press does what.
+		-- The border is the selection, and it is the only border in the row. A box
+		-- carries no name, so a row of outlined boxes would be a row of identical
+		-- squares; exactly one outline is what makes the answer readable without
+		-- reading anything. The name it belongs to is on the chip.
 		local stroke = button:FindFirstChildOfClass("UIStroke")
 		if stroke then
 			stroke.Color = color
-			stroke.Transparency = isSelected and 0 or 0.6
+			stroke.Enabled = isSelected
 		end
 	end
 end
@@ -205,36 +245,36 @@ local function rebuild()
 	buttons = {}
 
 	local count = #owned
-	bar.Visible = count > 0
+	chip.Visible = count > 0
+	keys.Visible = count > 0
 	setBound(count > 0)
 	if count == 0 then
 		return
 	end
 
-	local width = PAD * 2 + count * BUTTON_W + (count - 1) * GAP
-	bar.Size = UDim2.fromOffset(width, PAD * 2 + BUTTON_H + 8 + METER_H)
-	row.Size = UDim2.fromOffset(width - PAD * 2, BUTTON_H)
+	keys.Size = UDim2.fromOffset(count * BOX + (count - 1) * GAP, BOX)
 
 	for i, key in ipairs(owned) do
-		local def = Config.abilityDef(key)
-
 		local button = Instance.new("TextButton")
-		button.Size = UDim2.fromOffset(BUTTON_W, BUTTON_H)
-		button.Position = UDim2.fromOffset((i - 1) * (BUTTON_W + GAP), 0)
+		button.Size = UDim2.fromOffset(BOX, BOX)
+		button.Position = UDim2.fromOffset((i - 1) * (BOX + GAP), 0)
 		button.BorderSizePixel = 0
 		button.AutoButtonColor = false
 		button.Font = Enum.Font.GothamBold
-		button.TextSize = 13
-		button.Text = (i <= #NUMBER_KEYS and string.format("%d  %s", i, def.Label) or def.Label)
-		button.Parent = row
+		button.TextSize = 14
+		-- Past the ninth there is no key to print, and a box with nothing in it is
+		-- still tappable, which is the only selector that ability has left.
+		button.Text = i <= #NUMBER_KEYS and tostring(i) or ""
+		button.Parent = keys
 		rounded(button, 7)
 
 		local stroke = Instance.new("UIStroke")
-		stroke.Thickness = 1.5
+		stroke.Thickness = 2
+		stroke.Enabled = false
 		stroke.Parent = button
 
 		-- Tapping is the only selector a phone has, and it is also the one a player
-		-- finds without being told. The number keys below are the shortcut.
+		-- finds without being told. The number keys are the shortcut.
 		button.Activated:Connect(function()
 			intents:FireServer({ kind = "select", ability = key })
 		end)
@@ -283,7 +323,7 @@ local function shownCharge()
 end
 
 RunService.RenderStepped:Connect(function()
-	if not bar.Visible then
+	if not chip.Visible then
 		return
 	end
 
@@ -294,12 +334,20 @@ RunService.RenderStepped:Connect(function()
 
 	if not def then
 		fill.BackgroundColor3 = DIM
-		hint.Text = "Pick an ability"
+		nameLabel.Text = "No ability"
+		nameLabel.TextColor3 = DIM
+		hint.Text = "Pick one below"
 		hint.TextColor3 = DIM
 		return
 	end
 
 	local color = def.Color
+	-- The name is written every frame beside the charge rather than once when the
+	-- selection changes, for the reason the hint text already had: the chip is one
+	-- readout and half of it drawn on a signal and half on a frame is two things
+	-- that can disagree about which ability is being described.
+	nameLabel.Text = def.Label
+	nameLabel.TextColor3 = color
 	if grace then
 		fill.BackgroundColor3 = GRACE
 		hint.Text = "SQUEEZE OUT!"
@@ -462,9 +510,9 @@ remote.OnClientEvent:Connect(function(payload)
 	elseif event.kind == "refilled" or event.kind == "respawn" then
 		-- A flash rather than a chime. The charge refills on every floor, and a
 		-- sound there would be the most repeated noise in a ten floor climb.
-		bar.BackgroundTransparency = 0.05
+		chip.BackgroundTransparency = 0.05
 		task.delay(0.25, function()
-			bar.BackgroundTransparency = 0.25
+			chip.BackgroundTransparency = 0.25
 		end)
 	end
 end)
