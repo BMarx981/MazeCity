@@ -114,6 +114,8 @@ Worth keeping in mind for anything else in this repo that is pure geometry: `Maz
 
 **`PetLookPreview.server.lua` is still in the tree and is still flagged for deletion.** It outlived Set 1 deliberately: it is the only way to see eleven silhouettes side by side, and Set 2 was tuned against it. It goes when [PREVIEW_PLAN.md](PREVIEW_PLAN.md) Set 1 lands, which generalises exactly this file to enemies, gear and building styles and deletes it in the same change. Whoever removes it should also remove this paragraph.
 
+It is now `/petlook` and `/petlook clear` rather than a row that builds itself on first spawn, which is the correction the plan's own command surface was always going to make and which could not wait for it: eleven `AlwaysOnTop` billboards stack into one unreadable pile at the distance the row sits, and they did that to every playtest of anything else. A debug surface that cannot be not-looked-at is worse than no debug surface. The spin connection is held and dropped by `clear` for the same reason, a row now being buildable more than once per session.
+
 ### Set 2: The follower wears it
 
 **Done.** `buildRig` falls back to `PetModelGenerator.build`; `makePlaceholder` deleted; the Glow light and ward ring read `look.primary` through `Inventory.look`; `Inventory.placeholder` deleted; `placeholder` deleted from all five catalogue entries and all six stages, and with it the `Placeholder` type in `Types.lua` (`AccessoryPlaceholder` is a different type and stays: gear never grew a recipe).

@@ -21,7 +21,7 @@ CLAUDE.md already records the gap this closes and its own suggested workaround: 
 | File | What |
 |---|---|
 | `src/server/PreviewService.server.lua` | New. Studio-gated. The registry, the row layout, the labels, the spin, and the command surface. One file, the way `EnemyDebug` is one file. |
-| `src/server/PetLookPreview.server.lua` | Deleted by Set 1 of this plan, which is what it has been flagged for since it survived its own set. |
+| `src/server/PetLookPreview.server.lua` | Deleted by Set 1 of this plan, which is what it has been flagged for since it survived its own set. Already on `/petlook` rather than on first spawn, so the row it draws is opt-in until then. |
 | `src/shared/GearModelGenerator.lua` | New in Set 2. `makeGearPlaceholder` and `gearOrientation` lifted out of `PetService.server.lua`, which is a Script and therefore cannot be required by anything. |
 | `src/server/PetService.server.lua` | Set 2. Requires the module above instead of holding the two functions. |
 | `src/server/MazeGenerator.lua` | Set 3. One exported entry point for a single building, and a `ctx.preview` branch in `tagWithContext`. |

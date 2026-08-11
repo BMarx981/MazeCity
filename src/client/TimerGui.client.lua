@@ -506,6 +506,9 @@ local revealArrows = {}
 -- during a thirty second orb went out with the orb's own cleanup, and the
 -- ability read as broken on exactly the floor it was most worth using.
 local revealUntil = 0
+-- Kept so the trail can be redrawn for the floor above without the effect that
+-- lit it having to still be around to say what colour it was.
+local revealColor = nil
 
 -- Both arms live in the hop's own frame, so the pulse is one scale applied to the
 -- offsets and the sizes together and the chevron cannot come apart mid-swell.
@@ -551,6 +554,22 @@ local function currentTrigger()
 	return nil
 end
 
+-- Both ways this can come up empty used to return quietly, which is the powerup
+-- landing, the banner saying "Show the way", and the maze staying dark: from
+-- inside the game that is indistinguishable from a broken effect. Warned once
+-- per reason, the same shape as TowerTimerService's missing-RoofTrigger warning
+-- and for the same reason: the causes are environmental, and Output is the only
+-- place they can be seen.
+local revealWarned = {}
+
+local function revealMissing(reason)
+	if revealWarned[reason] then
+		return
+	end
+	revealWarned[reason] = true
+	warn("TimerGui: nothing to draw for the route trail, " .. reason)
+end
+
 local function showReveal(color, seconds)
 	-- The later of the two deadlines wins, so a cast during an orb extends the
 	-- trail rather than shortening it, and an orb during a cast does the same.
@@ -559,14 +578,33 @@ local function showReveal(color, seconds)
 	clearReveal()
 
 	local trigger = currentTrigger()
-	local route = trigger and trigger:GetAttribute("Route")
+	if not trigger then
+		revealMissing(
+			floorContext == nil and "the server has not said which floor the player is on"
+				or string.format(
+					"no LevelTrigger tagged for section %s building %s level %s, out of %d tagged",
+					tostring(floorContext.section),
+					tostring(floorContext.building),
+					tostring(floorContext.level),
+					#CollectionService:GetTagged("LevelTrigger")
+				)
+		)
+		return
+	end
+
+	local route = trigger:GetAttribute("Route")
 	if not route or route == "" then
 		-- No route to draw is not a deadline to hold: a floor whose trigger has not
 		-- replicated yet would otherwise sit with an armed clock and no arrows, and
 		-- the next real draw would inherit its leftover.
+		revealMissing(
+			"this floor's LevelTrigger carries no Route attribute, which is what a tower built by an older "
+				.. "generator looks like; delete workspace.MazeCity from the place file and play again"
+		)
 		return
 	end
 	revealUntil = deadline
+	revealColor = color
 
 	local juice = Config.Juice
 	local model = Instance.new("Model")
@@ -636,6 +674,22 @@ local function showReveal(color, seconds)
 
 	model.Parent = workspace
 	revealModel = model
+end
+
+-- A floor change is not the effect ending, and the two used to be treated as the
+-- same thing. The trail belongs to the floor it was read from, so it cannot
+-- survive a climb as drawn; what survives is the deadline, and the new floor's
+-- route is drawn for whatever is left of it. Clearing outright meant an orb
+-- taken near the stairs was spent on the last corridor below and the floor it
+-- was carried onto went dark, which is most of a thirty second powerup showing
+-- the way to nothing.
+local function carryReveal()
+	local left = revealUntil - os.clock()
+	if left <= 0 or not revealColor then
+		clearReveal()
+		return
+	end
+	showReveal(revealColor, left)
 end
 
 -- The pulse runs from the player's end of the route towards the stairs. The
@@ -1071,10 +1125,9 @@ remote.OnClientEvent:Connect(function(payload)
 		then
 			floorContext = { section = payload.section, building = payload.building, level = payload.level }
 			compassTarget = findTarget(floorContext)
-			-- A route belongs to the floor it was read from, so climbing out from
-			-- under one mid-powerup drops it rather than leaving a trail glowing
-			-- through the slab below.
-			clearReveal()
+			-- A route belongs to the floor it was read from, so the markers cannot
+			-- come up the stairs with the player; the deadline can, and does.
+			carryReveal()
 		end
 	else
 		holder.Visible = false

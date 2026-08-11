@@ -7,9 +7,22 @@
 -- throwaway RunService:IsStudio() branch that builds the geometry where you can
 -- see it, rather than owning eleven pets to look at eleven looks.
 --
--- Builds every pet at every stage in one row in front of the first character to
--- spawn, labelled, turning at the same rate a real follower turns. Nothing else
--- in the game reads it and it writes nothing back.
+-- Builds every pet at every stage in one row in front of the caller, labelled,
+-- turning at the same rate a real follower turns. Nothing else in the game reads
+-- it and it writes nothing back.
+--
+-- **On demand, never on spawn.** It used to build itself the moment the first
+-- character loaded, which put eleven AlwaysOnTop billboards in the view of
+-- anyone who pressed Play for any other reason: the labels bunch into one stack
+-- at the distance the row sits, and a debug surface that cannot be not-looked-at
+-- is a debug surface that ruins every unrelated playtest. So it takes the same
+-- two doors EnemyDebug takes, chat as any player or the command bar during Play:
+--
+--   /petlook          build the row in front of the speaker, replacing any row
+--   /petlook clear    take it away
+--
+--   game:GetService("ServerScriptService").PetLookPreviewCommand:Invoke()
+--   game:GetService("ServerScriptService").PetLookPreviewCommand:Invoke("clear")
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -27,7 +40,11 @@ local SPACING = 5
 local AHEAD = 16
 local HEIGHT = 3
 
-local built = false
+-- The spin loop, held so that clearing stops it. It was a bare Connect on a row
+-- built exactly once, which was fine while the row was built exactly once;
+-- rebuilding on a command leaves one connection per build turning models that
+-- have been destroyed.
+local spin = nil
 
 -- Sorted, because pairs over the catalogue is not a stable order and a row that
 -- reshuffles between runs is a row you cannot compare against the last one.
@@ -71,7 +88,22 @@ local function labelFor(model, text)
 	name.Parent = gui
 end
 
+local function clearRow()
+	if spin then
+		spin:Disconnect()
+		spin = nil
+	end
+	local folder = workspace:FindFirstChild("PetLookPreview")
+	if folder then
+		folder:Destroy()
+		return true
+	end
+	return false
+end
+
 local function buildRow(root)
+	clearRow()
+
 	local folder = Instance.new("Folder")
 	folder.Name = "PetLookPreview"
 	folder.Parent = workspace
@@ -99,28 +131,56 @@ local function buildRow(root)
 		table.insert(placed, { model = model, at = at })
 	end
 
-	print(string.format("PetLookPreview: %d looks, %d instances", #entries, parts))
-
 	-- Held in a list rather than read back off the folder, because GetChildren
 	-- order is not build order and a row that pairs a model with someone else's
 	-- slot spends every frame teleporting past itself.
-	RunService.Heartbeat:Connect(function()
+	spin = RunService.Heartbeat:Connect(function()
 		local turn = math.rad((os.clock() * Config.Pets.SpinDegreesPerSecond) % 360)
 		for _, entry in ipairs(placed) do
 			entry.model:PivotTo(CFrame.new(entry.at.Position) * CFrame.Angles(0, turn, 0))
 		end
 	end)
+
+	return string.format("%d looks, %d instances", #entries, parts)
 end
 
+-- The speaker's own character, falling back to the first player so the command
+-- bar door works with no speaker to read a position off.
+local function rootFor(speaker)
+	local player = speaker or Players:GetPlayers()[1]
+	local character = player and player.Character
+	return character and character:FindFirstChild("HumanoidRootPart")
+end
+
+local function dispatch(speaker, command)
+	if string.lower(tostring(command or "")) == "clear" then
+		return clearRow() and "cleared" or "nothing to clear"
+	end
+	local root = rootFor(speaker)
+	if not root then
+		return "no character to build in front of"
+	end
+	return buildRow(root)
+end
+
+local function run(speaker, command)
+	local result = dispatch(speaker, command)
+	print("[PetLookPreview] " .. tostring(result))
+	return result
+end
+
+local bindable = Instance.new("BindableFunction")
+bindable.Name = "PetLookPreviewCommand"
+bindable.OnInvoke = function(command)
+	return run(nil, command)
+end
+bindable.Parent = script.Parent
+
 Players.PlayerAdded:Connect(function(player)
-	player.CharacterAdded:Connect(function(character)
-		if built then
-			return
-		end
-		built = true
-		local root = character:WaitForChild("HumanoidRootPart", 10)
-		if root then
-			buildRow(root)
+	player.Chatted:Connect(function(message)
+		local words = string.split(message, " ")
+		if string.lower(words[1]) == "/petlook" then
+			run(player, words[2])
 		end
 	end)
 end)
