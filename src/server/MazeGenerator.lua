@@ -1032,12 +1032,17 @@ local function markMovingWall(part, mode, travel, axis)
 			end
 		end
 	else
-		-- Two rails at the edges of the wall's own thickness, running the whole
-		-- span it occupies across a cycle: its length plus its travel. A closed
-		-- wall shows only the pair reaching into the cell it will slide into,
-		-- which is the hint, pointed where the thing is about to go.
+		-- Two rails flanking the wall, running the whole span it occupies across
+		-- a cycle: its length plus its travel. A closed wall shows only the pair
+		-- reaching into the cell it will slide into, which is the hint, pointed
+		-- where the thing is about to go.
+		--
+		-- They sit just outside the wall's own thickness, not inside it. Rails
+		-- tucked under the wall are covered along their whole length by the thing
+		-- they are meant to advertise, and a player standing anywhere sees the
+		-- hint only once the wall has already left it.
 		local along = (axis == "X")
-		local half = (along and size.Z or size.X) / 2 - width / 2
+		local half = (along and size.Z or size.X) / 2 + width / 2
 		local length = (along and size.X or size.Z) + travel
 		for side = -1, 1, 2 do
 			table.insert(
