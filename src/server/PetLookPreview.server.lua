@@ -29,7 +29,7 @@
 -- a leading `/` as a command and does not hand the message to `Player.Chatted`.
 -- A row nobody could summon looked exactly like a row that had been deleted. So
 -- the alias is registered as a real TextChatCommand and `Chatted` is kept for a
--- place that ever pins the legacy system; `LAST_RUN_GRACE` is what stops a
+-- place that ever pins the legacy system; `CHAT_ECHO_GRACE` is what stops a
 -- system that fires both from building the row twice, the second build placing
 -- it in front of a player the first one had already teleported.
 --
@@ -67,10 +67,11 @@ local DECK_MARGIN = 6
 local VIEW_BACK = 7
 local LABEL_RANGE = 60
 
--- Both chat doors can be live at once. Same command, same speaker, inside this
--- many seconds is the second door repeating the first, not a second request.
-local LAST_RUN_GRACE = 0.5
-local lastRun = 0
+-- Both chat doors can be live at once. Keyed on the text rather than on the
+-- clock alone, because the double delivery is the same message twice and a
+-- second command typed quickly is not. Same rule as EnemyDebug.
+local CHAT_ECHO_GRACE = 0.5
+local lastChat, lastChatAt = nil, 0
 
 -- The spin loop, held so that clearing stops it. It was a bare Connect on a row
 -- built exactly once, which was fine while the row was built exactly once;
@@ -229,10 +230,10 @@ end
 -- driving this deliberately twice is asking for two builds.
 local function runFromChat(speaker, message)
 	local now = os.clock()
-	if now - lastRun < LAST_RUN_GRACE then
+	if message == lastChat and now - lastChatAt < CHAT_ECHO_GRACE then
 		return
 	end
-	lastRun = now
+	lastChat, lastChatAt = message, now
 
 	local words = string.split(message, " ")
 	run(speaker, words[2])

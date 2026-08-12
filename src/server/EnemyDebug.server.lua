@@ -8,6 +8,14 @@
 --
 --   game:GetService("ServerScriptService").EnemyDebugCommand:Invoke("spawn", "Warden")
 --
+-- The chat half is registered twice over, and the TextChatCommand is the half
+-- that works. The place pins no ChatVersion, so it runs the modern
+-- TextChatService, which reads a leading `/` as a command and does not hand the
+-- message to `Player.Chatted`: every command in this file had been unreachable
+-- from chat, which is indistinguishable from a debug surface that was never
+-- written. `Chatted` is kept for a place that ever pins the legacy system, and
+-- CHAT_ECHO_GRACE drops the second delivery when a system fires both.
+--
 -- Commands: models (regenerate templates, proving idempotence), spawn <Type>
 -- [count], wave <budget>, clear, damage [amount], kill (nearest enemy to the
 -- speaker; nothing else in the game can damage one, which is what makes these
@@ -26,6 +34,7 @@ local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 local ServerStorage = game:GetService("ServerStorage")
+local TextChatService = game:GetService("TextChatService")
 
 if not RunService:IsStudio() then
 	return
@@ -310,6 +319,22 @@ local function dispatch(speaker, command, ...)
 	return result
 end
 
+-- Keyed on the text rather than on the clock alone, because the double delivery
+-- is the same message twice and a second command typed quickly is not.
+local CHAT_ECHO_GRACE = 0.5
+local lastChat, lastChatAt = nil, 0
+
+local function dispatchFromChat(speaker, message)
+	local now = os.clock()
+	if message == lastChat and now - lastChatAt < CHAT_ECHO_GRACE then
+		return
+	end
+	lastChat, lastChatAt = message, now
+
+	local words = string.split(message, " ")
+	dispatch(speaker, select(2, table.unpack(words)))
+end
+
 local bindable = Instance.new("BindableFunction")
 bindable.Name = "EnemyDebugCommand"
 bindable.OnInvoke = function(command, ...)
@@ -317,11 +342,19 @@ bindable.OnInvoke = function(command, ...)
 end
 bindable.Parent = script.Parent
 
+local chatCommand = Instance.new("TextChatCommand")
+chatCommand.Name = "EnemyDebugChatCommand"
+chatCommand.PrimaryAlias = "/enemy"
+chatCommand.Triggered:Connect(function(source, message)
+	dispatchFromChat(source and Players:GetPlayerByUserId(source.UserId) or nil, message)
+end)
+chatCommand.Parent = TextChatService
+
 Players.PlayerAdded:Connect(function(player)
 	player.Chatted:Connect(function(message)
 		local words = string.split(message, " ")
 		if string.lower(words[1]) == "/enemy" then
-			dispatch(player, select(2, table.unpack(words)))
+			dispatchFromChat(player, message)
 		end
 	end)
 end)
