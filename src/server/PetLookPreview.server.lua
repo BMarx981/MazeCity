@@ -24,22 +24,26 @@
 --   game:GetService("ServerScriptService").PetLookPreviewCommand:Invoke()
 --   game:GetService("ServerScriptService").PetLookPreviewCommand:Invoke("clear")
 --
--- **Chat needs both doors, and TextChatService is the one that works.** The
--- place pins no ChatVersion, so it runs the modern TextChatService, which reads
--- a leading `/` as a command and does not hand the message to `Player.Chatted`.
--- A row nobody could summon looked exactly like a row that had been deleted. So
--- the alias is registered as a real TextChatCommand and `Chatted` is kept for a
--- place that ever pins the legacy system; `CHAT_ECHO_GRACE` is what stops a
--- system that fires both from building the row twice, the second build placing
--- it in front of a player the first one had already teleported.
+-- **Chat needs both doors, and which one is live is now pinned rather than
+-- inherited.** `default.project.json` sets `TextChatService.ChatVersion`,
+-- because the project did not name it and a door that works depends entirely on
+-- the answer: the modern service reads a leading `/` as a command and does not
+-- hand the message to `Player.Chatted`, the legacy one does the reverse and
+-- ignores a TextChatCommand. Unpinned, that was whatever the place happened to
+-- carry, and a row nobody could summon looks exactly like a row that had been
+-- deleted. So the alias is registered as a TextChatCommand, `Chatted` is kept
+-- for the legacy setting, and `CHAT_ECHO_GRACE` stops a system that somehow
+-- fires both from building the row twice, the second build placing it in front
+-- of a player the first one had already teleported.
 --
--- **You are put on the row rather than pointed at it.** The row is 30 looks and
--- 145 studs of it, so the far end is unreadable from the near end whatever the
--- label does; standing back far enough to frame the lot is standing too far
--- back to read any of it. The deck is a floor to walk the row on, you land at
--- its left end, and the labels carry a MaxDistance so only the few pets you are
--- actually near are named. That is the same bunching problem the on-spawn build
--- had, solved by drawing fewer labels rather than by moving the camera.
+-- **You are put on the row rather than pointed at it.** Eleven looks at five
+-- studs apart is fifty studs of row, which fits in one view from the deck but
+-- was nowhere findable from wherever the caller happened to be standing. So the
+-- row gets a floor and you are set down at its left end. LABEL_RANGE is not
+-- about that distance, it is about the other one: the labels stack into an
+-- unreadable smear when the row is seen from across the city, which is what
+-- made the on-spawn build intolerable, and a MaxDistance means a row left
+-- standing is invisible from anywhere you are not deliberately looking at it.
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -228,6 +232,23 @@ end
 
 -- The chat doors only. The command bar invokes `run` directly, because a script
 -- driving this deliberately twice is asking for two builds.
+-- The two doors do not agree on whether the text they hand back still has the
+-- alias on the front of it. This file survived guessing wrong only because its
+-- one argument is optional: "/petlook" parsed either way is a build. Same rule
+-- as EnemyDebug, where the same guess ate the command word.
+local function argumentsIn(message)
+	local words = {}
+	for _, word in ipairs(string.split(message, " ")) do
+		if word ~= "" then
+			table.insert(words, word)
+		end
+	end
+	if words[1] and string.sub(words[1], 1, 1) == "/" then
+		table.remove(words, 1)
+	end
+	return words
+end
+
 local function runFromChat(speaker, message)
 	local now = os.clock()
 	if message == lastChat and now - lastChatAt < CHAT_ECHO_GRACE then
@@ -235,8 +256,7 @@ local function runFromChat(speaker, message)
 	end
 	lastChat, lastChatAt = message, now
 
-	local words = string.split(message, " ")
-	run(speaker, words[2])
+	run(speaker, argumentsIn(message)[1])
 end
 
 local bindable = Instance.new("BindableFunction")
@@ -255,11 +275,21 @@ chatCommand.Triggered:Connect(function(source, message)
 end)
 chatCommand.Parent = TextChatService
 
-Players.PlayerAdded:Connect(function(player)
+-- Backfilled as well as connected. In Play Solo the local player can be added
+-- before a ServerScriptService script gets to run, and a legacy door hooked
+-- only on PlayerAdded then never hears from the one player in the session.
+local function hookChatted(player)
 	player.Chatted:Connect(function(message)
 		local words = string.split(message, " ")
 		if string.lower(words[1]) == "/petlook" or string.lower(words[1]) == "/pets" then
 			runFromChat(player, message)
 		end
 	end)
-end)
+end
+
+for _, player in ipairs(Players:GetPlayers()) do
+	hookChatted(player)
+end
+Players.PlayerAdded:Connect(hookChatted)
+
+print(string.format("[PetLookPreview] ready on %s chat, say /petlook", TextChatService.ChatVersion.Name))

@@ -8,13 +8,14 @@
 --
 --   game:GetService("ServerScriptService").EnemyDebugCommand:Invoke("spawn", "Warden")
 --
--- The chat half is registered twice over, and the TextChatCommand is the half
--- that works. The place pins no ChatVersion, so it runs the modern
--- TextChatService, which reads a leading `/` as a command and does not hand the
--- message to `Player.Chatted`: every command in this file had been unreachable
--- from chat, which is indistinguishable from a debug surface that was never
--- written. `Chatted` is kept for a place that ever pins the legacy system, and
--- CHAT_ECHO_GRACE drops the second delivery when a system fires both.
+-- The chat half is registered twice over, because which door works depends on
+-- `TextChatService.ChatVersion`: the modern service reads a leading `/` as a
+-- command and does not hand the message to `Player.Chatted`, the legacy one
+-- does the reverse and ignores a TextChatCommand. That setting is now pinned in
+-- `default.project.json` rather than inherited from whatever the place carried,
+-- which is what had left every command in this file unreachable from chat, a
+-- state indistinguishable from a debug surface that was never written.
+-- CHAT_ECHO_GRACE drops the second delivery if a system ever fires both.
 --
 -- Commands: models (regenerate templates, proving idempotence), spawn <Type>
 -- [count], wave <budget>, clear, damage [amount], kill (nearest enemy to the
@@ -324,6 +325,24 @@ end
 local CHAT_ECHO_GRACE = 0.5
 local lastChat, lastChatAt = nil, 0
 
+-- The two doors do not agree on whether the text they hand back still has the
+-- alias on the front of it, and guessing wrong here is invisible: "/enemy spawn
+-- Warden" arrives as ("Warden") and prints the command list, which reads as a
+-- typo rather than as a parse off by one. So the alias is dropped when it is
+-- there and the words are the arguments either way.
+local function argumentsIn(message)
+	local words = {}
+	for _, word in ipairs(string.split(message, " ")) do
+		if word ~= "" then
+			table.insert(words, word)
+		end
+	end
+	if words[1] and string.sub(words[1], 1, 1) == "/" then
+		table.remove(words, 1)
+	end
+	return words
+end
+
 local function dispatchFromChat(speaker, message)
 	local now = os.clock()
 	if message == lastChat and now - lastChatAt < CHAT_ECHO_GRACE then
@@ -331,8 +350,7 @@ local function dispatchFromChat(speaker, message)
 	end
 	lastChat, lastChatAt = message, now
 
-	local words = string.split(message, " ")
-	dispatch(speaker, select(2, table.unpack(words)))
+	dispatch(speaker, table.unpack(argumentsIn(message)))
 end
 
 local bindable = Instance.new("BindableFunction")
@@ -350,11 +368,21 @@ chatCommand.Triggered:Connect(function(source, message)
 end)
 chatCommand.Parent = TextChatService
 
-Players.PlayerAdded:Connect(function(player)
+-- Backfilled as well as connected. In Play Solo the local player can be added
+-- before a ServerScriptService script gets to run, and a legacy door hooked
+-- only on PlayerAdded then never hears from the one player in the session.
+local function hookChatted(player)
 	player.Chatted:Connect(function(message)
 		local words = string.split(message, " ")
 		if string.lower(words[1]) == "/enemy" then
 			dispatchFromChat(player, message)
 		end
 	end)
-end)
+end
+
+for _, player in ipairs(Players:GetPlayers()) do
+	hookChatted(player)
+end
+Players.PlayerAdded:Connect(hookChatted)
+
+print(string.format("[EnemyDebug] ready on %s chat, say /enemy", TextChatService.ChatVersion.Name))
