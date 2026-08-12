@@ -688,23 +688,30 @@ Config.Accessories = {
 	-- is refused rather than sold for nothing.
 	SellFraction = 0.5,
 
-	-- Where the effects that land in another service are published. PetService is
-	-- the only writer of all six and the reader adds one to whatever it already
-	-- had, which is the plan's one-attribute-one-writer rule: SaveService keeps
-	-- owning BaseWalkSpeed and MagnetRange and never learns that gear exists.
-	-- Named here rather than spelled out at seven call sites so a rename is one
-	-- edit, and listed as a table so PetService stamps them in a loop.
+	-- Where the effects that land somewhere this script does not write are
+	-- published. PetService is the only writer of all eight and the reader adds
+	-- one to whatever it already had, which is the plan's one-attribute-one-writer
+	-- rule: SaveService keeps owning BaseWalkSpeed and MagnetRange and never
+	-- learns that gear exists. Named here rather than spelled out at nine call
+	-- sites so a rename is one edit, and listed as a table so PetService stamps
+	-- them in a loop.
 	--
-	-- The other effects need no attribute, because their reader is already a
-	-- script that requires PetInventory: GlowRange and PetXp are PetService's
-	-- own, HatchProgress is IncubatorService's, and the two clarity effects are
-	-- client draws that come off the projection.
+	-- The other three effects need no attribute, because their reader is already a
+	-- script that requires PetInventory: GlowRange and PetXp are PetService's own
+	-- and HatchProgress is IncubatorService's.
 	--
-	-- The last two are the award sites, and each names one function rather than
-	-- one caller: every score this game pays goes through TowerTimerService's
-	-- award and every point of health an enemy takes goes through
-	-- EnemyCombat.applyDamage, so a third payout or a fifth way to hurt somebody
-	-- cannot be written without them.
+	-- ScoreBonus and Armor are the award sites, and each names one function rather
+	-- than one caller: every score this game pays goes through
+	-- TowerTimerService's award and every point of health an enemy takes goes
+	-- through EnemyCombat.applyDamage, so a third payout or a fifth way to hurt
+	-- somebody cannot be written without them.
+	--
+	-- The last two are the only ones whose reader is a client, and they are
+	-- attributes for the reason the ability tiers are: an attribute replicates, so
+	-- TimerGui draws the geared trail correctly on its first frame after a rejoin
+	-- with nothing to request. Off the projection they would have meant that
+	-- script subscribing to PetUpdate and parsing an inventory it has no other use
+	-- for.
 	Attributes = {
 		WalkSpeed = "PetWalkSpeed",
 		PickupRadius = "PetMagnetBonus",
@@ -712,6 +719,8 @@ Config.Accessories = {
 		WallWalkSeconds = "PetWallWalkSeconds",
 		ScoreBonus = "PetScoreBonus",
 		Armor = "PetArmor",
+		RouteVision = "PetRouteVision",
+		PhantomSense = "PetPhantomSense",
 	},
 	-- The second source, and the only way to own a Legendary. Here rather than
 	-- beside the daily knobs in Config.Pets because it names a piece of gear, and
@@ -1225,6 +1234,26 @@ Config.Juice = {
 	RouteArrowPulseSeconds = 1.4,
 	RouteArrowPulseScale = 1.55, -- the swell has to stay inside its own cell
 	RouteArrowFade = 0.25,
+	-- The geared trail: the first RouteVision hops, permanently. Amber rather than
+	-- another green, because the whole of what tells a player which layer they are
+	-- looking at is the colour: the orb and Trailblazer both draw the Reveal green
+	-- over the top of this and hand back to it, so if the two matched, a thirty
+	-- second orb would look like nothing happening and then like the trail
+	-- shortening. It does not pulse either, which is the second half of the same
+	-- distinction: the swell says how far along a full route you are, and there is
+	-- no along on three hops.
+	RouteGearColor = Color3.fromRGB(255, 196, 92),
+	-- The geared phantom mark. A shell around the pane rather than a change to it,
+	-- because the pane is generated geometry and a client parents nothing into
+	-- MazeCity; grown a little so the two surfaces do not fight over the same
+	-- pixels. Drawn in the sparkle's own colour so that the mark and the payoff
+	-- for walking into it are visibly the same thing.
+	PhantomSenseGrow = 0.3,
+	PhantomSenseTransparency = 0.68,
+	-- The whole cost of the effect, and it is a broadphase query rather than a
+	-- sweep over the thousand-odd phantoms a pregenerated city holds. Four times a
+	-- second is under a walking player's own pace at a 30 stud reach.
+	PhantomSenseInterval = 0.25,
 }
 
 -- ============================================================

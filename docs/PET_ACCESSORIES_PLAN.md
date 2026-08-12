@@ -116,8 +116,8 @@ Every effect names exactly one integration site. An effect with no site is not i
 | `WallWalkSeconds` | seconds, additive | `holdSeconds` in AbilityService, which becomes tier seconds plus bonus. Was `capacityFor` in WallWalkService, and the trailing claim that gear alone gives a meter to a player who never bought the upgrade died with that file; see Set 3. | +4.0 |
 | `PetXp` | fraction | `awardXp` in PetService (`:298`) | +0.35 |
 | `HatchProgress` | fraction | IncubatorService's boost resolve (`:182`), where `HatchBoost` already multiplies | +0.75 |
-| `RouteVision` | hops | Client. TimerGui already decodes `LevelTrigger.Route` for Reveal (`:520`); this draws the first N hops permanently. | 14 hops |
-| `PhantomSense` | studs | Client. TimerGui already binds the `PhantomWall` tag (`:666`); this marks phantoms within range before they are touched. | 30 |
+| `RouteVision` | hops | `PetRouteVision`, read by TimerGui's `drawGear`, which shares `buildTrail` with the Reveal orb and draws the first N hops permanently as its own layer. | 14 hops |
+| `PhantomSense` | studs | `PetPhantomSense`, read by TimerGui's `updateSense`, which marks phantoms on the player's own storey before they are touched. | 30 |
 | `ScoreBonus` | fraction | TowerTimerService's `award` (`:149`), which both payout sites already funnel through | +0.15 |
 | `Armor` | fraction prevented | `EnemyCombat.applyDamage` (`:77`), the one place anything takes a player's health | 0.40 |
 
@@ -327,15 +327,33 @@ Checked with the same stub-prelude harness Sets 1 through 3 used, at 100 checks,
 
 ### Set 4: Clarity
 
+**Done.**
+
 Two client draws, no server effect, which is the shape Reveal already has and the reason they are cheap.
 
-- [ ] `RouteVision` and `PhantomSense` join `Config.Accessories.Attributes` as `PetRouteVision` and `PetPhantomSense`. This corrects that table's own comment, which says the two clarity effects come off the projection: the projection lands in PetGui and the trail is drawn by TimerGui, so coming off the projection means TimerGui subscribing to a second remote and parsing an inventory it has no other use for. Attributes are replicated, so the trail is correct on the first frame after a rejoin, which is the argument AbilityGui already made for ownership.
-- [ ] `RouteVision`: the first N hops of the current floor's `Route`, drawn permanently in a distinct colour from Reveal's.
-- [ ] The handback is the delicate part. `clearReveal` (`TimerGui.client.lua:533`) tears the whole `RouteHint` model down and zeroes the deadline, and two unrelated things already extend that deadline without owning it. So clearing means returning to the baseline the gear pays for rather than to nothing: `clearReveal` redraws the geared hops after it clears. The deadline stays the single owner of the temporary layer and neither the orb nor Trailblazer learns that gear exists.
-- [ ] `PhantomSense`: phantoms within range marked before they are walked through, on the `PhantomWall` binding TimerGui already holds (`:794`).
-- [ ] Both cleared on floor change, on respawn and on unwear, the way `clearReveal` already is. Unwear arrives as an attribute change, so it is a `GetAttributeChangedSignal` bind rather than anything new on the wire.
+- [x] `RouteVision` and `PhantomSense` join `Config.Accessories.Attributes` as `PetRouteVision` and `PetPhantomSense`. This corrects that table's own comment, which says the two clarity effects come off the projection: the projection lands in PetGui and the trail is drawn by TimerGui, so coming off the projection means TimerGui subscribing to a second remote and parsing an inventory it has no other use for. Attributes are replicated, so the trail is correct on the first frame after a rejoin, which is the argument AbilityGui already made for ownership.
+- [x] `RouteVision`: the first N hops of the current floor's `Route`, drawn permanently in a distinct colour from Reveal's.
+- [x] The handback is the delicate part. `clearReveal` tears the whole `RouteHint` model down and zeroes the deadline, and two unrelated things already extend that deadline without owning it. So clearing means returning to the baseline the gear pays for rather than to nothing: `clearReveal` redraws the geared hops after it clears. The deadline stays the single owner of the temporary layer and neither the orb nor Trailblazer learns that gear exists.
+- [x] `PhantomSense`: phantoms within range marked before they are walked through.
+- [x] Both cleared on floor change, on respawn and on unwear. Unwear arrives as an attribute change, so it is a `GetAttributeChangedSignal` bind rather than anything new on the wire.
 
 Exit: the trail is on at the item's hop count with no orb taken and no cast made, Reveal takes over and hands back to it rather than to nothing, and the markers still live in `RouteHint` outside `MazeCity`.
+
+Six things the implementation settled:
+
+- **A second layer, not a third caller of `showReveal`.** A deadline is exactly what the geared trail does not have, and the cheap version, calling `showReveal` with a huge number of seconds, would have meant the orb could never end and `revealColor` would have carried the gear's colour up every floor. So the temporary layer keeps its deadline untouched and the gear gets its own model. The two are exclusive: a temporary draw takes the gear layer down, clearing one puts it back, and the model is named `RouteHint` either way because there is never more than one of them in the workspace to tell apart.
+
+- **The parse is full even when the draw is not.** An arrow points at the hop after it, so a three hop trail whose last chevron aimed at nothing would say "here" where the route says "left". `buildTrail` decodes the whole `Route` and draws `limit` of it, which is what lets the last geared arrow aim at the fourth cell.
+
+- **The geared trail does not pulse.** The swell says how far along the route you are, and there is no along on three hops. Colour and stillness together are what say which of the two layers is up, which matters more than it sounds: if they matched, a thirty second orb over a geared trail would read as nothing happening and then as the trail shortening.
+
+- **The sense is floor-filtered, and that is not tidiness.** `LEVEL_HEIGHT` is 19.5 and the cap is 30, so a sphere at the cap reaches a full storey through the slab, and a mark on a wall one floor down is a shortcut nobody can take. The filter is the `Section`/`Building`/`Level` attributes generation already stamps, which also means a floor change clears the marks by itself: the plan asked for three teardowns and two of them turned out to be things the draw already does.
+
+- **One broadphase query per tick rather than a sweep over the tag.** A pregenerated city holds over a thousand phantoms and at most a handful are ever near anybody, which is the bargain PickupService's magnet already struck. Marks are diffed rather than rebuilt, so a player standing still is not respawning parts four times a second, and a mark's `CanQuery` is false so the query cannot find this client's own marks and mark them.
+
+- **Marked through walls, on the same `AlwaysOnTop` the route trail uses.** A sense that only works on what is already in sight is not a sense, and the reach is one cell at the cap.
+
+Checked with a stub prelude wide enough to run the whole of TimerGui headless, at 44 checks, and confirmed against three mutated copies of the script that they bite: dropping the floor filter, dropping the handback from `clearReveal`, and drawing the whole route where the gear pays for three. What the harness covers is the hop count, the colour, the exclusivity, the handback on expiry and across a floor change, the unwear, the floor filter, the mark diffing and the eight published attributes each having a cap and a label with no two sharing a name. It is a scratchpad artifact for the reason the others were. What it cannot answer is whether amber reads as a different thing from green at a junction, which is a Studio session.
 
 ## Invariants this adds
 

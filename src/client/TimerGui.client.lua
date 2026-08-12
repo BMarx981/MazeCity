@@ -510,6 +510,20 @@ local revealUntil = 0
 -- lit it having to still be around to say what colour it was.
 local revealColor = nil
 
+-- The third thing that lights it, and the only one with no clock: pet gear worth
+-- RouteVision hops draws the first few of them permanently. It is a second layer
+-- rather than a third caller of showReveal, because a deadline is exactly what it
+-- does not have, and giving the temporary layer an infinite one would mean the
+-- orb could never end.
+--
+-- The two are exclusive: a temporary draw takes the gear layer down and clearing
+-- one puts it back, so there is never more than one RouteHint in the workspace
+-- and the geared hops are never underneath the orb's own arrows in a second
+-- colour. That is the whole of the handback the plan asked for, and neither the
+-- orb nor Trailblazer learns that gear exists.
+local GEAR_ROUTE_ATTR = Config.Accessories.Attributes.RouteVision
+local gearModel = nil
+
 -- Both arms live in the hop's own frame, so the pulse is one scale applied to the
 -- offsets and the sizes together and the chevron cannot come apart mid-swell.
 local ARROW_SPREAD = math.rad(Config.Juice.RouteArrowSpread)
@@ -530,12 +544,22 @@ local function scaleArrow(chevron, scale)
 	chevron.scale = scale
 end
 
-local function clearReveal()
+-- The temporary layer alone. Public clearing is clearReveal below, which is this
+-- plus the handback; showReveal wants this one, because it is about to draw over
+-- the top and a handback in between would be a model built to be destroyed.
+local function destroyReveal()
 	revealArrows = {}
 	revealUntil = 0
 	if revealModel then
 		revealModel:Destroy()
 		revealModel = nil
+	end
+end
+
+local function destroyGear()
+	if gearModel then
+		gearModel:Destroy()
+		gearModel = nil
 	end
 end
 
@@ -570,45 +594,35 @@ local function revealMissing(reason)
 	warn("TimerGui: nothing to draw for the route trail, " .. reason)
 end
 
-local function showReveal(color, seconds)
-	-- The later of the two deadlines wins, so a cast during an orb extends the
-	-- trail rather than shortening it, and an orb during a cast does the same.
-	-- Computed before the clear, which resets it.
-	local deadline = math.max(revealUntil, os.clock() + (seconds or 0))
-	clearReveal()
-
+-- Both layers come out of here: the model and its chevrons, or nil and the
+-- reason there was nothing to draw. `limit` is how many hops to show and nil is
+-- all of them, which is the only difference between what the orb draws and what
+-- the gear does.
+--
+-- The caller decides whether a failure is worth saying out loud. It is for a
+-- powerup, which announced itself with a banner and a sound; it is not for gear,
+-- which is drawing a floor it may simply not have been told about yet.
+local function buildTrail(color, limit)
 	local trigger = currentTrigger()
 	if not trigger then
-		revealMissing(
-			floorContext == nil and "the server has not said which floor the player is on"
-				or string.format(
-					"no LevelTrigger tagged for section %s building %s level %s, out of %d tagged",
-					tostring(floorContext.section),
-					tostring(floorContext.building),
-					tostring(floorContext.level),
-					#CollectionService:GetTagged("LevelTrigger")
-				)
-		)
-		return
+		return nil,
+			floorContext == nil and "the server has not said which floor the player is on" or string.format(
+				"no LevelTrigger tagged for section %s building %s level %s, out of %d tagged",
+				tostring(floorContext.section),
+				tostring(floorContext.building),
+				tostring(floorContext.level),
+				#CollectionService:GetTagged("LevelTrigger")
+			)
 	end
 
 	local route = trigger:GetAttribute("Route")
 	if not route or route == "" then
-		-- No route to draw is not a deadline to hold: a floor whose trigger has not
-		-- replicated yet would otherwise sit with an armed clock and no arrows, and
-		-- the next real draw would inherit its leftover.
-		revealMissing(
+		return nil,
 			"this floor's LevelTrigger carries no Route attribute, which is what a tower built by an older "
 				.. "generator looks like; delete workspace.MazeCity from the place file and play again"
-		)
-		return
 	end
-	revealUntil = deadline
-	revealColor = color
 
 	local juice = Config.Juice
-	local model = Instance.new("Model")
-	model.Name = "RouteHint"
 
 	-- The trigger is built 4 studs over its slab and the offsets are measured in
 	-- its plane, so the markers come back down from there to breadcrumb height.
@@ -616,7 +630,10 @@ local function showReveal(color, seconds)
 	local markerY = origin.Y - 4 + juice.RouteArrowHeight
 
 	-- The hops are read in full before any of them is drawn, because an arrow
-	-- points at the hop after it and the parse cannot know that one yet.
+	-- points at the hop after it and the parse cannot know that one yet. Parsed in
+	-- full even when only the first few are drawn, for the same reason: the last
+	-- geared arrow aims at the hop past the end of the gear, which is what makes a
+	-- three hop trail say which way the fourth cell is.
 	local points = {}
 	for hop in string.gmatch(route, "[^;]+") do
 		local dx, dz = string.match(hop, "^(%-?%d+),(%-?%d+)$")
@@ -625,11 +642,21 @@ local function showReveal(color, seconds)
 		end
 	end
 
+	local shown = #points
+	if limit and limit < shown then
+		shown = limit
+	end
+
+	local model = Instance.new("Model")
+	model.Name = "RouteHint"
+	local arrows = {}
+
 	-- The last hop is the stairwell and has nothing after it to aim at, so it keeps
 	-- the heading it arrived on. Same fallback covers a repeated offset, which is a
 	-- zero-length step no direction can be taken from.
 	local heading = Vector3.new(0, 0, -1)
-	for i, point in ipairs(points) do
+	for i = 1, shown do
+		local point = points[i]
 		local nextPoint = points[i + 1]
 		if nextPoint then
 			local step = nextPoint - point
@@ -654,13 +681,12 @@ local function showReveal(color, seconds)
 			chevron.arms[j] = arm
 		end
 		scaleArrow(chevron, 1)
-		table.insert(revealArrows, chevron)
+		table.insert(arrows, chevron)
 	end
 
-	if #revealArrows == 0 then
+	if #arrows == 0 then
 		model:Destroy()
-		revealUntil = 0
-		return
+		return nil, "this floor's Route decoded to no hops at all"
 	end
 
 	local glow = Instance.new("Highlight")
@@ -673,7 +699,54 @@ local function showReveal(color, seconds)
 	glow.Parent = model
 
 	model.Parent = workspace
+	return model, arrows
+end
+
+-- The baseline. Drawn whenever nothing temporary is up and the worn gear is worth
+-- a hop, which is what makes clearing the orb a handback rather than a blackout.
+-- Silent on failure: a floor whose trigger has not replicated yet is a moment
+-- with no arrows, not a fault, and the player asked for nothing.
+local function drawGear()
+	destroyGear()
+	if revealModel then
+		return
+	end
+	local hops = math.floor(player:GetAttribute(GEAR_ROUTE_ATTR) or 0)
+	if hops < 1 then
+		return
+	end
+	gearModel = buildTrail(Config.Juice.RouteGearColor, hops)
+end
+
+local function clearReveal()
+	destroyReveal()
+	drawGear()
+end
+
+local function showReveal(color, seconds)
+	-- The later of the two deadlines wins, so a cast during an orb extends the
+	-- trail rather than shortening it, and an orb during a cast does the same.
+	-- Computed before the clear, which resets it.
+	local deadline = math.max(revealUntil, os.clock() + (seconds or 0))
+	destroyReveal()
+	destroyGear()
+
+	local model, result = buildTrail(color, nil)
+	if not model then
+		-- No route to draw is not a deadline to hold: a floor whose trigger has not
+		-- replicated yet would otherwise sit with an armed clock and no arrows, and
+		-- the next real draw would inherit its leftover. The gear layer goes back up
+		-- for the same reason it does anywhere else, which here means it fails the
+		-- same way and quietly.
+		revealMissing(result)
+		drawGear()
+		return
+	end
+
 	revealModel = model
+	revealArrows = result
+	revealUntil = deadline
+	revealColor = color
 end
 
 -- A floor change is not the effect ending, and the two used to be treated as the
@@ -724,6 +797,12 @@ RunService.RenderStepped:Connect(function()
 end)
 
 player.CharacterAdded:Connect(clearReveal)
+
+-- Wearing or taking off a Cartographer's Circlet arrives as an attribute change,
+-- because the attribute is the wire: PetService publishes it and this redraws.
+-- Nothing new crosses for it, and a rejoin needs no event at all, the value being
+-- replicated before the first floor is entered.
+player:GetAttributeChangedSignal(GEAR_ROUTE_ATTR):Connect(drawGear)
 
 -- ============================================================
 -- Phantom wall sparkle
@@ -795,6 +874,124 @@ for _, part in ipairs(CollectionService:GetTagged("PhantomWall")) do
 	bindPhantom(part)
 end
 CollectionService:GetInstanceAddedSignal("PhantomWall"):Connect(bindPhantom)
+
+-- ============================================================
+-- Phantom sense
+-- ============================================================
+-- The other half of what gear pays for on this client: a phantom within
+-- PhantomSense studs is marked before it is walked into rather than after. The
+-- sparkle above is the payoff and this is the tell, so they are the same colour
+-- deliberately.
+--
+-- A shell around the pane, in a model of this client's own beside RouteHint,
+-- because the pane is generated geometry and nothing is parented into MazeCity.
+-- Marked through walls, on the same AlwaysOnTop the route trail uses: a sense
+-- that only works on what is already in sight is not a sense, and the reach is
+-- one cell at the cap.
+--
+-- Found by one broadphase query per tick rather than by a sweep over the tag,
+-- which is the bargain PickupService's magnet already struck: a pregenerated city
+-- holds over a thousand phantoms and at most a handful are ever near anybody. The
+-- floor filter after it is not decoration either. LEVEL_HEIGHT is 19.5 and the
+-- cap is 30, so a sphere that size reaches a full storey through the slab, and a
+-- mark on a wall one floor down is a shortcut nobody can take.
+
+local GEAR_PHANTOM_ATTR = Config.Accessories.Attributes.PhantomSense
+
+local senseModel = nil
+local senseMarks = {}
+local senseParams = OverlapParams.new()
+
+local function clearSense()
+	senseMarks = {}
+	if senseModel then
+		senseModel:Destroy()
+		senseModel = nil
+	end
+end
+
+local function markPhantom(part)
+	local juice = Config.Juice
+	local grow = juice.PhantomSenseGrow
+	local mark = Instance.new("Part")
+	mark.Name = "PhantomMark"
+	mark.Anchored = true
+	mark.CanCollide = false
+	mark.CanTouch = false
+	-- False, and load-bearing: the query below would otherwise find this client's
+	-- own marks and the tag check would be the only thing between them and a mark
+	-- on a mark.
+	mark.CanQuery = false
+	mark.CastShadow = false
+	mark.Material = Enum.Material.Neon
+	mark.Color = juice.PhantomSparkleColor
+	mark.Transparency = juice.PhantomSenseTransparency
+	mark.Size = part.Size + Vector3.new(grow, grow, grow)
+	mark.CFrame = part.CFrame
+	mark.Parent = senseModel
+	return mark
+end
+
+local function updateSense()
+	local range = player:GetAttribute(GEAR_PHANTOM_ATTR) or 0
+	local char = player.Character
+	local root = char and char:FindFirstChild("HumanoidRootPart")
+	if range <= 0 or not root or not floorContext then
+		clearSense()
+		return
+	end
+
+	if not senseModel then
+		local juice = Config.Juice
+		senseModel = Instance.new("Model")
+		senseModel.Name = "PhantomHint"
+		local glow = Instance.new("Highlight")
+		glow.FillColor = juice.PhantomSparkleColor
+		glow.FillTransparency = 0.45
+		glow.OutlineColor = juice.PhantomSparkleColor
+		glow.OutlineTransparency = 0
+		glow.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+		glow.Adornee = senseModel
+		glow.Parent = senseModel
+		senseModel.Parent = workspace
+	end
+
+	-- Marks are diffed rather than rebuilt, so a wall that stays in range keeps the
+	-- instance it already had and a player standing still is not respawning parts
+	-- four times a second.
+	local nearby = {}
+	for _, part in ipairs(workspace:GetPartBoundsInRadius(root.Position, range, senseParams)) do
+		if
+			CollectionService:HasTag(part, "PhantomWall")
+			and matches(part, floorContext.section, floorContext.building)
+			and part:GetAttribute("Level") == floorContext.level
+		then
+			nearby[part] = true
+			if not senseMarks[part] then
+				senseMarks[part] = markPhantom(part)
+			end
+		end
+	end
+
+	for part, mark in pairs(senseMarks) do
+		if not nearby[part] or not part.Parent then
+			mark:Destroy()
+			senseMarks[part] = nil
+		end
+	end
+end
+
+-- The floor change and the unwear both arrive here on their own: the first drops
+-- every mark through the floor filter, the second through the range being zero.
+-- A respawn is the one that does not, the marks belonging to a body that is gone.
+player.CharacterAdded:Connect(clearSense)
+
+task.spawn(function()
+	while true do
+		task.wait(Config.Juice.PhantomSenseInterval)
+		updateSense()
+	end
+end)
 
 -- ============================================================
 -- Coins and powerups

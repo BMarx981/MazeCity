@@ -10,9 +10,9 @@
 -- every intent is validated against the profile, nothing is trusted, and a
 -- player who floods gets their extra intents dropped.
 --
--- Gear leaves this script as six player attributes rather than as calls into six
--- services, which is the same channel the shop's upgrades already use. See
--- publishEffects: this is the one writer of all six and every reader adds.
+-- Gear leaves this script as eight player attributes rather than as calls into
+-- eight readers, which is the same channel the shop's upgrades already use. See
+-- publishEffects: this is the one writer of all eight and every reader adds.
 --
 -- Followers are anchored parts moved by CFrame, not humanoids. A pathfinding pet
 -- in a maze whose walls move is a pet stuck behind one, and a physics pet is one
@@ -85,14 +85,15 @@ end
 -- ============================================================
 -- Gear that reaches another service
 -- ============================================================
--- Six of the eleven accessory effects are spent somewhere this script has no
+-- Eight of the eleven accessory effects are spent somewhere this script has no
 -- business writing: a humanoid's walk speed, a coin payout, a magnet radius, a
--- charge drain, a score award and a hit landing. They cross the same way the
--- shop's upgrades cross and the Ghost powerup crosses, as an attribute, and the
--- rule that keeps them composable is the plan's: **one attribute, one writer,
--- readers add.** This is the writer of all six; SaveService and PickupService
--- keep owning BaseWalkSpeed and MagnetRange, and TowerTimerService and
--- EnemyCombat never learn that gear exists.
+-- charge drain, a score award, a hit landing, and the two trails TimerGui draws.
+-- They cross the same way the shop's upgrades cross and the Ghost powerup
+-- crosses, as an attribute, and the rule that keeps them composable is the
+-- plan's: **one attribute, one writer, readers add.** This is the writer of all
+-- eight; SaveService and PickupService keep owning BaseWalkSpeed and
+-- MagnetRange, and TowerTimerService, EnemyCombat and TimerGui never learn that
+-- gear exists.
 --
 -- Stamped as numbers rather than left absent at zero, for the reason the ability
 -- tiers are: an absent attribute is indistinguishable from a profile that has
