@@ -56,17 +56,18 @@ Same construction as the enemy recipes, restated because the details are the con
 
 Vocabulary, all optional except the first four:
 
-- `scale`, `primary`, `secondary`, `accent`: the whole-rig multiplier and the three colours. `primary` is the body, `secondary` the soft parts (belly, wings, muzzle, beak), `accent` the one neon group. Every part takes its colour from exactly one of the three, so recolouring a pet is naming three colours.
+- `scale`, `primary`, `secondary`, `accent`, `primaryMaterial`, `secondaryMaterial`, `accentMaterial`: the whole-rig multiplier, the three colour channels and their Roblox materials. `primary` is the body, `secondary` the soft parts (belly, wings, muzzle, beak), `accent` the ability group. Materials are broad species texture: Fabric for fur/fuzz/feathers, Pebble for the Firefly's shell, SmoothPlastic for membranes and hard beaks, Neon for ability tells.
 - `body`: the torso ellipsoid (number for a sphere, Vector3 for an ellipsoid, same rule as enemy sizes).
 - `belly`: a secondary-coloured ellipsoid sunk into the body, showing only underneath (the Hound).
 - `head`, `headOffset`: a second ball, or 0 for the one-ball pets whose face sits on the body.
-- `eyeCount`, `eyeSize`, `eyeSpread`, `eyeHeight`, `eyeDepth`, `pupilSize`: a dark ball proud of a light one, the inversion of the enemy eye. The two colours are fixed in the generator rather than per-pet, because a recipe that could opt out of them could build a pet that reads as a Kept.
+- `eyeCount`, `eyeSize`, `eyeColor`, `eyeSpread`, `eyeHeight`, `eyeDepth`, `eyeTilt`, `eyePitch`, `eyeYaw`, `eyeRim`, `pupilSize`, `pupilColor`, `catchlight`: the face. The default is still the old friendly white eye with a dark pupil, but pets can now push away from it: insect bead eyes, soft moth ovals, framed hound eyes, glossy bat eyes and sharp crow eyes.
 - `ears`, `wings`, `antennae`: symmetric pairs, `{ size, spread, height, z, tilt, sweep, pitch, forward, color }`. Anchor, orient, then push out along the part's own axis, same order as the enemy pairs and for the same reason.
 - `beak`, `muzzle`: a single part forward of the head (the Crow; the Hound).
 - `tail`: one solid part with size and offset. Not the enemy's fading segment chain: a pet tail is a tail rather than a thing trailing into smoke.
 - `crest`: a single upright accent on the head (the Crow's compass needle).
 - `collar`, `halo`, `motes`: one ring builder, three uses, `{ count, radius, size, height, z, tilt, upright }`. Flat by default, which is a halo above the head or a dial at a needle's base; `upright` stands the ring in the XY plane, which is a collar around a neck. **The plane is the whole difference between an accent that reads and one that is buried**, and it cost a fix in Set 1: a flat ring wide enough to clear the Hound's chest at the sides puts its rear beads inside the ribs, where they read as parts coming loose. The same trap took the Wayfinder's compass ring back into the shoulders, which is why it ended up a dial above the skull instead.
 - `charms`: a list of accent props the pet carries rather than wears, each `{ size, offset, color }`. The Firefly's lantern and the Coin Bat's coin. A list because a stage can add a second one, which is how Gilded reads: two coins is a thing you can count from across a room and 20% more coin is not.
+- `details`: static surface parts for animal-specific tells, each `{ name, size, offset, mirrored, pitch, yaw, roll, color, colorKey, material }`. This is deliberately not a new first-class group for every feature. It covers stripes, paws, fangs, wing spots, feet and feather marks while keeping the builder pure and the catalogue data-shaped.
 
 `look.primary` is the stage's colour in the world, and the two runtime reads move to it: the Glow light colour ([PetService.server.lua:156](src/server/PetService.server.lua#L156)) and the ward ring colour ([PetService.server.lua:201](src/server/PetService.server.lua#L201)). One colour source per stage; `placeholder` is deleted, not left beside it to drift.
 
@@ -74,11 +75,11 @@ Vocabulary, all optional except the first four:
 
 Five bases and six evolution stages. The standing rule: **an evolution adds or changes a group, never only scale and tint.** Enemies learned that lesson as "one rig in six colours is one rig"; here it is one pet in two sizes is one pet, and an evolution a player paid twenty-five levels for should read across a corridor.
 
-- **Firefly**: small amber ball, stub wings, neon lantern at the tail. *Radiant* (10): brighter lantern, gains a halo. *Solar* (25): flame palette, halo plus orbiting spark motes.
-- **Lumen Moth**: pale body, oversized flat wings, feathery antennae. *Pale* (12): wings grow past body length, secondary goes near-white.
-- **Ward Hound**: stout ellipsoid body, muzzle, drooped ears, short tail, neon collar. *Bulwark* (15): broader body, upright ears, the collar widens into a shoulder ring (the ward, worn).
-- **Coin Bat**: round body, big ears, membrane wings, a gold neon coin held under it. *Gilded* (15): gold secondary, second coin, wing edges go accent.
-- **Compass Crow**: slate body, beak, fanned tail, needle crest. *Wayfinder* (15): crest becomes a spinning needle mote on a ring, lighter palette.
+- **Firefly**: small segmented amber beetle body, dark bead eyes with gold glints, stub wings, antennae, six tiny tucked legs, shell seam and neon lantern at the tail. *Radiant* (10): brighter lantern, gains a halo. *Solar* (25): flame palette, halo plus orbiting spark motes.
+- **Lumen Moth**: pale insect body with separate fuzzy thorax and abdomen, large soft cyan oval eyes, oversized flat wings, feathery antennae, six tiny fuzzy legs, wing veins and wing eyespots. *Pale* (12): wings grow past body length, secondary goes near-white.
+- **Ward Hound**: compact long hound body, warm framed eyes, muzzle, nose, cheeks, embedded shoulders and haunches, real leg columns with attached small paws, drooped ears, short tail, neon collar. *Bulwark* (15): broader body, upright ears, the collar widens into a shoulder ring (the ward, worn).
+- **Coin Bat**: tiny dark torso under broad wings, glossy dark eyes with catchlights, big ears, chest and belly masses, small hind legs and feet, membrane wing ribs, tiny fangs and a gold neon coin held under it. *Gilded* (15): gold secondary, second coin, wing edges go accent.
+- **Compass Crow**: sleek dark slate bird body, sharp gold eyes, gold beak, small legs and feet, chest/back feather masses, fanned tail feathers, wing tips, needle crest. *Wayfinder* (15): crest becomes a spinning needle mote on a ring, lighter palette.
 
 Exact numbers are Set 1's work, tuned by eye in a play test. The list above is the contract for what each stage must visibly add.
 

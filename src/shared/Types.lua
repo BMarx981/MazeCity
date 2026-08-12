@@ -19,7 +19,7 @@ local Types = {}
 
 export type Rarity = "Common" | "Uncommon" | "Rare" | "Epic" | "Legendary"
 
-export type AbilityType = "Glow" | "DeadEndPing" | "CoinMagnet" | "CheckpointSave" | "SpeedBoost" | "HatchBoost"
+export type AbilityType = "Glow" | "DeadEndPing" | "CoinMagnet" | "CheckpointSave" | "SpeedBoost" | "HatchBoost" | "Ward"
 
 export type Ability = {
 	type: AbilityType,
@@ -42,6 +42,7 @@ export type SymmetricGroup = {
 	pitch: number?,
 	forward: number?,
 	color: Color3?,
+	material: PetMaterial?,
 }
 
 export type RingGroup = {
@@ -52,12 +53,40 @@ export type RingGroup = {
 	z: number?,
 	tilt: number?,
 	color: Color3?,
+	material: PetMaterial?,
 }
 
 export type Charm = {
 	size: number | Vector3,
 	offset: Vector3,
 	color: Color3?,
+	material: PetMaterial?,
+}
+
+export type PetColorKey = "primary" | "secondary" | "accent"
+
+export type PetMaterial = "SmoothPlastic" | "Plastic" | "Fabric" | "Pebble" | "Slate" | "Neon"
+
+export type PetDetail = {
+	name: string?,
+	size: number | Vector3,
+	offset: Vector3,
+	mirrored: boolean?,
+	pitch: number?,
+	yaw: number?,
+	roll: number?,
+	color: Color3?,
+	colorKey: PetColorKey?,
+	material: PetMaterial?,
+}
+
+export type EyeSurface = {
+	size: number | Vector3,
+	inset: number?,
+	offset: Vector3?,
+	color: Color3?,
+	colorKey: PetColorKey?,
+	material: PetMaterial?,
 }
 
 export type PetLook = {
@@ -65,27 +94,54 @@ export type PetLook = {
 	primary: Color3?,
 	secondary: Color3?,
 	accent: Color3?,
+	primaryMaterial: PetMaterial?,
+	secondaryMaterial: PetMaterial?,
+	accentMaterial: PetMaterial?,
 	body: (number | Vector3)?,
-	belly: { size: number | Vector3, offset: Vector3? }?,
+	belly: { size: number | Vector3, offset: Vector3?, material: PetMaterial? }?,
 	head: (number | Vector3)?,
 	headOffset: Vector3?,
 	eyeCount: number?,
-	eyeSize: number?,
+	eyeSize: (number | Vector3)?,
+	eyeColor: Color3?,
 	eyeSpread: number?,
 	eyeHeight: number?,
 	eyeDepth: number?,
-	pupilSize: number?,
+	eyeEmbed: number?,
+	eyeTilt: number?,
+	eyePitch: number?,
+	eyeYaw: number?,
+	eyeRim: EyeSurface?,
+	pupilSize: (number | Vector3)?,
+	pupilColor: Color3?,
+	catchlight: EyeSurface?,
 	ears: SymmetricGroup?,
 	wings: SymmetricGroup?,
 	antennae: SymmetricGroup?,
-	beak: { size: number | Vector3, height: number?, forward: number?, tilt: number?, color: Color3? }?,
-	muzzle: { size: number | Vector3, height: number?, forward: number?, tilt: number?, color: Color3? }?,
-	tail: { size: number | Vector3, offset: Vector3?, tilt: number?, color: Color3? }?,
-	crest: { size: number | Vector3, height: number?, z: number?, color: Color3? }?,
+	beak: {
+		size: number | Vector3,
+		height: number?,
+		forward: number?,
+		tilt: number?,
+		color: Color3?,
+		material: PetMaterial?,
+	}?,
+	muzzle: {
+		size: number | Vector3,
+		height: number?,
+		forward: number?,
+		tilt: number?,
+		color: Color3?,
+		material: PetMaterial?,
+	}?,
+	tail: { size: number | Vector3, offset: Vector3?, tilt: number?, color: Color3?, material: PetMaterial? }?,
+	crest: { size: number | Vector3, height: number?, z: number?, color: Color3?, material: PetMaterial? }?,
 	collar: RingGroup?,
 	halo: RingGroup?,
 	motes: RingGroup?,
 	charms: { Charm }?,
+	details: { PetDetail }?,
+	motion: { [string]: number }?,
 }
 
 export type EvolutionStage = {

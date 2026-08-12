@@ -68,10 +68,9 @@ local PetCatalog = require(ReplicatedStorage:WaitForChild("PetCatalog"))
 
 local PetModelGenerator = {}
 
--- The eye is the single clearest place the pets separate from the Kept, so the
--- two colours are fixed here rather than being per-pet: an enemy is a lit point
--- on a dark head, a pet is a dark pupil on a bright eye, and a recipe that could
--- opt out of that could build a pet that reads as a Kept.
+-- These are the friendly default eye colours. Individual pets can override
+-- them, because faces are where the animal read is strongest; the default still
+-- keeps a new pet away from the Kept's dark-head-neon-eye language.
 local EYE_WHITE = Color3.fromRGB(250, 250, 252)
 local PUPIL_DARK = Color3.fromRGB(26, 26, 34)
 
@@ -81,11 +80,14 @@ local DEFAULT_LOOK = {
 
 	-- primary is the body, secondary the soft parts (belly, wings, muzzle,
 	-- beak), accent the one neon group that is the ability made visible. Every
-	-- part built below takes its colour from exactly one of the three, so a
-	-- recipe recolours a pet by naming three colours and nothing else.
+	-- common part below takes its colour from exactly one of the three, while
+	-- eyes and details may name their own colour when the animal read needs it.
 	primary = Color3.fromRGB(235, 235, 240),
 	secondary = Color3.fromRGB(255, 255, 255),
 	accent = Color3.fromRGB(255, 236, 150),
+	primaryMaterial = "SmoothPlastic",
+	secondaryMaterial = "SmoothPlastic",
+	accentMaterial = "Neon",
 
 	-- A number is a sphere, a Vector3 is an ellipsoid. Same rule as the enemy
 	-- recipes, and it is what keeps most lines here to one number.
@@ -102,7 +104,18 @@ local DEFAULT_LOOK = {
 	eyeSpread = 0.24,
 	eyeHeight = 0.1,
 	eyeDepth = 0.46,
+	-- How far an eye is pressed into the head surface. The depth above is still
+	-- useful as an artistic limit, but this keeps a wide-set eye from floating
+	-- off the curved cheek of a small ellipsoid head.
+	eyeEmbed = 0.05,
 	pupilSize = 0.17,
+	eyeColor = EYE_WHITE,
+	pupilColor = PUPIL_DARK,
+	eyeTilt = 0,
+	eyePitch = 0,
+	eyeYaw = 0,
+	eyeRim = nil,
+	catchlight = nil,
 
 	-- Symmetric pairs. Each is { size, spread, height, z, tilt, sweep, pitch,
 	-- forward }, all but size optional.
@@ -134,6 +147,10 @@ local DEFAULT_LOOK = {
 	-- Accent props a pet carries rather than wears: the Firefly's lantern, the
 	-- Coin Bat's coin. A list, so a stage can add a second one.
 	charms = nil,
+
+	-- Static surface details: wing spots, paws, fangs, stripes and other little
+	-- animal tells that would be too specific to make first-class groups.
+	details = nil,
 
 	-- How the rig moves, read by PetRigDriver: flapRate, flapAngle, swayRate,
 	-- swayAngle, twitchEvery, ringRate, blinkEvery and the rest of that module's
@@ -270,7 +287,22 @@ function PetModelGenerator.build(petId, stage)
 		highest = math.max(highest, offsetY + height / 2)
 	end
 
-	local body = skinPart(model, "Body", bodySize, look.primary)
+	local function materialNamed(name)
+		if name == "Fabric" then
+			return Enum.Material.Fabric
+		elseif name == "Pebble" then
+			return Enum.Material.Pebble
+		elseif name == "Slate" then
+			return Enum.Material.Slate
+		elseif name == "Plastic" then
+			return Enum.Material.Plastic
+		elseif name == "Neon" then
+			return Enum.Material.Neon
+		end
+		return Enum.Material.SmoothPlastic
+	end
+
+	local body = skinPart(model, "Body", bodySize, look.primary, materialNamed(look.primaryMaterial))
 	body.CFrame = root.CFrame
 	local bodyJoint = Instance.new("Motor6D")
 	bodyJoint.Name = "BodyJoint"
@@ -305,14 +337,49 @@ function PetModelGenerator.build(petId, stage)
 		return part
 	end
 
+	local function colorOf(spec, fallback)
+		if spec.color then
+			return spec.color
+		end
+		if spec.colorKey == "primary" then
+			return look.primary
+		elseif spec.colorKey == "secondary" then
+			return look.secondary
+		elseif spec.colorKey == "accent" then
+			return look.accent
+		end
+		return fallback
+	end
+
+	local function materialOf(spec, fallback)
+		if spec.material then
+			return materialNamed(spec.material)
+		end
+		return fallback
+	end
+
 	if look.belly then
 		local spec = look.belly
-		place("Belly", sizeOf(spec.size, scale), look.secondary, (spec.offset or Vector3.zero) * scale)
+		place(
+			"Belly",
+			sizeOf(spec.size, scale),
+			look.secondary,
+			(spec.offset or Vector3.zero) * scale,
+			nil,
+			materialOf(spec, materialNamed(look.secondaryMaterial))
+		)
 	end
 
 	local face = body
 	if look.head ~= 0 then
-		face = place("Head", sizeOf(look.head, scale), look.primary, look.headOffset * scale)
+		face = place(
+			"Head",
+			sizeOf(look.head, scale),
+			look.primary,
+			look.headOffset * scale,
+			nil,
+			materialNamed(look.primaryMaterial)
+		)
 	end
 	local faceOffset = look.head ~= 0 and look.headOffset * scale or Vector3.zero
 
@@ -326,7 +393,14 @@ function PetModelGenerator.build(petId, stage)
 			local offset = Vector3.new(side * spec.spread * scale, spec.height * scale, (spec.z or 0) * scale)
 			local angles = CFrame.Angles(spec.pitch or 0, side * (spec.sweep or 0), side * (spec.tilt or 0))
 				* CFrame.new(0, 0, -(spec.forward or 0) * scale)
-			place(partName, size, spec.color or look.secondary, offset, angles)
+			place(
+				partName,
+				size,
+				spec.color or look.secondary,
+				offset,
+				angles,
+				materialOf(spec, materialNamed(look.secondaryMaterial))
+			)
 		end
 	end
 
@@ -347,7 +421,8 @@ function PetModelGenerator.build(petId, stage)
 			sizeOf(spec.size, scale),
 			spec.color or look.secondary,
 			offset,
-			spec.tilt and CFrame.Angles(spec.tilt, 0, 0) or nil
+			spec.tilt and CFrame.Angles(spec.tilt, 0, 0) or nil,
+			materialOf(spec, materialNamed(look.secondaryMaterial))
 		)
 	end
 
@@ -365,14 +440,50 @@ function PetModelGenerator.build(petId, stage)
 			sizeOf(spec.size, scale),
 			spec.color or look.primary,
 			(spec.offset or Vector3.zero) * scale,
-			spec.tilt and CFrame.Angles(spec.tilt, 0, 0) or nil
+			spec.tilt and CFrame.Angles(spec.tilt, 0, 0) or nil,
+			materialOf(spec, materialNamed(look.primaryMaterial))
 		)
+	end
+
+	for index, spec in ipairs(look.details or {}) do
+		local angles = CFrame.Angles(spec.pitch or 0, spec.yaw or 0, spec.roll or 0)
+		if spec.mirrored then
+			for _, side in ipairs({ -1, 1 }) do
+				local offset = spec.offset * scale
+				offset = Vector3.new(offset.X * side, offset.Y, offset.Z)
+				local mirroredAngles = CFrame.Angles(spec.pitch or 0, side * (spec.yaw or 0), side * (spec.roll or 0))
+				place(
+					(spec.name or "Detail") .. (side < 0 and "Left" or "Right") .. index,
+					sizeOf(spec.size, scale),
+					colorOf(spec, look.secondary),
+					offset,
+					mirroredAngles,
+					materialOf(spec, nil)
+				)
+			end
+		else
+			place(
+				(spec.name or "Detail") .. index,
+				sizeOf(spec.size, scale),
+				colorOf(spec, look.secondary),
+				spec.offset * scale,
+				angles,
+				materialOf(spec, nil)
+			)
+		end
 	end
 
 	if look.crest then
 		local spec = look.crest
 		local offset = faceOffset + Vector3.new(0, (spec.height or 0) * scale, (spec.z or 0) * scale)
-		place("Crest", sizeOf(spec.size, scale), spec.color or look.accent, offset, nil, Enum.Material.Neon)
+		place(
+			"Crest",
+			sizeOf(spec.size, scale),
+			spec.color or look.accent,
+			offset,
+			nil,
+			materialNamed(look.accentMaterial)
+		)
 	end
 
 	-- One ring, three uses. Seeded around the circle at build time rather than at
@@ -390,7 +501,7 @@ function PetModelGenerator.build(petId, stage)
 			)
 			local angles = spec.tilt and CFrame.Angles(math.cos(angle) * spec.tilt, 0, -math.sin(angle) * spec.tilt)
 				or nil
-			place(name .. index, size, spec.color or look.accent, offset, angles, Enum.Material.Neon)
+			place(name .. index, size, spec.color or look.accent, offset, angles, materialNamed(look.accentMaterial))
 		end
 	end
 
@@ -411,8 +522,23 @@ function PetModelGenerator.build(petId, stage)
 			spec.color or look.accent,
 			spec.offset * scale,
 			nil,
-			Enum.Material.Neon
+			materialOf(spec, materialNamed(look.accentMaterial))
 		)
+	end
+
+	-- How far the front surface of an ellipsoid reaches at a local X/Y point.
+	-- Eyes sit out toward each cheek, where a round head is shallower than it is
+	-- at the centre. Placing them against this curve, rather than one flat plane,
+	-- makes the rear of every eye overlap the head instead of looking suspended
+	-- just in front of it.
+	local faceSize = look.head ~= 0 and sizeOf(look.head, scale) or bodySize
+	local function faceDepthAt(offset)
+		local halfX = faceSize.X / 2
+		local halfY = faceSize.Y / 2
+		local halfZ = faceSize.Z / 2
+		local x = offset.X / halfX
+		local y = offset.Y / halfY
+		return halfZ * math.sqrt(math.max(0, 1 - x * x - y * y))
 	end
 
 	-- Laid out in a row and centred, so one is a cyclops and four are a thing
@@ -426,18 +552,53 @@ function PetModelGenerator.build(petId, stage)
 			look.eyeHeight * scale,
 			-look.eyeDepth * scale
 		)
+		local side = offset.X < 0 and -1 or 1
+		local eyeAngles = CFrame.Angles((look.eyePitch or 0), side * (look.eyeYaw or 0), side * (look.eyeTilt or 0))
 		local eyeSize = sizeOf(look.eyeSize, scale)
-		local eye = skinPart(model, "Eye" .. index, eyeSize, EYE_WHITE)
-		eye.CFrame = face.CFrame * CFrame.new(offset)
-		joint("Eye" .. index, face, eye, CFrame.new(offset))
+		local attachedDepth = faceDepthAt(offset) + eyeSize.Z / 2 - (look.eyeEmbed or 0) * scale
+		offset = Vector3.new(offset.X, offset.Y, -math.min(look.eyeDepth * scale, attachedDepth))
+		if look.eyeRim then
+			local rim = look.eyeRim
+			local rimOffset = offset + Vector3.new(0, 0, (rim.inset or 0.03) * scale)
+			local part = skinPart(
+				model,
+				"EyeRim" .. index,
+				sizeOf(rim.size, scale),
+				colorOf(rim, look.primary),
+				materialOf(rim, nil)
+			)
+			local c0 = CFrame.new(rimOffset) * eyeAngles
+			part.CFrame = face.CFrame * c0
+			joint("EyeRim" .. index, face, part, c0)
+		end
+
+		local eye = skinPart(model, "Eye" .. index, eyeSize, look.eyeColor)
+		local eyeC0 = CFrame.new(offset) * eyeAngles
+		eye.CFrame = face.CFrame * eyeC0
+		joint("Eye" .. index, face, eye, eyeC0)
 
 		-- Proud of the eye rather than inside it. A pupil flush with the sphere
 		-- is a pupil that disappears at every angle but dead on. On the eye's own
 		-- joint, so it goes in with it when the eye blinks.
 		local pupilOffset = Vector3.new(0, 0, -eyeSize.Z * 0.34)
-		local pupil = skinPart(model, "Pupil" .. index, sizeOf(look.pupilSize, scale), PUPIL_DARK)
+		local pupil = skinPart(model, "Pupil" .. index, sizeOf(look.pupilSize, scale), look.pupilColor)
 		pupil.CFrame = eye.CFrame * CFrame.new(pupilOffset)
 		joint("Pupil" .. index, eye, pupil, CFrame.new(pupilOffset))
+
+		if look.catchlight then
+			local spec = look.catchlight
+			local catchOffset = spec.offset or Vector3.new(-eyeSize.X * 0.16, eyeSize.Y * 0.14, -eyeSize.Z * 0.58)
+			catchOffset = Vector3.new(catchOffset.X * side, catchOffset.Y, catchOffset.Z)
+			local catchlight = skinPart(
+				model,
+				"Catchlight" .. index,
+				sizeOf(spec.size, scale),
+				colorOf(spec, Color3.fromRGB(255, 255, 255)),
+				materialOf(spec, nil)
+			)
+			catchlight.CFrame = eye.CFrame * CFrame.new(catchOffset)
+			joint("Catchlight" .. index, eye, catchlight, CFrame.new(catchOffset))
+		end
 	end
 
 	-- The four accessory slots, placed against what the rig actually came out as
