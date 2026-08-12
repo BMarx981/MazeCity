@@ -19,10 +19,19 @@
 -- two doors EnemyDebug takes, chat as any player or the command bar during Play:
 --
 --   /petlook          build the row, stand on its deck, replacing any row
+--   /petlook spin     the same row, turning, for checking a silhouette
 --   /petlook clear    take it away
 --
 --   game:GetService("ServerScriptService").PetLookPreviewCommand:Invoke()
 --   game:GetService("ServerScriptService").PetLookPreviewCommand:Invoke("clear")
+--
+-- **The rigs go in workspace.LivePets, not in this file's folder.** Only the
+-- deck and the labels are the preview's own. PetAnimator poses the followers in
+-- that folder and only that folder, so a row built anywhere else is a row of
+-- statues, which is what this was: every part anchored, no joint able to move,
+-- and a spin overhead that read as motion and hid the fact. Clearing therefore
+-- destroys the tracked rigs as well as the folder, since the folder no longer
+-- holds them.
 --
 -- **Chat needs both doors, and which one is live is now pinned rather than
 -- inherited.** `default.project.json` sets `TextChatService.ChatVersion`,
@@ -83,6 +92,52 @@ local lastChat, lastChatAt = nil, 0
 -- have been destroyed.
 local spin = nil
 
+-- The rigs, which do not live in this file's folder and so cannot be cleared by
+-- destroying it. See livePets below.
+local shown = {}
+
+-- PetAnimator drives workspace.LivePets and nothing else, so a row built into
+-- its own folder is a row of statues: the spin was the only thing moving in it
+-- and it was moving the whole pet rather than any part of one. Putting the rigs
+-- where the animator already looks is what makes wings beat here, and it costs
+-- nothing, because PetService only ever destroys followers it is tracking by
+-- player and never sweeps the folder. Find-or-create for the usual reason: this
+-- can run before PetService has made it.
+local function livePets()
+	local folder = workspace:FindFirstChild("LivePets")
+	if not folder then
+		folder = Instance.new("Folder")
+		folder.Name = "LivePets"
+		folder.Parent = workspace
+	end
+	return folder
+end
+
+-- The same rule PetService's own `sterilise` applies to a real follower: a part
+-- is anchored unless a joint holds it, and the root anchors regardless, so the
+-- rig is one anchored assembly PivotTo carries and the joints pose. Copied
+-- rather than shared, that function being private to a .server.lua and not
+-- requirable. Blanket-anchoring everything, which is what this did before, is
+-- exactly the thing that stops a Motor6D from moving anything.
+local function poseable(model)
+	local held = {}
+	for _, item in ipairs(model:GetDescendants()) do
+		if (item:IsA("Motor6D") or item:IsA("WeldConstraint")) and item.Part1 then
+			held[item.Part1] = true
+		end
+	end
+	for _, part in ipairs(model:GetDescendants()) do
+		if part:IsA("BasePart") then
+			part.Anchored = not held[part] or part == model.PrimaryPart
+			part.CanCollide = false
+			part.CanTouch = false
+			part.CanQuery = false
+			part.CastShadow = false
+			part.Massless = true
+		end
+	end
+end
+
 -- Sorted, because pairs over the catalogue is not a stable order and a row that
 -- reshuffles between runs is a row you cannot compare against the last one.
 local function everyLook()
@@ -131,15 +186,25 @@ local function clearRow()
 		spin:Disconnect()
 		spin = nil
 	end
+
+	local cleared = false
+	for _, model in ipairs(shown) do
+		if model.Parent then
+			model:Destroy()
+			cleared = true
+		end
+	end
+	shown = {}
+
 	local folder = workspace:FindFirstChild("PetLookPreview")
 	if folder then
 		folder:Destroy()
-		return true
+		cleared = true
 	end
-	return false
+	return cleared
 end
 
-local function buildRow(root)
+local function buildRow(root, turning)
 	clearRow()
 
 	local folder = Instance.new("Folder")
@@ -165,35 +230,40 @@ local function buildRow(root)
 	deck.TopSurface = Enum.SurfaceType.Smooth
 	deck.Parent = folder
 
+	local live = livePets()
 	local placed = {}
 	local parts = 0
 	for index, entry in ipairs(entries) do
 		local model = PetModelGenerator.build(entry.petId, entry.stage)
-		for _, part in ipairs(model:GetDescendants()) do
-			if part:IsA("BasePart") then
-				part.Anchored = true
-				part.CanCollide = false
-				part.CanTouch = false
-				part.CanQuery = false
-			end
-		end
+		poseable(model)
 		local at = origin * CFrame.new((index - 1) * SPACING, 0, 0)
 		model:PivotTo(at)
 		labelFor(model, entry.label)
-		model.Parent = folder
+		-- What PetAnimator reads to know which ability tell to draw, so the Ward
+		-- Hound wears its collar here and the Firefly glows, same as in the maze.
+		model:SetAttribute("PetId", entry.petId)
+		model.Parent = live
 		parts = parts + #model:GetDescendants()
 		table.insert(placed, { model = model, at = at })
+		table.insert(shown, model)
 	end
 
+	-- Off by default, because it fights the thing the row is now for: a turning
+	-- pet reads as motion whatever its joints are doing, which is what hid the
+	-- wings not beating. `/petlook spin` is still there for checking a
+	-- silhouette from every side, which is what it was added for.
+	--
 	-- Held in a list rather than read back off the folder, because GetChildren
 	-- order is not build order and a row that pairs a model with someone else's
 	-- slot spends every frame teleporting past itself.
-	spin = RunService.Heartbeat:Connect(function()
-		local turn = math.rad((os.clock() * Config.Pets.SpinDegreesPerSecond) % 360)
-		for _, entry in ipairs(placed) do
-			entry.model:PivotTo(CFrame.new(entry.at.Position) * CFrame.Angles(0, turn, 0))
-		end
-	end)
+	if turning then
+		spin = RunService.Heartbeat:Connect(function()
+			local turn = math.rad((os.clock() * Config.Pets.SpinDegreesPerSecond) % 360)
+			for _, entry in ipairs(placed) do
+				entry.model:PivotTo(CFrame.new(entry.at.Position) * CFrame.Angles(0, turn, 0))
+			end
+		end)
+	end
 
 	-- The left end, facing the way the caller already was, which is the way the
 	-- row faces: walking right reads it in catalogue order.
@@ -202,7 +272,7 @@ local function buildRow(root)
 		character:PivotTo(base * CFrame.new(-span / 2, HEIGHT - DECK_DROP + 3, -AHEAD + VIEW_BACK))
 	end
 
-	return string.format("%d looks, %d instances", #entries, parts)
+	return string.format("%d looks, %d instances, %s", #entries, parts, turning and "turning" or "still")
 end
 
 -- The speaker's own character, falling back to the first player so the command
@@ -214,14 +284,15 @@ local function rootFor(speaker)
 end
 
 local function dispatch(speaker, command)
-	if string.lower(tostring(command or "")) == "clear" then
+	local word = string.lower(tostring(command or ""))
+	if word == "clear" then
 		return clearRow() and "cleared" or "nothing to clear"
 	end
 	local root = rootFor(speaker)
 	if not root then
 		return "no character to build in front of"
 	end
-	return buildRow(root)
+	return buildRow(root, word == "spin")
 end
 
 local function run(speaker, command)

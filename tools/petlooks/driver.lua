@@ -118,6 +118,7 @@ for _, petId in ipairs(ids) do
 			watch(rig.joints.halo, rig.bases.halo, true)
 			watch(rig.joints.motes, rig.bases.motes, true)
 			watch(rig.joints.charms, rig.bases.charms, true)
+			watch(rig.joints.steps, rig.bases.steps, false)
 			watchOne(rig.joints.crest, rig.bases.crest, true)
 			watchOne(rig.joints.wingL, rig.bases.wingL, false)
 			watchOne(rig.joints.wingR, rig.bases.wingR, false)

@@ -48,7 +48,7 @@ The rule behind the table: **a pet must never be mistakable for a threat**, and 
 
 Neon appears only as small accents that mean something: the Firefly's lantern is its Glow, the Ward Hound's collar is its ward, the Coin Bat's coin is its magnet. The accent is the ability made visible, which is also what makes an evolution legible (a stronger ability is a bigger or brighter accent).
 
-No legs anywhere, for exactly the reason `ModelGenerator`'s header gives: a walk cycle needs art or a skeleton and foot-slides without both. Every pet hovers. The catalogue is already mostly fliers, and the follower rides at `FollowHeight` anyway; the Hound floats too, a stout balloon of a dog, and floats better than it would walk.
+Followers still hover at `FollowHeight`, but the Hound and Moth now use small named gait cycles: the Hound alternates diagonal pairs and the Moth alternates insect tripods. These are pose cycles, not navigation; PetService still owns follower movement, while the steps keep legs from reading as inert decoration.
 
 ## The recipe
 
@@ -67,7 +67,7 @@ Vocabulary, all optional except the first four:
 - `crest`: a single upright accent on the head (the Crow's compass needle).
 - `collar`, `halo`, `motes`: one ring builder, three uses, `{ count, radius, size, height, z, tilt, upright }`. Flat by default, which is a halo above the head or a dial at a needle's base; `upright` stands the ring in the XY plane, which is a collar around a neck. **The plane is the whole difference between an accent that reads and one that is buried**, and it cost a fix in Set 1: a flat ring wide enough to clear the Hound's chest at the sides puts its rear beads inside the ribs, where they read as parts coming loose. The same trap took the Wayfinder's compass ring back into the shoulders, which is why it ended up a dial above the skull instead.
 - `charms`: a list of accent props the pet carries rather than wears, each `{ size, offset, color }`. The Firefly's lantern and the Coin Bat's coin. A list because a stage can add a second one, which is how Gilded reads: two coins is a thing you can count from across a room and 20% more coin is not.
-- `details`: static surface parts for animal-specific tells, each `{ name, size, offset, mirrored, pitch, yaw, roll, color, colorKey, material }`. This is deliberately not a new first-class group for every feature. It covers stripes, paws, fangs, wing spots, feet and feather marks while keeping the builder pure and the catalogue data-shaped.
+- `details`: static animal-specific parts, each `{ name, size, offset, attach, attachTo, gait, mirrored, pitch, yaw, roll, color, colorKey, material }`. `attach` mounts a detail to the body, head or an individual wing; `attachTo` chains it to an earlier named detail on the same side, so paws follow legs, toes fan from paws, fangs follow the face and wing ribs flap with their membrane. `gait` gives a leg or paw a named step phase, letting a hound alternate diagonal pairs and an insect alternate tripods. This is deliberately not a new first-class group for every feature. It covers stripes, paws, fangs, wing spots, feet and feather marks while keeping the builder pure and the catalogue data-shaped.
 
 `look.primary` is the stage's colour in the world, and the two runtime reads move to it: the Glow light colour ([PetService.server.lua:156](src/server/PetService.server.lua#L156)) and the ward ring colour ([PetService.server.lua:201](src/server/PetService.server.lua#L201)). One colour source per stage; `placeholder` is deleted, not left beside it to drift.
 
@@ -77,9 +77,9 @@ Five bases and six evolution stages. The standing rule: **an evolution adds or c
 
 - **Firefly**: small segmented amber beetle body, dark bead eyes with gold glints, stub wings, antennae, six tiny tucked legs, shell seam and neon lantern at the tail. *Radiant* (10): brighter lantern, gains a halo. *Solar* (25): flame palette, halo plus orbiting spark motes.
 - **Lumen Moth**: pale insect body with separate fuzzy thorax and abdomen, large soft cyan oval eyes, oversized flat wings, feathery antennae, six tiny fuzzy legs, wing veins and wing eyespots. *Pale* (12): wings grow past body length, secondary goes near-white.
-- **Ward Hound**: compact long hound body, warm framed eyes, muzzle, nose, cheeks, embedded shoulders and haunches, real leg columns with attached small paws, drooped ears, short tail, neon collar. *Bulwark* (15): broader body, upright ears, the collar widens into a shoulder ring (the ward, worn).
-- **Coin Bat**: tiny dark torso under broad wings, glossy dark eyes with catchlights, big ears, chest and belly masses, small hind legs and feet, membrane wing ribs, tiny fangs and a gold neon coin held under it. *Gilded* (15): gold secondary, second coin, wing edges go accent.
-- **Compass Crow**: sleek dark slate bird body, sharp gold eyes, gold beak, small legs and feet, chest/back feather masses, fanned tail feathers, wing tips, needle crest. *Wayfinder* (15): crest becomes a spinning needle mote on a ring, lighter palette.
+- **Ward Hound**: compact long hound body, warm framed eyes, muzzle, nose, cheeks, embedded shoulders and haunches, real leg columns with padded two-toed paws, drooped ears, short tail, neon collar. *Bulwark* (15): broader body, upright ears, the collar widens into a shoulder ring (the ward, worn).
+- **Coin Bat**: tiny dark torso under broad wings, glossy dark eyes with catchlights, big ears, chest and belly masses, small hind legs ending in three hooked toes, membrane wing ribs, tiny fangs and a gold coin held under it. *Gilded* (15): gold secondary, second coin, wing edges go accent.
+- **Compass Crow**: sleek dark slate bird body, sharp gold eyes, gold beak, small legs ending in three splayed toes and a rear claw, chest/back feather masses, fanned tail feathers, wing tips, needle crest. *Wayfinder* (15): crest becomes a spinning needle mote on a ring, lighter palette.
 
 Exact numbers are Set 1's work, tuned by eye in a play test. The list above is the contract for what each stage must visibly add.
 
@@ -151,9 +151,10 @@ Both edits this section named are the ones that landed, and the second one moved
 
 What each thing does, and every one of them is the recipe made legible rather than decoration:
 
-- **Wings** hinge at the inner edge, not at their centre, so they beat rather than see-saw. `flapRate` and `flapAngle` are the two numbers that separate the Firefly (14 and 0.26, a blur) from the Lumen Moth (2.4 and 0.62, a shape crossing in front of a light), and the Pale stage names only the rate, keeping the depth the pet already had.
+- **Wings** hinge at the inner edge, not at their centre, so they beat rather than see-saw. `flapRate` and `flapAngle` are the two numbers that separate the Firefly (14 and 0.26, a blur) from the Lumen Moth (2.4 and 0.78, a shape crossing in front of a light), and the Pale stage names only the rate, keeping the depth the pet already had.
 - **Ears** flick on a pulse rather than a sine, the two sides half a cycle apart: a dog flicking both at once is a dog shaking its head. The Bulwark's ears go up in geometry and steady in motion, which is the same tell twice.
 - **Tails** sway from the base, **antennae** wave from theirs, the crest leans on its own.
+- **Gaits** lift and pitch each named leg/paw pair together. The Hound's front-left/back-right pair alternates with its other diagonal; the Moth's front-left/middle-right/rear-left tripod alternates with the opposite three legs.
 - **Rings** turn *and* ripple outward, and the ripple is the part that reads: a turn is invisible on twelve identical collar beads and legible on four motes, so both are needed. The ripple is outward only, because a bead pulled inward lands in the ribs the recipe was sized to clear.
 - **Blink** is the eye sinking back into the face for a tenth of a second, the pupil riding in on its own joint. This is the one change to `build`: eyes and pupils are on Motor6Ds now instead of WeldConstraints. A pet with no eyelids blinks by taking its eyes away, and the depth comes off the eye itself so it works on a Ward Hound and on a Firefly a third the size.
 - **The two ability tells.** A Glow pet's lantern breathes out and back a lot further than a carried prop otherwise does, which gives the light a pulse without touching the `PointLight` (that is the server's, and it replicates once for everyone). The Ward Hound's collar rides a wide tight wave while the ward is up, falls almost flat on an empty charge, and swells back as it recharges.

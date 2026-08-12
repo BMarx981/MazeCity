@@ -88,6 +88,13 @@ local DEFAULT_MOTION = {
 
 	blinkEvery = 4.6,
 	blinkSeconds = 0.12,
+
+	-- Feet move in named gait groups instead of every leg sharing one bounce.
+	-- This makes the Hound's diagonal pairs and the Moth's alternating tripods
+	-- read as walking while paws remain aligned with their leg columns.
+	stepRate = 5.2,
+	stepAngle = 0.18,
+	stepLift = 0.07,
 }
 
 -- The two ability tells, in multiples of the rest state so a pet with a strong
@@ -174,6 +181,15 @@ local function outward(from, distance)
 		return Vector3.zero
 	end
 	return from * (distance / length)
+end
+
+local function gaitPhase(motor)
+	local phase = motor:GetAttribute("PetGaitSide") == 1 and math.pi or 0
+	local gait = motor:GetAttribute("PetGait")
+	if gait == "houndBack" or gait == "mothMiddle" then
+		return phase + math.pi
+	end
+	return phase
 end
 
 -- A ring turns about its own axis and rides a ripple outward from its centre.
@@ -316,6 +332,13 @@ function PetRigDriver.animate(rig, clock, tell)
 	for index, motor in ipairs(joints.charms) do
 		local base = bases.charms[index]
 		motor.Transform = offset(base, outward(base.Position, reach) + Vector3.new(0, bob, 0))
+	end
+
+	for _, motor in ipairs(joints.steps) do
+		local phase = clock * rate(motion, "stepRate") + gaitPhase(motor)
+		local stride = math.sin(phase)
+		local lift = math.max(0, stride) * rate(motion, "stepLift")
+		motor.Transform = CFrame.new(0, lift, 0) * CFrame.Angles(stride * rate(motion, "stepAngle"), 0, 0)
 	end
 
 	-- A pet with no eyelids blinks by taking its eyes away: the joint sinks the

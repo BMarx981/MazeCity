@@ -353,6 +353,9 @@ local STYLES = {
 		material = Enum.Material.Concrete,
 		windows = "grid",
 		crown = "parapet",
+		exterior = "archive",
+		accent = Color3.fromRGB(92, 190, 255),
+		theme = "Drowned Archive",
 		enemy = "Drifter",
 	},
 	{
@@ -364,6 +367,9 @@ local STYLES = {
 		material = Enum.Material.Brick,
 		windows = "ribbon",
 		crown = "setback",
+		exterior = "reliquary",
+		accent = Color3.fromRGB(255, 176, 72),
+		theme = "Buried Reliquary",
 		enemy = "Stalker",
 	},
 	{
@@ -375,6 +381,9 @@ local STYLES = {
 		material = Enum.Material.Slate,
 		windows = "columns",
 		crown = "spire",
+		exterior = "monolith",
+		accent = Color3.fromRGB(172, 208, 228),
+		theme = "Silent Monolith",
 		enemy = "Sentry",
 	},
 	{
@@ -386,6 +395,9 @@ local STYLES = {
 		material = Enum.Material.Metal,
 		windows = "grid",
 		crown = "watertower",
+		exterior = "alchemy",
+		accent = Color3.fromRGB(92, 255, 184),
+		theme = "Alchemist Stack",
 		enemy = "Swarmer",
 	},
 	{
@@ -397,6 +409,9 @@ local STYLES = {
 		material = Enum.Material.Marble,
 		windows = "ribbon",
 		crown = "setback",
+		exterior = "ossuary",
+		accent = Color3.fromRGB(236, 226, 196),
+		theme = "Ivory Ossuary",
 		enemy = "Lurker",
 	},
 	{
@@ -408,6 +423,9 @@ local STYLES = {
 		material = Enum.Material.Concrete,
 		windows = "columns",
 		crown = "spire",
+		exterior = "cinder",
+		accent = Color3.fromRGB(255, 92, 52),
+		theme = "Cinder Sanctum",
 		enemy = "Charger",
 	},
 }
@@ -1659,6 +1677,269 @@ local function buildWindows(parent, origin, style, side, doorU)
 	end
 end
 
+local function facePart(parent, origin, name, side, u, y, lenU, height, depth, color, material, offset)
+	local O = CFG.FACADE_OUTSET + CFG.FACADE_THICKNESS + (offset or 0.18)
+	local pos
+	local size
+	if side == "north" then
+		pos = Vector3.new(u, y, -O)
+		size = Vector3.new(lenU, height, depth)
+	elseif side == "south" then
+		pos = Vector3.new(u, y, FZ + O)
+		size = Vector3.new(lenU, height, depth)
+	elseif side == "west" then
+		pos = Vector3.new(-O, y, u)
+		size = Vector3.new(depth, height, lenU)
+	else
+		pos = Vector3.new(FX + O, y, u)
+		size = Vector3.new(depth, height, lenU)
+	end
+
+	local part = makePart(parent, name, CFrame.new(origin + pos), size, color, material)
+	part.CanCollide = false
+	part.CanTouch = false
+	part.CanQuery = false
+	return part
+end
+
+local function detailColor(base, shade, glow)
+	if glow then
+		return base:Lerp(Color3.fromRGB(255, 255, 255), shade)
+	end
+	return base:Lerp(Color3.fromRGB(0, 0, 0), shade)
+end
+
+local function maybeSkipDoor(side, entrySide, doorU, u, y, lenU, height)
+	if side ~= entrySide then
+		return false
+	end
+	local clearHalf = CFG.DOOR_WIDTH / 2 + CFG.DOOR_CLEARANCE + lenU / 2
+	local clearTop = CFG.DOOR_HEIGHT + CFG.DOOR_CLEARANCE
+	return math.abs(u - doorU) < clearHalf and y - height / 2 < clearTop
+end
+
+local function buildExteriorMystery(parent, origin, style, entrySide, entryCell, ctx)
+	local rng = Random.new(ctx.seed + 61291)
+	local O = CFG.FACADE_OUTSET + CFG.FACADE_THICKNESS
+	local height = ROOF_Y + CFG.PARAPET_HEIGHT
+	local doorCenter = cellCenter(entryCell.x, entryCell.z)
+	local doorU = (entrySide == "north" or entrySide == "south") and doorCenter.X or doorCenter.Z
+	local accent = style.accent or style.trim
+	local shadow = detailColor(style.wall, 0.5, false)
+	local deep = detailColor(style.wall, 0.68, false)
+	local pale = detailColor(style.wall, 0.38, true)
+
+	ctx.exteriorTheme = style.theme
+	ctx.exteriorVariant = rng:NextInteger(1000, 9999)
+
+	local function place(side, name, u, y, lenU, h, depth, color, material, offset, neon)
+		if maybeSkipDoor(side, entrySide, doorU, u, y, lenU, h) then
+			return nil
+		end
+		local part = facePart(parent, origin, name, side, u, y, lenU, h, depth, color, material, offset)
+		if neon then
+			part.Material = Enum.Material.Neon
+			part.CastShadow = false
+		end
+		return part
+	end
+
+	for _, side in ipairs(SIDE_ORDER) do
+		local horizontal = (side == "north" or side == "south")
+		local faceLen = horizontal and FX or FZ
+
+		local ribCount = rng:NextInteger(3, 5)
+		for i = 1, ribCount do
+			local u = faceLen * i / (ribCount + 1) + rng:NextNumber(-6, 6)
+			local ribH = height * rng:NextNumber(0.72, 0.98)
+			local ribY = height - ribH / 2
+			place(
+				side,
+				"MysteryRib",
+				u,
+				ribY,
+				rng:NextNumber(1.6, 3.6),
+				ribH,
+				rng:NextNumber(2.4, 4.8),
+				shadow,
+				style.material,
+				0.8
+			)
+		end
+
+		for _ = 1, rng:NextInteger(2, 4) do
+			local level = rng:NextInteger(1, math.max(1, CFG.LEVELS - 1))
+			local y = level * LEVEL_HEIGHT + rng:NextNumber(1.2, 4.8)
+			place(
+				side,
+				"MysteryBelt",
+				faceLen / 2,
+				y,
+				faceLen * rng:NextNumber(0.68, 0.96),
+				1.1,
+				2.2,
+				deep,
+				Enum.Material.Slate,
+				0.55
+			)
+		end
+
+		if style.exterior == "archive" then
+			for _ = 1, rng:NextInteger(5, 8) do
+				local u = rng:NextNumber(faceLen * 0.1, faceLen * 0.9)
+				local y = rng:NextNumber(LEVEL_HEIGHT * 0.8, height - 12)
+				place(
+					side,
+					"ArchiveGlyph",
+					u,
+					y,
+					rng:NextNumber(2.2, 4.5),
+					rng:NextNumber(2.2, 4.5),
+					0.45,
+					accent,
+					Enum.Material.Neon,
+					1.0,
+					true
+				)
+				place(
+					side,
+					"ArchiveGlyphStem",
+					u,
+					y - 5,
+					0.55,
+					rng:NextNumber(5, 10),
+					0.42,
+					accent,
+					Enum.Material.Neon,
+					1.03,
+					true
+				)
+			end
+		elseif style.exterior == "reliquary" then
+			local archCount = rng:NextInteger(3, 5)
+			for i = 1, archCount do
+				local u = faceLen * i / (archCount + 1) + rng:NextNumber(-8, 8)
+				local y = rng:NextNumber(LEVEL_HEIGHT * 1.2, height - 28)
+				local archH = rng:NextNumber(18, 28)
+				local archW = rng:NextNumber(12, 18)
+				place(side, "ReliquaryPillar", u - archW / 2, y, 1.3, archH, 1.6, pale, Enum.Material.Sandstone, 0.7)
+				place(side, "ReliquaryPillar", u + archW / 2, y, 1.3, archH, 1.6, pale, Enum.Material.Sandstone, 0.7)
+				place(
+					side,
+					"ReliquaryLintel",
+					u,
+					y + archH / 2,
+					archW + 3,
+					1.8,
+					1.8,
+					accent,
+					Enum.Material.Neon,
+					0.9,
+					true
+				)
+			end
+		elseif style.exterior == "monolith" then
+			for _ = 1, rng:NextInteger(6, 10) do
+				local u = rng:NextNumber(faceLen * 0.08, faceLen * 0.92)
+				local crackY = rng:NextNumber(LEVEL_HEIGHT, height - 20)
+				local crackH = rng:NextNumber(8, 20)
+				place(side, "MonolithCrack", u, crackY, 0.75, crackH, 0.5, accent, Enum.Material.Neon, 1.1, true)
+				place(
+					side,
+					"MonolithScar",
+					u + rng:NextNumber(-2, 2),
+					crackY - crackH * 0.35,
+					2.2,
+					0.65,
+					0.45,
+					accent,
+					Enum.Material.Neon,
+					1.12,
+					true
+				)
+			end
+		elseif style.exterior == "alchemy" then
+			for _ = 1, rng:NextInteger(4, 7) do
+				local u = rng:NextNumber(faceLen * 0.08, faceLen * 0.92)
+				local pipeH = rng:NextNumber(height * 0.35, height * 0.78)
+				local y = rng:NextNumber(pipeH / 2 + 8, height - pipeH / 2)
+				place(
+					side,
+					"AlchemyConduit",
+					u,
+					y,
+					1.6,
+					pipeH,
+					1.8,
+					accent:Lerp(style.wall, 0.35),
+					Enum.Material.Metal,
+					1.0
+				)
+				place(side, "AlchemyValve", u, y + pipeH / 2, 6, 1.6, 2, accent, Enum.Material.Neon, 1.18, true)
+			end
+		elseif style.exterior == "ossuary" then
+			for _ = 1, rng:NextInteger(4, 7) do
+				local u = rng:NextNumber(faceLen * 0.08, faceLen * 0.92)
+				local y = rng:NextNumber(LEVEL_HEIGHT * 0.7, height - 14)
+				place(side, "OssuaryRibLeft", u - 2.4, y, 1.1, 14, 1.2, pale, Enum.Material.Marble, 0.78)
+				place(side, "OssuaryRibRight", u + 2.4, y, 1.1, 14, 1.2, pale, Enum.Material.Marble, 0.78)
+				place(side, "OssuarySeal", u, y, 5.8, 2.2, 0.55, deep, Enum.Material.Slate, 1.0)
+			end
+		elseif style.exterior == "cinder" then
+			for _ = 1, rng:NextInteger(7, 11) do
+				local u = rng:NextNumber(faceLen * 0.08, faceLen * 0.92)
+				local y = rng:NextNumber(LEVEL_HEIGHT * 0.6, height - 10)
+				local h = rng:NextNumber(5, 15)
+				place(
+					side,
+					"CinderFissure",
+					u,
+					y,
+					rng:NextNumber(0.7, 1.4),
+					h,
+					0.55,
+					accent,
+					Enum.Material.Neon,
+					1.12,
+					true
+				)
+				place(
+					side,
+					"CinderSoot",
+					u + rng:NextNumber(-3, 3),
+					y - h / 2,
+					rng:NextNumber(4, 9),
+					1.1,
+					0.5,
+					deep,
+					Enum.Material.Slate,
+					1.0
+				)
+			end
+		end
+	end
+
+	for _, corner in ipairs({
+		Vector3.new(-O - 1.8, height / 2, -O - 1.8),
+		Vector3.new(FX + O + 1.8, height / 2, -O - 1.8),
+		Vector3.new(-O - 1.8, height / 2, FZ + O + 1.8),
+		Vector3.new(FX + O + 1.8, height / 2, FZ + O + 1.8),
+	}) do
+		local cornerHeight = height * rng:NextNumber(0.88, 1.0)
+		local p = makePart(
+			parent,
+			"MysteryCorner",
+			CFrame.new(origin + Vector3.new(corner.X, cornerHeight / 2, corner.Z)),
+			Vector3.new(3.6, cornerHeight, 3.6),
+			shadow,
+			style.material
+		)
+		p.CanCollide = false
+		p.CanTouch = false
+		p.CanQuery = false
+	end
+end
+
 -- How far out from the deck centre the crown reaches, at its widest. Every crown
 -- is centred and every piece of one is a box or a cylinder about that centre, so
 -- one number describes the whole keep-out on both axes. Anything placed on the
@@ -1804,6 +2085,10 @@ local function buildFacade(parent, origin, style, entrySide, entryCell, ctx)
 
 		buildWindows(folder, origin, style, side, side == entrySide and doorU or nil)
 	end
+
+	buildExteriorMystery(folder, origin, style, entrySide, entryCell, ctx)
+	parent:SetAttribute("ExteriorTheme", ctx.exteriorTheme)
+	parent:SetAttribute("ExteriorVariant", ctx.exteriorVariant)
 
 	local plazaCenter
 	if entrySide == "north" then

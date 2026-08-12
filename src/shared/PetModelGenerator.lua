@@ -35,9 +35,10 @@
 -- Bat's coin is its magnet. That is also what makes an evolution legible without
 -- a label, because a stronger ability is a bigger or brighter accent.
 --
--- No legs, for the reason ModelGenerator's header gives: a walk cycle needs art
--- or a skeleton and foot-slides without both. Every pet hovers, which the
--- follower was already doing at Config.Pets.FollowHeight.
+-- Legs stay compact because every follower hovers at Config.Pets.FollowHeight,
+-- but named gait joints give the Hound and Moth a quiet walk rather than leaving
+-- their feet as inert decoration. It is a pose cycle, not navigation: PetService
+-- still owns where the pet moves and the steps only make that movement read.
 --
 -- ============================================================
 -- The rig
@@ -327,14 +328,15 @@ function PetModelGenerator.build(petId, stage)
 
 	-- Everything else joints to the body rather than to the root, so the motion
 	-- set can lean or bounce one part and carry the whole pet with it.
-	local function place(name, size, color, offset, angles, material)
+	local function place(name, size, color, offset, angles, material, part0, jointName)
+		part0 = part0 or body
 		local part = skinPart(model, name, size, color, material)
 		local c0 = CFrame.new(offset) * (angles or CFrame.new())
-		part.CFrame = body.CFrame * c0
-		joint(name, body, part, c0)
+		part.CFrame = part0.CFrame * c0
+		local motor = joint(jointName or name, part0, part, c0)
 
 		noteBounds(offset.Y, size.Y)
-		return part
+		return part, motor
 	end
 
 	local function colorOf(spec, fallback)
@@ -387,13 +389,14 @@ function PetModelGenerator.build(petId, stage)
 	-- part's own axis by `forward`. Offsetting before rotating is what leaves a
 	-- long ear centred on the skull with half of it inside the head.
 	local function symmetricPair(spec, name)
+		local parts = {}
 		local size = sizeOf(spec.size, scale)
 		for _, side in ipairs({ -1, 1 }) do
 			local partName = name .. (side < 0 and "Left" or "Right")
 			local offset = Vector3.new(side * spec.spread * scale, spec.height * scale, (spec.z or 0) * scale)
 			local angles = CFrame.Angles(spec.pitch or 0, side * (spec.sweep or 0), side * (spec.tilt or 0))
 				* CFrame.new(0, 0, -(spec.forward or 0) * scale)
-			place(
+			parts[side] = place(
 				partName,
 				size,
 				spec.color or look.secondary,
@@ -402,13 +405,15 @@ function PetModelGenerator.build(petId, stage)
 				materialOf(spec, materialNamed(look.secondaryMaterial))
 			)
 		end
+		return parts
 	end
 
 	if look.ears then
 		symmetricPair(look.ears, "Ear")
 	end
+	local wings = nil
 	if look.wings then
-		symmetricPair(look.wings, "Wing")
+		wings = symmetricPair(look.wings, "Wing")
 	end
 	if look.antennae then
 		symmetricPair(look.antennae, "Antenna")
@@ -445,31 +450,63 @@ function PetModelGenerator.build(petId, stage)
 		)
 	end
 
+	local stepIndex = 0
+	local detailParts = {}
 	for index, spec in ipairs(look.details or {}) do
 		local angles = CFrame.Angles(spec.pitch or 0, spec.yaw or 0, spec.roll or 0)
+		local function detailMount(side)
+			if spec.attachTo then
+				local mounts = detailParts[spec.attachTo]
+				if mounts then
+					return mounts[side] or mounts[1]
+				end
+			end
+			if spec.attach == "head" then
+				return face
+			end
+			if spec.attach == "wing" and wings then
+				return wings[side]
+			end
+			return body
+		end
+		local function placeDetail(name, offset, detailAngles, side)
+			local jointName = nil
+			if spec.gait then
+				stepIndex = stepIndex + 1
+				jointName = "Step" .. stepIndex
+			end
+			local part, motor = place(
+				name,
+				sizeOf(spec.size, scale),
+				colorOf(spec, look.secondary),
+				offset,
+				detailAngles,
+				materialOf(spec, nil),
+				detailMount(side),
+				jointName
+			)
+			local mounts = detailParts[spec.name or "Detail"] or {}
+			mounts[side] = part
+			detailParts[spec.name or "Detail"] = mounts
+			if spec.gait then
+				motor:SetAttribute("PetGait", spec.gait)
+				motor:SetAttribute("PetGaitSide", side)
+			end
+		end
 		if spec.mirrored then
 			for _, side in ipairs({ -1, 1 }) do
 				local offset = spec.offset * scale
 				offset = Vector3.new(offset.X * side, offset.Y, offset.Z)
 				local mirroredAngles = CFrame.Angles(spec.pitch or 0, side * (spec.yaw or 0), side * (spec.roll or 0))
-				place(
+				placeDetail(
 					(spec.name or "Detail") .. (side < 0 and "Left" or "Right") .. index,
-					sizeOf(spec.size, scale),
-					colorOf(spec, look.secondary),
 					offset,
 					mirroredAngles,
-					materialOf(spec, nil)
+					side
 				)
 			end
 		else
-			place(
-				(spec.name or "Detail") .. index,
-				sizeOf(spec.size, scale),
-				colorOf(spec, look.secondary),
-				spec.offset * scale,
-				angles,
-				materialOf(spec, nil)
-			)
+			placeDetail((spec.name or "Detail") .. index, spec.offset * scale, angles, 1)
 		end
 	end
 
@@ -662,6 +699,7 @@ function PetModelGenerator.rigOf(model)
 		motes = {},
 		charms = {},
 		eyes = {},
+		steps = {},
 	}
 
 	-- Counted up from 1 rather than read off GetChildren, because child order is
@@ -680,14 +718,15 @@ function PetModelGenerator.rigOf(model)
 	collect(joints.motes, "Mote")
 	collect(joints.charms, "Charm")
 	collect(joints.eyes, "Eye")
+	collect(joints.steps, "Step")
 
-	local bases = { collar = {}, halo = {}, motes = {}, charms = {}, eyes = {} }
+	local bases = { collar = {}, halo = {}, motes = {}, charms = {}, eyes = {}, steps = {} }
 	for key, motor in pairs(joints) do
 		if typeof(motor) == "Instance" then
 			bases[key] = motor.C0
 		end
 	end
-	for _, key in ipairs({ "collar", "halo", "motes", "charms", "eyes" }) do
+	for _, key in ipairs({ "collar", "halo", "motes", "charms", "eyes", "steps" }) do
 		for index, motor in ipairs(joints[key]) do
 			bases[key][index] = motor.C0
 		end
