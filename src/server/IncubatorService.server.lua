@@ -1,6 +1,8 @@
 -- IncubatorService (Script) -> ServerScriptService
 -- Eggs: the summit roost, buying one, placing one, the climb that hatches it,
--- and the roll that decides what comes out.
+-- and the roll that decides what comes out. Since the accessories plan's Set 5
+-- the same counter also sells gear, because the roost is where this game already
+-- spends coins at a pedestal and a second storefront would be a second door.
 --
 -- Consumes the EggPedestal tag the generator puts on every roof deck, the way
 -- SaveService consumes ShopItem. The prompt itself only opens the client's egg
@@ -323,6 +325,90 @@ local function buyEgg(player, payload)
 	announce(player, { kind = "bought", eggId = eggConfig.id, name = eggConfig.name, cost = eggConfig.coinCost })
 end
 
+-- Gear is a second list through the same door: the same roost, the same
+-- leaderstats.Coins, the same deduct-then-refund order, and the same proximity
+-- re-check on the mutation rather than on the prompt that opened the panel. It
+-- is here rather than in PetService for the reason the plan gives: this is
+-- already the service that spends coins at a pedestal, and PetService owns no
+-- purchase.
+local function buyAccessory(player, payload)
+	local data = Profiles.data(player)
+	if not data or type(payload.accessoryId) ~= "string" then
+		return
+	end
+	if not atRoost(player) then
+		deny(player, "buyAccessory", "notatroost")
+		return
+	end
+
+	local config = Inventory.accessoryConfig(payload.accessoryId)
+	if not config then
+		deny(player, "buyAccessory", "unknown")
+		return
+	end
+	-- No coinCost is the whole of what keeps the streak Legendary and the event
+	-- trail out of the shop, the same flag-free rule the streak egg already uses,
+	-- and Set 1 settled that it keeps them out of the sell path too.
+	if not config.coinCost then
+		deny(player, "buyAccessory", "notforsale")
+		return
+	end
+	if config.availableUntil and os.time() > config.availableUntil then
+		deny(player, "buyAccessory", "expired")
+		return
+	end
+	if Inventory.count(data.accessories) >= data.accessoryStorageCap then
+		deny(player, "buyAccessory", "gearfull")
+		return
+	end
+
+	local coins = Profiles.coins(player)
+	if coins.Value < config.coinCost then
+		remote:FireClient(player, {
+			kind = "denied",
+			action = "buyAccessory",
+			reason = "poor",
+			need = config.coinCost - coins.Value,
+			label = config.name,
+		})
+		return
+	end
+
+	coins.Value = coins.Value - config.coinCost
+	local ok, reason = Inventory.grantAccessory(data, payload.accessoryId)
+	if not ok then
+		coins.Value = coins.Value + config.coinCost
+		deny(player, "buyAccessory", reason)
+		return
+	end
+	announce(player, { kind = "bought", accessoryId = config.id, name = config.name, cost = config.coinCost })
+end
+
+-- The refusals are all Inventory.sellAccessory's: locked, worn, an item that was
+-- never for sale, and an id this player does not own. Nothing is checked twice
+-- here, and the coins are paid after the instance is gone rather than before, so
+-- a refusal cannot pay out.
+local function sellAccessory(player, payload)
+	local data = Profiles.data(player)
+	if not data or type(payload.accessoryUid) ~= "string" then
+		return
+	end
+	if not atRoost(player) then
+		deny(player, "sellAccessory", "notatroost")
+		return
+	end
+
+	local ok, result = Inventory.sellAccessory(data, payload.accessoryUid)
+	if not ok then
+		deny(player, "sellAccessory", result)
+		return
+	end
+
+	local coins = Profiles.coins(player)
+	coins.Value = coins.Value + result.value
+	announce(player, { kind = "sold", name = result.config.name, value = result.value })
+end
+
 intents.OnServerEvent:Connect(function(player, payload)
 	if not Config.Pets.Enabled or type(payload) ~= "table" then
 		return
@@ -331,6 +417,10 @@ intents.OnServerEvent:Connect(function(player, payload)
 		placeEgg(player, payload)
 	elseif payload.kind == "buyEgg" then
 		buyEgg(player, payload)
+	elseif payload.kind == "buyAccessory" then
+		buyAccessory(player, payload)
+	elseif payload.kind == "sellAccessory" then
+		sellAccessory(player, payload)
 	elseif payload.kind == "hatch" then
 		-- The manual retry for a finished egg that could not hatch into a full
 		-- shelf. Releasing a pet is not in this version, so what unblocks it today

@@ -24,6 +24,12 @@ local TweenService = game:GetService("TweenService")
 
 local Config = require(ReplicatedStorage:WaitForChild("MazeConfig"))
 local EggCatalog = require(ReplicatedStorage:WaitForChild("EggCatalog"))
+-- Read for the shop list only, exactly as EggCatalog is above it, and that is
+-- not the accessories plan's third invariant being bent: what an item costs is
+-- not what an effect is worth. The owned rows still draw from the projection,
+-- what a raw 0.25 means still comes from Config.Accessories, and nothing here
+-- resolves an effect. A storefront has to be able to name a thing nobody owns.
+local AccessoryCatalog = require(ReplicatedStorage:WaitForChild("AccessoryCatalog"))
 -- Portraits are built here, from the recipes, not sent: the projection already
 -- names the pet and the stage, so a row draws the same rig the follower is
 -- without one extra byte over the remote.
@@ -435,7 +441,7 @@ local REASONS = {
 	petsfull = "Your pet storage is full",
 	equipfull = "Too many pets out already",
 	notready = "That egg is not ready yet",
-	expired = "That egg is no longer available",
+	expired = "That one is no longer available",
 	unknown = "That is not available",
 	filter = "Try a different name",
 	claimed = "Already claimed, come back tomorrow",
@@ -713,7 +719,7 @@ end
 
 local GEAR_ROW_H = 58
 
-local function gearRow(item, order, wearerName)
+local function gearRow(item, order, wearerName, canReach)
 	local frame = row(order, GEAR_ROW_H)
 
 	local swatch = Instance.new("Frame")
@@ -737,8 +743,10 @@ local function gearRow(item, order, wearerName)
 	if wearerName then
 		where.Text = "Worn by " .. wearerName
 		where.TextColor3 = GREEN
+	elseif item.sellValue then
+		where.Text = string.format("In the bag  |  sells for %d", item.sellValue)
 	else
-		where.Text = "In the bag"
+		where.Text = "In the bag  |  not for sale"
 	end
 
 	local wear = button(
@@ -758,9 +766,14 @@ local function gearRow(item, order, wearerName)
 		end
 	end)
 
+	-- Lock keeps the full width while the item cannot be sold at all, which is
+	-- every worn item and the two that were never for sale. Half a row each
+	-- otherwise, because the price is on the line to the left of them and these
+	-- two only have to say which verb they are.
+	local sellable = item.sellValue ~= nil and not item.wornBy
 	local lock = button(
 		frame,
-		UDim2.fromOffset(96, 20),
+		UDim2.fromOffset(sellable and 46 or 96, 20),
 		UDim2.new(1, -108, 0, 32),
 		item.locked and "UNLOCK" or "LOCK",
 		Color3.fromRGB(60, 62, 74)
@@ -768,6 +781,67 @@ local function gearRow(item, order, wearerName)
 	lock.TextSize = 11
 	lock.MouseButton1Click:Connect(function()
 		send({ kind = "lockAccessory", accessoryUid = item.uid, locked = not item.locked })
+	end)
+
+	if not sellable then
+		return
+	end
+
+	-- Same bargain the Place button makes: it says why rather than going grey and
+	-- silent, and a locked item keeps its button so the refusal names the lock the
+	-- player set rather than nothing happening.
+	local sell = button(
+		frame,
+		UDim2.fromOffset(46, 20),
+		UDim2.new(1, -58, 0, 32),
+		canReach and "SELL" or "ROOST",
+		canReach and Color3.fromRGB(120, 70, 70) or Color3.fromRGB(52, 54, 64)
+	)
+	sell.TextSize = 11
+	sell.MouseButton1Click:Connect(function()
+		send({ kind = "sellAccessory", accessoryUid = item.uid })
+	end)
+end
+
+-- The shop half of the tab. Everything catalogued with a price, whether or not
+-- the player already owns one: gear is instanced, so a second Coin Chain is a
+-- thing somebody may well want, and hiding what is owned would make the list
+-- change shape as it is bought out.
+local function gearShelfRow(config, order, canBuy)
+	local frame = row(order, 52)
+	frame.BackgroundTransparency = 0.35
+
+	local name = label(
+		frame,
+		UDim2.new(0, 250, 0, 18),
+		UDim2.new(0, 14, 0, 4),
+		Enum.Font.GothamBold,
+		14,
+		Config.rarityColor(config.rarity)
+	)
+	name.TextXAlignment = Enum.TextXAlignment.Left
+	name.Text = config.name
+
+	local sub = label(frame, UDim2.new(0, 250, 0, 14), UDim2.new(0, 14, 0, 21), Enum.Font.Gotham, 11, DIM)
+	sub.TextXAlignment = Enum.TextXAlignment.Left
+	sub.TextTruncate = Enum.TextTruncate.AtEnd
+	sub.Text = string.format("%s  |  %s", config.slot, effectsLine(config))
+
+	local price = label(frame, UDim2.new(0, 250, 0, 14), UDim2.new(0, 14, 0, 35), Enum.Font.Gotham, 11, GOLD)
+	price.TextXAlignment = Enum.TextXAlignment.Left
+	price.Text = string.format("%d coins", config.coinCost)
+
+	local buy = button(
+		frame,
+		UDim2.fromOffset(96, 26),
+		UDim2.new(1, -108, 0, 13),
+		canBuy and "BUY" or "AT A ROOST",
+		canBuy and GOLD or Color3.fromRGB(52, 54, 64)
+	)
+	buy.TextSize = canBuy and 13 or 10
+	buy.TextColor3 = canBuy and Color3.fromRGB(30, 26, 12) or WHITE
+	buy.MouseButton1Click:Connect(function()
+		send({ kind = "buyAccessory", accessoryId = config.id })
 	end)
 end
 
@@ -954,12 +1028,44 @@ local function drawGear()
 		state.accessoryCount or #items,
 		state.accessoryCap or 0
 	)
+
+	local canReach = nearRoost()
+	local order = 0
 	if #items == 0 then
+		order = order + 1
 		emptyNote("No gear yet. A piece of gear goes on one pet, and only the pet you have out gets what it does.")
-		return
 	end
-	for i, item in ipairs(items) do
-		gearRow(item, i, item.wornBy and names[item.wornBy] or nil)
+	for _, item in ipairs(items) do
+		order = order + 1
+		gearRow(item, order, item.wornBy and names[item.wornBy] or nil, canReach)
+	end
+
+	-- The shop is every catalogued piece with a price, cheapest first, and the two
+	-- without one are absent rather than greyed: an item that is only ever earned
+	-- has no business taking up a row in a shop.
+	local forSale = {}
+	for _, config in pairs(AccessoryCatalog) do
+		if config.coinCost then
+			table.insert(forSale, config)
+		end
+	end
+	table.sort(forSale, function(a, b)
+		if a.coinCost ~= b.coinCost then
+			return a.coinCost < b.coinCost
+		end
+		return a.id < b.id
+	end)
+
+	order = order + 1
+	local header = row(order, 26)
+	header.BackgroundTransparency = 1
+	local heading = label(header, UDim2.new(1, -24, 1, 0), UDim2.new(0, 14, 0, 0), Enum.Font.GothamBold, 12, GOLD)
+	heading.TextXAlignment = Enum.TextXAlignment.Left
+	heading.Text = canReach and "FOR SALE" or "FOR SALE AT ANY ROOF ROOST"
+
+	for _, config in ipairs(forSale) do
+		order = order + 1
+		gearShelfRow(config, order, canReach)
 	end
 end
 
@@ -1051,11 +1157,13 @@ end
 -- Walking up to a roost with the panel already open has to light the Place
 -- button, and no server message accompanies a walk. Redrawn only when
 -- reachability actually flips, because a rebuild every half second would reset
--- the scroll position under anyone reading the list.
+-- the scroll position under anyone reading the list. The Gear tab joined this
+-- when it grew a shop: buying and selling are the same counter and the same
+-- proximity re-check on the server.
 task.spawn(function()
 	local lastReach = nil
 	while true do
-		if panel.Visible and openTab == "Eggs" then
+		if panel.Visible and (openTab == "Eggs" or openTab == "Gear") then
 			local reach = nearRoost()
 			if reach ~= lastReach then
 				lastReach = reach
@@ -1243,6 +1351,8 @@ local function playEvent(event)
 		showBanner("Egg placed", remaining(event.done, event.required), GREEN, 2.5)
 	elseif event.kind == "bought" then
 		showBanner(event.name, string.format("-%d coins", event.cost), GOLD, 1.8)
+	elseif event.kind == "sold" then
+		showBanner(string.format("Sold %s", event.name), string.format("+%d coins", event.value), GOLD, 1.8)
 	elseif event.kind == "starter" then
 		showBanner("A free egg!", "Open PETS to place it at a roof roost", GOLD, 4)
 	elseif event.kind == "daily" then
@@ -1252,6 +1362,9 @@ local function playEvent(event)
 		end
 		if event.egg then
 			table.insert(parts, event.egg .. "!")
+		end
+		if event.gear then
+			table.insert(parts, event.gear .. "!")
 		end
 		dailyAvailable = false
 		showBanner(string.format("Day %d streak", event.streak), table.concat(parts, "  |  "), GOLD, 3)
@@ -1299,8 +1412,16 @@ remote.OnClientEvent:Connect(function(payload)
 			playSound(Config.Sounds.CoinPickup, Config.Juice.CoinVolume, Config.Juice.ShopDeniedPitch)
 		end
 	elseif payload.kind == "broadcast" then
+		-- Two things are worth announcing to a whole server and they are not both
+		-- hatches, so the verb and the noun both ride the payload. The hatch sends
+		-- neither and reads as it always did.
 		showBanner(
-			string.format("%s hatched a %s!", payload.playerName, payload.petName),
+			string.format(
+				"%s %s a %s!",
+				payload.playerName,
+				payload.verb or "hatched",
+				payload.itemName or payload.petName
+			),
 			string.upper(payload.rarity),
 			Config.rarityColor(payload.rarity),
 			Config.Pets.BroadcastSeconds

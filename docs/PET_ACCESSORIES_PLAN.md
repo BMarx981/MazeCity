@@ -118,8 +118,8 @@ Every effect names exactly one integration site. An effect with no site is not i
 | `HatchProgress` | fraction | IncubatorService's boost resolve (`:182`), where `HatchBoost` already multiplies | +0.75 |
 | `RouteVision` | hops | Client. TimerGui already decodes `LevelTrigger.Route` for Reveal (`:520`); this draws the first N hops permanently. | 14 hops |
 | `PhantomSense` | studs | Client. TimerGui already binds the `PhantomWall` tag (`:666`); this marks phantoms within range before they are touched. | 30 |
-| `ScoreBonus` | fraction | TowerTimerService's two award sites (`:164`, `:245`) | +0.15 |
-| `Armor` | fraction prevented | EnemyService's `TakeDamage` (`:235`) | 0.40 |
+| `ScoreBonus` | fraction | TowerTimerService's `award` (`:149`), which both payout sites already funnel through | +0.15 |
+| `Armor` | fraction prevented | `EnemyCombat.applyDamage` (`:77`), the one place anything takes a player's health | 0.40 |
 
 The two clarity effects are client draws with no server effect, which is the same shape Reveal already has and the reason they are cheap. They are hints, and a hint that is briefly wrong because a section has not replicated yet is the failure mode TimerGui is already written to tolerate.
 
@@ -275,22 +275,67 @@ Six things the implementation settled, and the first two are the plan being out 
 
 Checked with the same kind of stub-prelude harness Sets 1 and 2 used, at 70 checks: the caps, the benched-pet rule, fractions summing rather than chaining, every catalogue effect having both a cap and a label, an unknown id scoring nothing, and the coin carry paying five coins as six. It is a scratchpad artifact for the same reason theirs were, and it reaches only the resolver: the seven integration sites live in Scripts, and whether a crown actually makes a player faster is a Studio session.
 
-### Set 4: Clarity
+### Set 5 ships before Set 4
 
-- [ ] `RouteVision`: the first N hops of the current floor's `Route`, drawn permanently in a distinct colour, with the Reveal powerup still overriding it and restoring it on expiry
-- [ ] `PhantomSense`: phantoms within range marked before they are walked through
-- [ ] Both cleared on floor change, on respawn and on unwear, the way `clearReveal` already is
+The numbering stays as written, because CLAUDE.md and three sets of exit criteria refer to these by number, but the order of work inverts. `Inventory.grantAccessory` has no caller anywhere in the repo: the catalogue, the resolver, the rendering and seven of eleven effects are built and correct, and not one player can own a single item. Until Set 5's first unit lands, Set 4 is clarity nobody can buy and every earlier set is unreachable code. So Set 5 first, and inside it the source before the effects.
 
-Exit: the trail is on at the item's hop count, Reveal takes over and hands back, and the markers still live in `RouteHint` outside `MazeCity`.
+What both sets have in common is that the crossing is already built. `publishEffects` (`PetService.server.lua:99`) is a loop over `Config.Accessories.Attributes`, so an effect that needs to reach another script is one row in that table plus one reader that adds. The table goes from four rows to eight across the two sets and no new channel is invented for any of them.
 
 ### Set 5: Economy and the two award-site effects
 
-- [ ] Roost Gear tab: buy, sell back, storage cap refusal
-- [ ] Daily streak grant
-- [ ] `ScoreBonus` at both TowerTimerService award sites, `Armor` at the EnemyService damage site
-- [ ] Rarity broadcast on a Legendary grant, reusing `Config.Pets.BroadcastFrom`
+**Done.**
 
-Exit: a player with no developer knowledge buys gear, wears it, feels it, and sells it back.
+**Unit 1: the source.** Buying and selling, at the roost, through the door that already exists.
+
+- [x] `buyAccessory` and `sellAccessory` intents in IncubatorService, beside `buyEgg` and shaped like it: the proximity re-check on every mutation, the `leaderstats.Coins` deduction, the refund if the grant refuses, the `announce` on success. IncubatorService rather than PetService because it is already the service that spends coins at a pedestal, and because PetService is 930 lines and owns no purchase.
+- [x] An item with no `coinCost` is refused on both paths, which Set 1 already settled for selling and which is what keeps the streak Legendary out of the shop.
+- [x] PetGui's Gear tab gains a shop list beside the owned list and a sell action on owned rows. The tab, the slot grouping, the wear picker and the worn chips are all Set 2's and were not rebuilt.
+- [x] `REASONS` covers every refusal the two intents can send: storage cap, cannot afford, not for sale, worn, locked, not at a roost, expired, unknown.
+
+Exit: a player with no developer knowledge walks to a roost, buys a Coin Chain, wears it, feels the magnet reach further, and sells it back for 75.
+
+**Unit 2: the streak grant.** The only way to get a Legendary, and the second source that keeps the loop from dying after the shop is cleared.
+
+- [x] DailyRewardService grants `Config.Accessories.StreakGearId` on `StreakGearDay`, beside the day-seven streak egg. Same posture as that grant, including its decision to keep the day rather than roll the streak back when storage is full.
+- [x] Rarity broadcast on a Legendary grant, reusing `Config.Pets.BroadcastFrom` and the announce path the hatch already uses.
+
+**Unit 3: the two award-site effects.** Two rows and two readers.
+
+- [x] `ScoreBonus` becomes `PetScoreBonus` in `Config.Accessories.Attributes`, read in TowerTimerService's `award`. The plan called this two award sites; it is one, because `enterFloor` and `completeTower` both funnel through that function, and applying it there rather than at each caller is what keeps a third payout from being written without it.
+- [x] `Armor` becomes `PetArmor`, read in `EnemyCombat.applyDamage`. Also one site rather than the `EnemyService:235` this plan named before the enemy tree was split out: every hit on a player in the game goes through that function, and `EnemyController:takeDamage` is the enemy taking damage rather than dealing it.
+- [x] Both are attributes rather than a `PetInventory` require, because neither script requires that module and neither should learn what gear is. This is the invariant, not a shortcut around it.
+
+Exit: a tower topped out under a Tin Crown pays measurably more than one topped out without it, and a Guard Collar measurably survives one more hit.
+
+Seven things the implementation settled:
+
+- **PetGui requires `AccessoryCatalog`, and invariant 3 survives it.** The projection carries what a player owns, and a shop has to name what they do not, so the shop list is read off the catalogue exactly as the egg shelf beside it already reads `EggCatalog`. The invariant is about who resolves an *effect*: no total is computed here, the numbers on a row are the row's own `effects` list, and what a raw `0.25` means in words still comes from `Config.Accessories` rather than a second table on the client. A storefront naming a price is not a consumer.
+
+- **Selling happens at the roost too.** The plan only said buying went through that door, but a sell path anywhere would have been the one mutation in the pet system with no proximity re-check behind it, and half the point of a bag cap is that clearing it is a decision made at the counter. The button says `ROOST` rather than going grey, which is the bargain the Place button already made.
+
+- **`award` returns what it paid rather than what it was asked for.** Both call sites report `gained` to the client's celebration and, for a floor, to the `MazeProgress` bindable; a crown that pays 10% more while the banner says otherwise is worse than no crown. So the bonus is applied inside the function and the callers read its return, which is also what keeps the two sites from each remembering to multiply. Rounded once on the total, because a floor pays tens of points into an IntValue: this needs none of the carried remainder `CoinValue = 1` forced on PickupService.
+
+- **The streak day is matched exactly where the egg's is `>=`.** The egg pays at the wrap, and `>=` is what keeps somebody who earned it from losing it if `DailyStreakLength` is lowered under a saved streak. Gear pays on one day of the week, and a day above the length is unreachable anyway: the streak resets to one the moment it would exceed it.
+
+- **The server-wide broadcast grew a verb and a noun.** It said "%s hatched a %s", and a crown is not hatched. The payload now carries `verb` and `itemName`, both optional, so the hatch sends neither and reads exactly as it did.
+
+- **A sell button is drawn only where selling is possible at all**, which is an unworn item that has a price; the lock button takes the full width otherwise. A *locked* item keeps its button, because there the refusal names a lock the player set themselves, which is worth reading.
+
+- **`ember_trail` still has no source.** `beacon_crown` is the streak grant and the Legendary the plan promised, but the event trail is not for sale, not on the streak, and not in any hatch table, so it is currently unobtainable by design and by nothing else. A second `StreakGearId`-shaped knob is the cheap fix the day an event exists.
+
+Checked with the same stub-prelude harness Sets 1 through 3 used, at 100 checks, and confirmed against a mutated config that the new ones bite: the streak item resolves and is unbuyable, its day is one the streak reaches, every for-sale item refunds between one coin and its price, a Coin Chain is 75, the bag cap refuses a purchase without charging, locked and worn refuse a sale, every refusal either intent can send has a sentence in `REASONS`, the six published attributes each have a cap and a label and no two share a name, and two armour pieces sum to 0.35 while three clamp at the cap. It is a scratchpad artifact for the reason the others were. What it cannot reach is both award sites and both intents, all four being in Scripts: whether a Tin Crown actually pays 42 for a 40 point floor is a Studio session.
+
+### Set 4: Clarity
+
+Two client draws, no server effect, which is the shape Reveal already has and the reason they are cheap.
+
+- [ ] `RouteVision` and `PhantomSense` join `Config.Accessories.Attributes` as `PetRouteVision` and `PetPhantomSense`. This corrects that table's own comment, which says the two clarity effects come off the projection: the projection lands in PetGui and the trail is drawn by TimerGui, so coming off the projection means TimerGui subscribing to a second remote and parsing an inventory it has no other use for. Attributes are replicated, so the trail is correct on the first frame after a rejoin, which is the argument AbilityGui already made for ownership.
+- [ ] `RouteVision`: the first N hops of the current floor's `Route`, drawn permanently in a distinct colour from Reveal's.
+- [ ] The handback is the delicate part. `clearReveal` (`TimerGui.client.lua:533`) tears the whole `RouteHint` model down and zeroes the deadline, and two unrelated things already extend that deadline without owning it. So clearing means returning to the baseline the gear pays for rather than to nothing: `clearReveal` redraws the geared hops after it clears. The deadline stays the single owner of the temporary layer and neither the orb nor Trailblazer learns that gear exists.
+- [ ] `PhantomSense`: phantoms within range marked before they are walked through, on the `PhantomWall` binding TimerGui already holds (`:794`).
+- [ ] Both cleared on floor change, on respawn and on unwear, the way `clearReveal` already is. Unwear arrives as an attribute change, so it is a `GetAttributeChangedSignal` bind rather than anything new on the wire.
+
+Exit: the trail is on at the item's hop count with no orb taken and no cast made, Reveal takes over and hands back to it rather than to nothing, and the markers still live in `RouteHint` outside `MazeCity`.
 
 ## Invariants this adds
 
@@ -304,7 +349,7 @@ Exit: a player with no developer knowledge buys gear, wears it, feels it, and se
 
 ## Open decisions
 
-- **Whether `Armor` belongs at all.** It is the one effect that changes how dangerous the game is rather than how fast or how legible, and the enemy tuning comment argues that contact should be a mistake rather than a tax. 40% is chosen to keep a hit a mistake. Worth a playtest before Set 5 rather than after.
+- **Whether `Armor` belongs at all.** It is the one effect that changes how dangerous the game is rather than how fast or how legible, and the enemy tuning comment argues that contact should be a mistake rather than a tax. 40% is chosen to keep a hit a mistake. Still open after Set 5, which shipped it wired rather than shipped it decided: it is one attribute read at one line in `EnemyCombat.applyDamage`, so lowering the cap is a `Config.Accessories` edit, and retiring the effect is deleting the three catalogue rows that carry it. The playtest this asked for is a Guard Collar worn against a Brute.
 - **Whether gear should be droppable from eggs.** It would give hatching a second axis, and it would also make a full pet shelf stop being the only reason a hatch can refuse. Left out of v1 because an egg that pays either a pet or a hat needs its `hatchTable` to hold two kinds of thing, which is a wider change to the roll than it looks.
 - **Where this sits against the ship plan.** Same question PETS_PLAN records and does not answer: this is additive to the save schema and to the client input surface, so it should not run beside the README/CI and ship milestones on the same save format.
 

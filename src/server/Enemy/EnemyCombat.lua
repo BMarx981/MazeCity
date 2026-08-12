@@ -74,12 +74,26 @@ function EnemyCombat.canReach(controller, character)
 	return EnemyTargeting.hasLineOfSight(controller.root.Position + EYE_OFFSET, hrp)
 end
 
+-- Every point of health anything in this game takes goes through here, which is
+-- why a pet's Armor is read here and not at the six places that call it. It
+-- arrives as a replicated player attribute rather than as a PetInventory require,
+-- because this module has no business learning what gear is: one attribute, one
+-- writer, and this reader only subtracts. It is a fraction prevented, already
+-- capped in the resolver, so nothing is clamped here.
 function EnemyCombat.applyDamage(controller, character, amount)
 	local humanoid = character:FindFirstChildOfClass("Humanoid")
 	if not humanoid or humanoid.Health <= 0 then
 		return false
 	end
-	humanoid:TakeDamage(amount or controller.stats.damage)
+
+	local dealt = amount or controller.stats.damage
+	local player = Players:GetPlayerFromCharacter(character)
+	local armor = player and player:GetAttribute(Config.Accessories.Attributes.Armor) or 0
+	if armor > 0 then
+		dealt = dealt * (1 - armor)
+	end
+
+	humanoid:TakeDamage(dealt)
 	return true
 end
 

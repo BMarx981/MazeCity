@@ -10,9 +10,9 @@
 -- every intent is validated against the profile, nothing is trusted, and a
 -- player who floods gets their extra intents dropped.
 --
--- Gear leaves this script as four player attributes rather than as calls into
--- four services, which is the same channel the shop's upgrades already use. See
--- publishEffects: this is the one writer of all four and every reader adds.
+-- Gear leaves this script as six player attributes rather than as calls into six
+-- services, which is the same channel the shop's upgrades already use. See
+-- publishEffects: this is the one writer of all six and every reader adds.
 --
 -- Followers are anchored parts moved by CFrame, not humanoids. A pathfinding pet
 -- in a maze whose walls move is a pet stuck behind one, and a physics pet is one
@@ -85,13 +85,14 @@ end
 -- ============================================================
 -- Gear that reaches another service
 -- ============================================================
--- Four of the eleven accessory effects are spent somewhere this script has no
+-- Six of the eleven accessory effects are spent somewhere this script has no
 -- business writing: a humanoid's walk speed, a coin payout, a magnet radius, a
--- charge drain. They cross the same way the shop's upgrades cross and the Ghost
--- powerup crosses, as an attribute, and the rule that keeps them composable is
--- the plan's: **one attribute, one writer, readers add.** This is the writer of
--- all four; SaveService and PickupService keep owning BaseWalkSpeed and
--- MagnetRange and never learn that gear exists.
+-- charge drain, a score award and a hit landing. They cross the same way the
+-- shop's upgrades cross and the Ghost powerup crosses, as an attribute, and the
+-- rule that keeps them composable is the plan's: **one attribute, one writer,
+-- readers add.** This is the writer of all six; SaveService and PickupService
+-- keep owning BaseWalkSpeed and MagnetRange, and TowerTimerService and
+-- EnemyCombat never learn that gear exists.
 --
 -- Stamped as numbers rather than left absent at zero, for the reason the ability
 -- tiers are: an absent attribute is indistinguishable from a profile that has

@@ -1,6 +1,6 @@
 -- DailyRewardService (Script) -> ServerScriptService
 -- One claim per UTC day, a streak that grows while the days are consecutive, and
--- a streak egg on day seven.
+-- a streak egg plus a piece of Legendary gear on day seven.
 --
 -- Day arithmetic is done on the UTC day number, math.floor(os.time() / 86400),
 -- exactly as the spec has it. Storing the day rather than the timestamp is what
@@ -108,6 +108,31 @@ local function claim(player)
 		end
 	end
 
+	-- The second source the accessories plan asks for, and the only way to own a
+	-- Legendary: the shop refuses anything with no coinCost, so this is not a
+	-- cheaper route to an item, it is the route. Same posture as the egg above,
+	-- including keeping the day when the bag is full rather than rolling the
+	-- streak back.
+	local gearName = nil
+	local gearConfig = Inventory.accessoryConfig(Config.Accessories.StreakGearId)
+	if streak == Config.Accessories.StreakGearDay and gearConfig then
+		local ok, result = Inventory.grantAccessory(data, gearConfig.id)
+		if ok then
+			gearName = gearConfig.name
+			if Config.rarityIndex(gearConfig.rarity) >= Config.rarityIndex(pets.BroadcastFrom) then
+				remote:FireAllClients({
+					kind = "broadcast",
+					playerName = player.DisplayName,
+					itemName = gearConfig.name,
+					verb = "earned",
+					rarity = gearConfig.rarity,
+				})
+			end
+		else
+			remote:FireClient(player, { kind = "denied", action = "daily", reason = result })
+		end
+	end
+
 	changed:Fire({
 		player = player,
 		event = {
@@ -117,6 +142,7 @@ local function claim(player)
 			coins = coinReward,
 			xp = xpPaid,
 			egg = eggName,
+			gear = gearName,
 		},
 	})
 end

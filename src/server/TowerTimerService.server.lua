@@ -146,10 +146,20 @@ local function inSameTower(s, trigger)
 	return s ~= nil and s.section == trigger:GetAttribute("Section") and s.building == trigger:GetAttribute("Building")
 end
 
+-- Returns what was actually paid, not the running total, because gear can move
+-- it: a pet's ScoreBonus is applied here rather than at the two call sites, so a
+-- third payout cannot be written without it, and the caller reports the number
+-- the player received rather than the one it asked for.
+--
+-- Rounded once, on the total, because Score is an IntValue. A floor's payout is
+-- tens of points rather than a coin's one, so there is nothing here worth the
+-- carried remainder PickupService keeps.
 local function award(player, amount)
+	local bonus = player:GetAttribute(Config.Accessories.Attributes.ScoreBonus) or 0
+	local paid = bonus > 0 and math.floor(amount * (1 + bonus) + 0.5) or amount
 	local score = scoreValue(player)
-	score.Value = score.Value + amount
-	return score.Value
+	score.Value = score.Value + paid
+	return paid
 end
 
 local function enterFloor(player, trigger)
@@ -161,8 +171,7 @@ local function enterFloor(player, trigger)
 	-- walking into a different tower, just restarts that floor's clock.
 	if inSameTower(s, trigger) and level == s.level + 1 then
 		local elapsed = os.clock() - s.startedAt
-		local gained = Config.scoreFloor(s.level, elapsed)
-		award(player, gained)
+		local gained = award(player, Config.scoreFloor(s.level, elapsed))
 		event = { kind = "floor", level = s.level, elapsed = elapsed, par = s.par, gained = gained }
 		progress:Fire({
 			kind = "floor",
@@ -242,8 +251,7 @@ end
 local function completeTower(player)
 	local s = state[player]
 	local elapsed = os.clock() - s.startedAt
-	local gained = Config.scoreFloor(s.level, elapsed) + Config.Scoring.TowerBonus
-	award(player, gained)
+	local gained = award(player, Config.scoreFloor(s.level, elapsed) + Config.Scoring.TowerBonus)
 
 	local event = {
 		kind = "tower",

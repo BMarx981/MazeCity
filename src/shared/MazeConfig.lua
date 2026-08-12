@@ -689,22 +689,43 @@ Config.Accessories = {
 	SellFraction = 0.5,
 
 	-- Where the effects that land in another service are published. PetService is
-	-- the only writer of all four and the reader adds one to whatever it already
+	-- the only writer of all six and the reader adds one to whatever it already
 	-- had, which is the plan's one-attribute-one-writer rule: SaveService keeps
 	-- owning BaseWalkSpeed and MagnetRange and never learns that gear exists.
-	-- Named here rather than spelled out at five call sites so a rename is one
+	-- Named here rather than spelled out at seven call sites so a rename is one
 	-- edit, and listed as a table so PetService stamps them in a loop.
 	--
 	-- The other effects need no attribute, because their reader is already a
 	-- script that requires PetInventory: GlowRange and PetXp are PetService's
 	-- own, HatchProgress is IncubatorService's, and the two clarity effects are
 	-- client draws that come off the projection.
+	--
+	-- The last two are the award sites, and each names one function rather than
+	-- one caller: every score this game pays goes through TowerTimerService's
+	-- award and every point of health an enemy takes goes through
+	-- EnemyCombat.applyDamage, so a third payout or a fifth way to hurt somebody
+	-- cannot be written without them.
 	Attributes = {
 		WalkSpeed = "PetWalkSpeed",
 		PickupRadius = "PetMagnetBonus",
 		CoinMultiplier = "PetCoinBonus",
 		WallWalkSeconds = "PetWallWalkSeconds",
+		ScoreBonus = "PetScoreBonus",
+		Armor = "PetArmor",
 	},
+	-- The second source, and the only way to own a Legendary. Here rather than
+	-- beside the daily knobs in Config.Pets because it names a piece of gear, and
+	-- a day number is a cheaper thing for that block to lend out than an
+	-- accessory id is for this one to borrow.
+	--
+	-- The day is matched exactly rather than with the streak egg's >=, and the
+	-- two want different things: the egg pays at the wrap, where a length lowered
+	-- underneath a saved streak still has to pay somebody who earned it, while
+	-- this pays on one day of the week and days above DailyStreakLength are never
+	-- reached at all, the streak resetting to one the moment it would exceed it.
+	StreakGearDay = 7,
+	StreakGearId = "beacon_crown",
+
 	-- WallWalkSeconds is the one effect that lands on an ability rather than on a
 	-- stat, and this is which one. It buys seconds of phase out of the same
 	-- charge every ability shares, so it is a slower drain rather than a second
