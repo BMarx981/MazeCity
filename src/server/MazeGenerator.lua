@@ -354,6 +354,9 @@ local STYLES = {
 		windows = "grid",
 		crown = "parapet",
 		exterior = "archive",
+		facadeSkin = Color3.fromRGB(20, 28, 38),
+		facadeTrim = Color3.fromRGB(48, 66, 82),
+		facadeGlass = Color3.fromRGB(5, 12, 18),
 		accent = Color3.fromRGB(92, 190, 255),
 		theme = "Drowned Archive",
 		enemy = "Drifter",
@@ -368,6 +371,9 @@ local STYLES = {
 		windows = "ribbon",
 		crown = "setback",
 		exterior = "reliquary",
+		facadeSkin = Color3.fromRGB(34, 26, 19),
+		facadeTrim = Color3.fromRGB(78, 58, 34),
+		facadeGlass = Color3.fromRGB(16, 10, 6),
 		accent = Color3.fromRGB(255, 176, 72),
 		theme = "Buried Reliquary",
 		enemy = "Stalker",
@@ -382,6 +388,9 @@ local STYLES = {
 		windows = "columns",
 		crown = "spire",
 		exterior = "monolith",
+		facadeSkin = Color3.fromRGB(24, 26, 30),
+		facadeTrim = Color3.fromRGB(58, 62, 70),
+		facadeGlass = Color3.fromRGB(7, 9, 12),
 		accent = Color3.fromRGB(172, 208, 228),
 		theme = "Silent Monolith",
 		enemy = "Sentry",
@@ -396,6 +405,9 @@ local STYLES = {
 		windows = "grid",
 		crown = "watertower",
 		exterior = "alchemy",
+		facadeSkin = Color3.fromRGB(18, 34, 30),
+		facadeTrim = Color3.fromRGB(38, 82, 70),
+		facadeGlass = Color3.fromRGB(4, 14, 12),
 		accent = Color3.fromRGB(92, 255, 184),
 		theme = "Alchemist Stack",
 		enemy = "Swarmer",
@@ -410,6 +422,9 @@ local STYLES = {
 		windows = "ribbon",
 		crown = "setback",
 		exterior = "ossuary",
+		facadeSkin = Color3.fromRGB(34, 32, 28),
+		facadeTrim = Color3.fromRGB(82, 76, 64),
+		facadeGlass = Color3.fromRGB(13, 12, 10),
 		accent = Color3.fromRGB(236, 226, 196),
 		theme = "Ivory Ossuary",
 		enemy = "Lurker",
@@ -424,6 +439,9 @@ local STYLES = {
 		windows = "columns",
 		crown = "spire",
 		exterior = "cinder",
+		facadeSkin = Color3.fromRGB(34, 20, 20),
+		facadeTrim = Color3.fromRGB(82, 38, 34),
+		facadeGlass = Color3.fromRGB(14, 5, 5),
 		accent = Color3.fromRGB(255, 92, 52),
 		theme = "Cinder Sanctum",
 		enemy = "Charger",
@@ -1626,6 +1644,7 @@ local function buildWindows(parent, origin, style, side, doorU)
 	local O = CFG.FACADE_OUTSET + CFG.FACADE_THICKNESS
 	local horizontal = (side == "north" or side == "south")
 	local faceLen = horizontal and FX or FZ
+	local glass = style.facadeGlass or style.glass
 
 	local clearHalf = CFG.DOOR_WIDTH / 2 + CFG.DOOR_CLEARANCE
 	local clearTop = CFG.DOOR_HEIGHT + CFG.DOOR_CLEARANCE
@@ -1642,9 +1661,10 @@ local function buildWindows(parent, origin, style, side, doorU)
 			pos = Vector3.new(FX + O + 0.3, y, u)
 		end
 		local size = horizontal and Vector3.new(lenU, height, thick) or Vector3.new(thick, height, lenU)
-		local w = makePart(parent, "Window", CFrame.new(origin + pos), size, style.glass, Enum.Material.Glass)
-		w.Reflectance = 0.28
+		local w = makePart(parent, "Window", CFrame.new(origin + pos), size, glass, Enum.Material.Glass)
+		w.Reflectance = 0.12
 		w.CanCollide = false
+		w.Transparency = 0.22
 		if doorU and math.abs(u - doorU) < lenU / 2 + clearHalf and y - height / 2 < clearTop then
 			w.Transparency = 1
 			w.Reflectance = 0
@@ -1709,6 +1729,18 @@ local function detailColor(base, shade, glow)
 	return base:Lerp(Color3.fromRGB(0, 0, 0), shade)
 end
 
+local function facadeSkin(style)
+	return style.facadeSkin or style.skin
+end
+
+local function facadeTrim(style)
+	return style.facadeTrim or style.trim
+end
+
+local function facadeMaterial(style)
+	return style.facadeMaterial or Enum.Material.Slate
+end
+
 local function maybeSkipDoor(side, entrySide, doorU, u, y, lenU, height)
 	if side ~= entrySide then
 		return false
@@ -1724,10 +1756,13 @@ local function buildExteriorMystery(parent, origin, style, entrySide, entryCell,
 	local height = ROOF_Y + CFG.PARAPET_HEIGHT
 	local doorCenter = cellCenter(entryCell.x, entryCell.z)
 	local doorU = (entrySide == "north" or entrySide == "south") and doorCenter.X or doorCenter.Z
+	local skin = facadeSkin(style)
+	local trim = facadeTrim(style)
+	local stoneMaterial = facadeMaterial(style)
 	local accent = style.accent or style.trim
-	local shadow = detailColor(style.wall, 0.5, false)
-	local deep = detailColor(style.wall, 0.68, false)
-	local pale = detailColor(style.wall, 0.38, true)
+	local shadow = detailColor(skin, 0.42, false)
+	local deep = detailColor(skin, 0.62, false)
+	local pale = accent:Lerp(Color3.fromRGB(255, 255, 255), 0.32)
 
 	ctx.exteriorTheme = style.theme
 	ctx.exteriorVariant = rng:NextInteger(1000, 9999)
@@ -1744,9 +1779,93 @@ local function buildExteriorMystery(parent, origin, style, entrySide, entryCell,
 		return part
 	end
 
+	local function mazeLine(side, name, u0, y0, u1, y1, color, width)
+		local du = math.abs(u1 - u0)
+		local dy = math.abs(y1 - y0)
+		if du >= dy then
+			return place(side, name, (u0 + u1) / 2, y0, du + width, width, 0.55, color, Enum.Material.Neon, 1.18, true)
+		end
+		return place(side, name, u0, (y0 + y1) / 2, width, dy + width, 0.55, color, Enum.Material.Neon, 1.18, true)
+	end
+
+	local function buildStoneCourses(side, faceLen)
+		local courses = CFG.LEVELS * 2
+		for course = 1, courses do
+			local y = height * course / (courses + 1) + rng:NextNumber(-0.45, 0.45)
+			place(
+				side,
+				"KeptStoneCourse",
+				faceLen / 2,
+				y,
+				faceLen * rng:NextNumber(0.82, 0.98),
+				0.18,
+				0.32,
+				deep,
+				stoneMaterial,
+				1.02
+			)
+		end
+
+		for course = 0, courses - 1 do
+			local bandY = height * (course + 0.5) / courses
+			local bandH = height / courses
+			for _ = 1, rng:NextInteger(3, 5) do
+				local u = rng:NextNumber(faceLen * 0.06, faceLen * 0.94)
+				place(
+					side,
+					"KeptStoneJoint",
+					u,
+					bandY + rng:NextNumber(-bandH * 0.18, bandH * 0.18),
+					0.16,
+					bandH * rng:NextNumber(0.35, 0.75),
+					0.3,
+					shadow,
+					stoneMaterial,
+					1.04
+				)
+			end
+		end
+	end
+
+	local function buildMazeTracery(side, faceLen)
+		local cols = 9
+		local rows = math.max(9, CFG.LEVELS + 3)
+		local cellU = faceLen / (cols + 1)
+		local cellY = height / (rows + 1)
+		local color = accent:Lerp(Color3.fromRGB(255, 255, 255), 0.08)
+		local dimColor = accent:Lerp(skin, 0.38)
+
+		for _ = 1, 3 do
+			local gx = rng:NextInteger(2, cols - 1)
+			local gy = rng:NextInteger(2, rows - 1)
+			local steps = rng:NextInteger(9, 15)
+			for step = 1, steps do
+				local oldX, oldY = gx, gy
+				if rng:NextNumber() < 0.5 then
+					gx = math.clamp(gx + (rng:NextNumber() < 0.5 and -1 or 1), 1, cols)
+				else
+					gy = math.clamp(gy + (rng:NextNumber() < 0.5 and -1 or 1), 1, rows)
+				end
+
+				local u0 = oldX * cellU + rng:NextNumber(-1.1, 1.1)
+				local y0 = oldY * cellY + rng:NextNumber(-0.7, 0.7)
+				local u1 = gx * cellU + rng:NextNumber(-1.1, 1.1)
+				local y1 = gy * cellY + rng:NextNumber(-0.7, 0.7)
+				mazeLine(side, "KeptMazeLine", u0, y0, u1, y1, (step % 3 == 0) and dimColor or color, 0.42)
+
+				if step % 4 == 0 then
+					place(side, "KeptMazeNode", u1, y1, 1.8, 1.8, 0.62, color, Enum.Material.Neon, 1.2, true)
+				end
+			end
+		end
+	end
+
 	for _, side in ipairs(SIDE_ORDER) do
 		local horizontal = (side == "north" or side == "south")
 		local faceLen = horizontal and FX or FZ
+
+		buildStoneCourses(side, faceLen)
+		buildMazeTracery(side, faceLen)
 
 		local ribCount = rng:NextInteger(3, 5)
 		for i = 1, ribCount do
@@ -1762,7 +1881,7 @@ local function buildExteriorMystery(parent, origin, style, entrySide, entryCell,
 				ribH,
 				rng:NextNumber(2.4, 4.8),
 				shadow,
-				style.material,
+				stoneMaterial,
 				0.8
 			)
 		end
@@ -1779,7 +1898,7 @@ local function buildExteriorMystery(parent, origin, style, entrySide, entryCell,
 				1.1,
 				2.2,
 				deep,
-				Enum.Material.Slate,
+				stoneMaterial,
 				0.55
 			)
 		end
@@ -1822,8 +1941,8 @@ local function buildExteriorMystery(parent, origin, style, entrySide, entryCell,
 				local y = rng:NextNumber(LEVEL_HEIGHT * 1.2, height - 28)
 				local archH = rng:NextNumber(18, 28)
 				local archW = rng:NextNumber(12, 18)
-				place(side, "ReliquaryPillar", u - archW / 2, y, 1.3, archH, 1.6, pale, Enum.Material.Sandstone, 0.7)
-				place(side, "ReliquaryPillar", u + archW / 2, y, 1.3, archH, 1.6, pale, Enum.Material.Sandstone, 0.7)
+				place(side, "ReliquaryPillar", u - archW / 2, y, 1.3, archH, 1.6, pale, stoneMaterial, 0.7)
+				place(side, "ReliquaryPillar", u + archW / 2, y, 1.3, archH, 1.6, pale, stoneMaterial, 0.7)
 				place(
 					side,
 					"ReliquaryLintel",
@@ -1863,27 +1982,16 @@ local function buildExteriorMystery(parent, origin, style, entrySide, entryCell,
 				local u = rng:NextNumber(faceLen * 0.08, faceLen * 0.92)
 				local pipeH = rng:NextNumber(height * 0.35, height * 0.78)
 				local y = rng:NextNumber(pipeH / 2 + 8, height - pipeH / 2)
-				place(
-					side,
-					"AlchemyConduit",
-					u,
-					y,
-					1.6,
-					pipeH,
-					1.8,
-					accent:Lerp(style.wall, 0.35),
-					Enum.Material.Metal,
-					1.0
-				)
+				place(side, "AlchemyConduit", u, y, 1.6, pipeH, 1.8, accent:Lerp(skin, 0.35), Enum.Material.Metal, 1.0)
 				place(side, "AlchemyValve", u, y + pipeH / 2, 6, 1.6, 2, accent, Enum.Material.Neon, 1.18, true)
 			end
 		elseif style.exterior == "ossuary" then
 			for _ = 1, rng:NextInteger(4, 7) do
 				local u = rng:NextNumber(faceLen * 0.08, faceLen * 0.92)
 				local y = rng:NextNumber(LEVEL_HEIGHT * 0.7, height - 14)
-				place(side, "OssuaryRibLeft", u - 2.4, y, 1.1, 14, 1.2, pale, Enum.Material.Marble, 0.78)
-				place(side, "OssuaryRibRight", u + 2.4, y, 1.1, 14, 1.2, pale, Enum.Material.Marble, 0.78)
-				place(side, "OssuarySeal", u, y, 5.8, 2.2, 0.55, deep, Enum.Material.Slate, 1.0)
+				place(side, "OssuaryRibLeft", u - 2.4, y, 1.1, 14, 1.2, pale, stoneMaterial, 0.78)
+				place(side, "OssuaryRibRight", u + 2.4, y, 1.1, 14, 1.2, pale, stoneMaterial, 0.78)
+				place(side, "OssuarySeal", u, y, 5.8, 2.2, 0.55, deep, stoneMaterial, 1.0)
 			end
 		elseif style.exterior == "cinder" then
 			for _ = 1, rng:NextInteger(7, 11) do
@@ -1931,8 +2039,8 @@ local function buildExteriorMystery(parent, origin, style, entrySide, entryCell,
 			"MysteryCorner",
 			CFrame.new(origin + Vector3.new(corner.X, cornerHeight / 2, corner.Z)),
 			Vector3.new(3.6, cornerHeight, 3.6),
-			shadow,
-			style.material
+			trim:Lerp(Color3.fromRGB(0, 0, 0), 0.45),
+			stoneMaterial
 		)
 		p.CanCollide = false
 		p.CanTouch = false
@@ -1958,6 +2066,9 @@ end
 local function buildCrown(parent, origin, style)
 	local topY = ROOF_Y + CFG.PARAPET_HEIGHT
 	local cx, cz = FX / 2, FZ / 2
+	local skin = facadeSkin(style)
+	local trim = facadeTrim(style)
+	local material = facadeMaterial(style)
 
 	if style.crown == "setback" then
 		makePart(
@@ -1965,15 +2076,15 @@ local function buildCrown(parent, origin, style)
 			"Penthouse",
 			CFrame.new(origin + Vector3.new(cx, topY + 14, cz)),
 			Vector3.new(FX * CFG.CROWN_SETBACK_BODY, 28, FZ * CFG.CROWN_SETBACK_BODY),
-			style.skin,
-			style.material
+			skin,
+			material
 		)
 		makePart(
 			parent,
 			"PenthouseCap",
 			CFrame.new(origin + Vector3.new(cx, topY + 29, cz)),
 			Vector3.new(FX * CFG.CROWN_SETBACK_CAP, 2, FZ * CFG.CROWN_SETBACK_CAP),
-			style.trim,
+			trim,
 			Enum.Material.Metal
 		)
 	elseif style.crown == "spire" then
@@ -1985,8 +2096,8 @@ local function buildCrown(parent, origin, style)
 				"Spire" .. i,
 				CFrame.new(origin + Vector3.new(cx, topY + (i - 0.5) * h, cz)),
 				Vector3.new(FX * CFG.CROWN_SPIRE_BASE * f, h, FZ * CFG.CROWN_SPIRE_BASE * f),
-				style.skin,
-				style.material
+				skin,
+				material
 			)
 		end
 		local mast = makePart(
@@ -1994,7 +2105,7 @@ local function buildCrown(parent, origin, style)
 			"Mast",
 			CFrame.new(origin + Vector3.new(cx, topY + 5 * h + 16, cz)),
 			Vector3.new(2, 32, 2),
-			style.trim,
+			style.accent or trim,
 			Enum.Material.Neon
 		)
 		mast.Shape = Enum.PartType.Cylinder
@@ -2006,7 +2117,7 @@ local function buildCrown(parent, origin, style)
 				"TowerLeg",
 				CFrame.new(origin + Vector3.new(cx + off[1], topY + 11, cz + off[2])),
 				Vector3.new(2, 22, 2),
-				style.trim,
+				trim,
 				Enum.Material.Metal
 			)
 		end
@@ -2015,7 +2126,7 @@ local function buildCrown(parent, origin, style)
 			"Tank",
 			CFrame.new(origin + Vector3.new(cx, topY + 36, cz)),
 			Vector3.new(CFG.CROWN_TANK, CFG.CROWN_TANK, CFG.CROWN_TANK),
-			style.skin,
+			skin,
 			Enum.Material.CorrodedMetal
 		)
 		tank.Shape = Enum.PartType.Cylinder
@@ -2034,6 +2145,8 @@ local function buildFacade(parent, origin, style, entrySide, entryCell, ctx)
 	local T = CFG.FACADE_THICKNESS
 	local height = ROOF_Y + CFG.PARAPET_HEIGHT
 	local midY = height / 2
+	local skin = facadeSkin(style)
+	local material = facadeMaterial(style)
 
 	local faces = {
 		north = { pos = Vector3.new(FX / 2, midY, -O - T / 2), size = Vector3.new(FX + 2 * (O + T), height, T) },
@@ -2048,7 +2161,7 @@ local function buildFacade(parent, origin, style, entrySide, entryCell, ctx)
 	for _, side in ipairs(SIDE_ORDER) do
 		local f = faces[side]
 		if side ~= entrySide then
-			makePart(folder, "Facade_" .. side, CFrame.new(origin + f.pos), f.size, style.skin, style.material)
+			makePart(folder, "Facade_" .. side, CFrame.new(origin + f.pos), f.size, skin, material)
 		else
 			local horizontal = (side == "north" or side == "south")
 			local total = horizontal and f.size.X or f.size.Z
@@ -2065,7 +2178,7 @@ local function buildFacade(parent, origin, style, entrySide, entryCell, ctx)
 					pos = Vector3.new(f.pos.X, y, uCenter)
 					size = Vector3.new(T, h, uLen)
 				end
-				makePart(folder, name, CFrame.new(origin + pos), size, style.skin, style.material)
+				makePart(folder, name, CFrame.new(origin + pos), size, skin, material)
 			end
 
 			if leftLen > 0.1 then
@@ -2218,8 +2331,11 @@ local function buildRoof(parent, origin, hole, style, isExit, ctx)
 
 	local towerName = ctx.towerName
 	local sectionIndex = ctx.section
+	local skin = facadeSkin(style)
+	local trim = facadeTrim(style)
+	local material = facadeMaterial(style)
 
-	buildSlab(folder, origin, ROOF_Y, hole, style.skin, style.material, "RoofSlab")
+	buildSlab(folder, origin, ROOF_Y, hole, skin, material, "RoofSlab")
 
 	local O = CFG.FACADE_OUTSET
 	local ring = {
@@ -2241,7 +2357,7 @@ local function buildRoof(parent, origin, hole, style, isExit, ctx)
 		},
 	}
 	for i, r in ipairs(ring) do
-		makePart(folder, "Parapet" .. i, CFrame.new(origin + r.pos), r.size, style.trim, Enum.Material.Concrete)
+		makePart(folder, "Parapet" .. i, CFrame.new(origin + r.pos), r.size, trim, material)
 	end
 
 	-- Win state. The roof has no LevelTrigger of its own because there is no
@@ -2735,6 +2851,16 @@ local function buildBuilding(sectionFolder, origin, sectionIndex, buildingIndex,
 	folder:SetAttribute("TowerName", towerName)
 	folder:SetAttribute("IsExit", isExit)
 	folder:SetAttribute("EnemyType", style.enemy)
+	folder:SetAttribute("CompletionLightColor", style.accent)
+	folder:SetAttribute("ExteriorOriginX", origin.X)
+	folder:SetAttribute("ExteriorOriginY", origin.Y)
+	folder:SetAttribute("ExteriorOriginZ", origin.Z)
+	folder:SetAttribute("ExteriorMinX", -CFG.FACADE_OUTSET - CFG.FACADE_THICKNESS)
+	folder:SetAttribute("ExteriorMaxX", FX + CFG.FACADE_OUTSET + CFG.FACADE_THICKNESS)
+	folder:SetAttribute("ExteriorMinZ", -CFG.FACADE_OUTSET - CFG.FACADE_THICKNESS)
+	folder:SetAttribute("ExteriorMaxZ", FZ + CFG.FACADE_OUTSET + CFG.FACADE_THICKNESS)
+	folder:SetAttribute("ExteriorBaseY", 0)
+	folder:SetAttribute("ExteriorTopY", ROOF_Y + CFG.PARAPET_HEIGHT)
 	folder.Parent = sectionFolder
 
 	local ctx = {

@@ -62,6 +62,7 @@ local function defaults()
 		-- player who chose the Cloak on Monday did not choose it for Monday.
 		selectedAbility = nil,
 		furthestSection = 1,
+		completedBuildings = {},
 		pets = {},
 		eggs = {},
 		-- Worn gear is not here: a pet's `worn` map rides inside the pet row, so it
@@ -167,6 +168,7 @@ local function adopt(data, result)
 	-- stored, not to hold an opinion about what the shop currently sells.
 	data.selectedAbility = result.selectedAbility
 	data.furthestSection = result.furthestSection or 1
+	data.completedBuildings = type(result.completedBuildings) == "table" and result.completedBuildings or {}
 	data.pets = result.pets or {}
 	data.eggs = result.eggs or {}
 	data.accessories = result.accessories or {}
@@ -251,6 +253,7 @@ function Profiles.save(player)
 		upgrades = data.upgrades,
 		selectedAbility = data.selectedAbility,
 		furthestSection = data.furthestSection,
+		completedBuildings = data.completedBuildings,
 		pets = data.pets,
 		eggs = data.eggs,
 		accessories = data.accessories,

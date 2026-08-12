@@ -376,6 +376,7 @@ export type PlayerData = {
 	schemaVersion: number,
 	upgrades: { [string]: number },
 	furthestSection: number,
+	completedBuildings: { [string]: boolean },
 	pets: { [string]: PetInstance },
 	eggs: { [string]: EggInstance },
 	accessories: { [string]: AccessoryInstance },
