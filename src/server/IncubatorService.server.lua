@@ -445,6 +445,31 @@ local function buyAccessoryRobux(player, payload)
 	end
 end
 
+-- R5, and the one Robux purchase with no coin twin: a pet is gambled for, not
+-- bought, so its price is what rolling for it costs and the offer is Robux
+-- only, derived in Storefront.impliedCoinsForPet from the same hatchTable the
+-- roll reads. No expiry check because a pet row has no availableUntil; the
+-- storage cap is the gate's hasRoom, and the grant lands through the same
+-- PetInventory.grantPet a hatch uses.
+local function buyPetRobux(player, payload)
+	local data = Profiles.data(player)
+	if not data or type(payload.petId) ~= "string" then
+		return
+	end
+	if not atRoost(player) then
+		deny(player, "buyPetRobux", "notatroost")
+		return
+	end
+	if not Inventory.petConfig(payload.petId) then
+		deny(player, "buyPetRobux", "unknown")
+		return
+	end
+	local ok, reason = promptPurchase:Invoke(player, "pet", payload.petId)
+	if not ok then
+		deny(player, "buyPetRobux", reason)
+	end
+end
+
 -- The refusals are all Inventory.sellAccessory's: locked, worn, an item that was
 -- never for sale, and an id this player does not own. Nothing is checked twice
 -- here, and the coins are paid after the instance is gone rather than before, so
@@ -484,6 +509,8 @@ intents.OnServerEvent:Connect(function(player, payload)
 		buyEggRobux(player, payload)
 	elseif payload.kind == "buyAccessoryRobux" then
 		buyAccessoryRobux(player, payload)
+	elseif payload.kind == "buyPetRobux" then
+		buyPetRobux(player, payload)
 	elseif payload.kind == "sellAccessory" then
 		sellAccessory(player, payload)
 	elseif payload.kind == "hatch" then

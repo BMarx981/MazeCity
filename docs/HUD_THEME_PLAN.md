@@ -111,6 +111,23 @@ stone) instead of party colours. The compass keeps its config-driven colours but
 moon base picks up the etch stroke so it sits in the same family. The powerup chip and
 shop banner keep tinting by the semantic config colours.
 
+*Done, pending the play test of its four states, with four decisions recorded.*
+(1) The celebration mapping is floor clear = Rune, topped out = Lantern, death =
+Ember: a floor cleared is progress and the tower is the reward, which is the same
+reading the sprint chip settled and the reverse of the old green/gold split only in
+name. (2) "Pale stone" in the confetti is two tokens, `Text` chips and `Etch` dust,
+beside the two accents: four colours keep the fall varied without reopening the
+party-colour box, and every one of them is already in the theme. (3) The compass
+arrow's label stays full white via `Color3.new(1, 1, 1)`, the file's one remaining
+colour literal, because it is the multiplicative identity under the semantic tip
+gradient and not chrome; retinting it `Text` would muddy the two config colours the
+gradient exists to show. The moon's new etch stroke fades with the erased half, the
+UIStroke being subject to the same transparency gradient that cuts the circle, which
+is why the flat edge needs no second treatment. (4) The clock under the floor number
+dropped from near-white to `Dim`: the hierarchy the old file drew with two grays now
+comes from the Display face on the number, and a second bright line was competing
+with it.
+
 **Slate 3: AbilityGui.**
 Chip converts to `chip`, the selector boxes to `Stone` with the existing selection
 UIStroke recoloured to Rune (it is already the one stroke in the game, it was ahead of

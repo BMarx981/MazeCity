@@ -6,25 +6,27 @@
 -- The compass and the phantom sparkle are the two places a client reads tags
 -- directly. Both are hints, not authority: the server owns progression, and a
 -- section that has not replicated yet just means no arrow for a moment.
+--
+-- Chrome comes from UiTheme and nowhere else (docs/HUD_THEME_PLAN.md, Slate 2).
+-- The colours still declared here are semantic passthrough: powerup kinds, the
+-- per-upgrade shop accents and the compass all keep their config colours, and
+-- the theme only frames them.
 
 local CollectionService = game:GetService("CollectionService")
 local Debris = game:GetService("Debris")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
-local SoundService = game:GetService("SoundService")
 local TweenService = game:GetService("TweenService")
 
 local Config = require(ReplicatedStorage:WaitForChild("MazeConfig"))
+local UiTheme = require(ReplicatedStorage:WaitForChild("UiTheme"))
 local remote = ReplicatedStorage:WaitForChild("TimerUpdate")
 local player = Players.LocalPlayer
 
-local GREEN = Color3.fromRGB(90, 200, 140)
-local AMBER = Color3.fromRGB(235, 180, 70)
-local RED = Color3.fromRGB(230, 80, 80)
-local WHITE = Color3.fromRGB(255, 255, 255)
-local GOLD = Color3.fromRGB(255, 214, 110)
-local CONFETTI_COLORS = { GREEN, AMBER, GOLD, WHITE, Color3.fromRGB(120, 180, 255), Color3.fromRGB(235, 120, 200) }
+-- Stone chips and sparks rather than party colours: the two accents plus the
+-- pale stone the slabs are cut from.
+local CONFETTI_COLORS = { UiTheme.Rune, UiTheme.Lantern, UiTheme.Text, UiTheme.Etch }
 local CONFETTI_WIDTH, CONFETTI_HEIGHT = 9, 14
 
 local gui = Instance.new("ScreenGui")
@@ -33,132 +35,74 @@ gui.ResetOnSpawn = false
 gui.IgnoreGuiInset = true
 gui.Parent = player:WaitForChild("PlayerGui")
 
-local function rounded(inst, radius)
-	local corner = Instance.new("UICorner")
-	corner.CornerRadius = UDim.new(0, radius)
-	corner.Parent = inst
-	return inst
-end
-
-local function label(parent, size, position, font, textSize, color)
-	local l = Instance.new("TextLabel")
-	l.Size = size
-	l.Position = position
-	l.BackgroundTransparency = 1
-	l.Font = font
-	l.TextSize = textSize
-	l.TextColor3 = color
-	l.Text = ""
-	l.Parent = parent
-	return l
-end
-
--- Timer panel. The floor number is the biggest thing on screen and the only
+-- Timer slab. The floor number is the biggest thing on screen and the only
 -- thing that has to be read at a glance; the tower's "S1-C3" code came off
 -- because the billboards on the towers already carry it and it is noise to
--- anyone still learning to read.
-local holder = Instance.new("Frame")
-holder.Size = UDim2.new(0, 220, 0, 86)
-holder.Position = UDim2.new(0.5, -110, 0, 16)
-holder.BackgroundColor3 = Color3.fromRGB(16, 16, 20)
-holder.BackgroundTransparency = 0.25
-holder.BorderSizePixel = 0
+-- anyone still learning to read. The number is the one piece of hero text on
+-- the HUD, so it is the one place up here the Display face gets to be carved.
+local holder = UiTheme.chip(gui, UDim2.new(0, 220, 0, 86), UDim2.new(0.5, -110, 0, 16))
 holder.Visible = false
-holder.Parent = gui
-rounded(holder, 8)
 
-local floorLabel = label(holder, UDim2.new(1, -16, 0, 40), UDim2.new(0, 8, 0, 6), Enum.Font.GothamBlack, 34, WHITE)
-local timeLabel = label(
-	holder,
-	UDim2.new(1, -16, 0, 26),
-	UDim2.new(0, 8, 0, 48),
-	Enum.Font.GothamBold,
-	22,
-	Color3.fromRGB(190, 200, 215)
-)
+local floorLabel = UiTheme.label(holder, UDim2.new(1, -16, 0, 40), UDim2.new(0, 8, 0, 6), UiTheme.Display, 34)
+local timeLabel =
+	UiTheme.label(holder, UDim2.new(1, -16, 0, 26), UDim2.new(0, 8, 0, 48), UiTheme.BodyBold, 22, UiTheme.Dim)
 timeLabel.Text = "0:00"
 
--- The bar fills toward par, and par is now worth points and nothing else, so it
--- never turns red and the clock never changes colour. Amber near the end is the
--- whole remaining signal: hurry if you want the speed bonus.
-local bar = Instance.new("Frame")
-bar.Size = UDim2.new(0, 0, 0, 4)
-bar.Position = UDim2.new(0, 0, 1, -4)
-bar.BackgroundColor3 = GREEN
-bar.BorderSizePixel = 0
-bar.Parent = holder
+-- The par bar is the slab's rune seam, one glowing line along the bottom edge
+-- doing both jobs, the same move the sprint chip made. It fills toward par, and
+-- par is worth points and nothing else, so it never turns red and the clock
+-- never changes colour. Lantern near the end is the whole remaining signal:
+-- hurry if you want the speed bonus.
+local _parTrack, bar = UiTheme.bar(
+	holder,
+	UDim2.new(1, -UiTheme.ChipRadius * 2, 0, 3),
+	UDim2.new(0, UiTheme.ChipRadius, 1, -6),
+	UiTheme.Rune
+)
+bar.Size = UDim2.fromScale(0, 1)
 
 -- Score chip. Stays up when the timer is hidden, so a player on the street
 -- still sees what the run is worth.
-local scoreChip = Instance.new("Frame")
-scoreChip.Size = UDim2.new(0, 132, 0, 34)
-scoreChip.Position = UDim2.new(1, -148, 0, 16)
-scoreChip.BackgroundColor3 = Color3.fromRGB(16, 16, 20)
-scoreChip.BackgroundTransparency = 0.25
-scoreChip.BorderSizePixel = 0
-scoreChip.Parent = gui
-rounded(scoreChip, 8)
+local scoreChip = UiTheme.chip(gui, UDim2.new(0, 132, 0, 34), UDim2.new(1, -148, 0, 16))
 
-local scoreLabel = label(scoreChip, UDim2.new(1, -12, 1, 0), UDim2.new(0, 6, 0, 0), Enum.Font.GothamBold, 18, WHITE)
+local scoreLabel = UiTheme.label(scoreChip, UDim2.new(1, -12, 1, 0), UDim2.new(0, 6, 0, 0), UiTheme.BodyBold, 18)
 scoreLabel.Text = "0"
 scoreLabel.TextXAlignment = Enum.TextXAlignment.Right
 
-label(scoreChip, UDim2.new(0, 60, 1, 0), UDim2.new(0, 10, 0, 0), Enum.Font.Gotham, 12, Color3.fromRGB(150, 160, 175)).Text =
-	"SCORE"
+local scoreCaption =
+	UiTheme.label(scoreChip, UDim2.new(0, 60, 1, 0), UDim2.new(0, 10, 0, 0), UiTheme.Body, 12, UiTheme.Dim)
+scoreCaption.Text = "SCORE"
 
--- Coin chip, under the score. A gold disc rather than the word "COINS": the
--- reason coins exist is that a floor should reward looking around, and the
+-- Coin chip, under the score. A lantern-gold disc rather than the word "COINS":
+-- the reason coins exist is that a floor should reward looking around, and the
 -- player being designed for is still learning to read.
-local coinChip = Instance.new("Frame")
-coinChip.Size = UDim2.new(0, 132, 0, 34)
-coinChip.Position = UDim2.new(1, -148, 0, 56)
-coinChip.BackgroundColor3 = Color3.fromRGB(16, 16, 20)
-coinChip.BackgroundTransparency = 0.25
-coinChip.BorderSizePixel = 0
-coinChip.Parent = gui
-rounded(coinChip, 8)
+local coinChip = UiTheme.chip(gui, UDim2.new(0, 132, 0, 34), UDim2.new(1, -148, 0, 56))
 
 local coinIcon = Instance.new("Frame")
 coinIcon.Size = UDim2.fromOffset(16, 16)
 coinIcon.Position = UDim2.new(0, 12, 0.5, -8)
-coinIcon.BackgroundColor3 = GOLD
+coinIcon.BackgroundColor3 = UiTheme.Lantern
 coinIcon.BorderSizePixel = 0
 coinIcon.Parent = coinChip
-rounded(coinIcon, 8)
+UiTheme.rounded(coinIcon, 8)
 
-local coinLabel = label(coinChip, UDim2.new(1, -12, 1, 0), UDim2.new(0, 6, 0, 0), Enum.Font.GothamBold, 18, WHITE)
+local coinLabel = UiTheme.label(coinChip, UDim2.new(1, -12, 1, 0), UDim2.new(0, 6, 0, 0), UiTheme.BodyBold, 18)
 coinLabel.Text = "0"
 coinLabel.TextXAlignment = Enum.TextXAlignment.Right
 
 -- Powerup chip, hidden until one is picked up. Nothing else on screen says how
 -- long an effect has left, and an effect that ends without warning reads as one
--- that broke.
-local powerChip = Instance.new("Frame")
-powerChip.Size = UDim2.new(0, 178, 0, 34)
-powerChip.Position = UDim2.new(1, -194, 0, 96)
-powerChip.BackgroundColor3 = Color3.fromRGB(16, 16, 20)
-powerChip.BackgroundTransparency = 0.25
-powerChip.BorderSizePixel = 0
+-- that broke. Its text keeps tinting by the powerup's own config colour, which
+-- is semantic and stays.
+local powerChip = UiTheme.chip(gui, UDim2.new(0, 178, 0, 34), UDim2.new(1, -194, 0, 96))
 powerChip.Visible = false
-powerChip.Parent = gui
-rounded(powerChip, 8)
 
-local powerLabel = label(powerChip, UDim2.new(1, -20, 1, 0), UDim2.new(0, 10, 0, 0), Enum.Font.GothamBold, 16, WHITE)
+local powerLabel = UiTheme.label(powerChip, UDim2.new(1, -20, 1, 0), UDim2.new(0, 10, 0, 0), UiTheme.BodyBold, 16)
 powerLabel.TextXAlignment = Enum.TextXAlignment.Left
 
--- Celebration banner
-local banner = Instance.new("Frame")
-banner.Size = UDim2.new(0, 460, 0, 108)
-banner.Position = UDim2.new(0.5, -230, 0.34, 0)
-banner.BackgroundColor3 = Color3.fromRGB(12, 12, 16)
-banner.BackgroundTransparency = 1
-banner.BorderSizePixel = 0
-banner.Visible = false
-banner.Parent = gui
-rounded(banner, 10)
-
-local bannerTitle = label(banner, UDim2.new(1, 0, 0, 52), UDim2.new(0, 0, 0, 14), Enum.Font.GothamBlack, 38, WHITE)
-local bannerSub = label(banner, UDim2.new(1, 0, 0, 28), UDim2.new(0, 0, 0, 66), Enum.Font.GothamBold, 22, GOLD)
+-- Celebration banner: the shared UiTheme.banner, which is the end of this
+-- file's fork of showBanner. Display-face titles, Lantern subtitles.
+local banner = UiTheme.banner(gui)
 
 -- Confetti is screen frames rather than world particles: it cannot be swallowed
 -- by the wall the player happens to be facing, and it adds nothing to workspace.
@@ -172,20 +116,6 @@ local function format(seconds)
 	local m = math.floor(seconds / 60)
 	local s = math.floor(seconds % 60)
 	return string.format("%d:%02d", m, s)
-end
-
-local function tween(inst, time, props)
-	TweenService:Create(inst, TweenInfo.new(time, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), props):Play()
-end
-
-local function playSound(assetId, volume, playbackSpeed)
-	local sound = Instance.new("Sound")
-	sound.SoundId = assetId
-	sound.Volume = volume
-	sound.PlaybackSpeed = playbackSpeed or 1
-	sound.Parent = SoundService
-	sound:Play()
-	Debris:AddItem(sound, sound.TimeLength > 0 and sound.TimeLength + 1 or 5)
 end
 
 local function confetti(count)
@@ -211,51 +141,13 @@ local function confetti(count)
 	end
 end
 
--- A token guards the sequence: a second celebration landing mid-fade takes the
--- banner over rather than letting the first one's fade-out finish on top of it.
-local bannerToken = 0
-
-local function showBanner(title, subtitle, titleColor, hold, big)
-	bannerToken = bannerToken + 1
-	local token = bannerToken
-
-	bannerTitle.Text = title
-	bannerTitle.TextColor3 = titleColor
-	bannerTitle.TextSize = big and 52 or 38
-	bannerSub.Text = subtitle
-
-	banner.Visible = true
-	banner.BackgroundTransparency = 1
-	banner.Position = UDim2.new(0.5, -230, 0.34, 18)
-	bannerTitle.TextTransparency = 1
-	bannerSub.TextTransparency = 1
-
-	tween(banner, 0.22, { BackgroundTransparency = 0.25, Position = UDim2.new(0.5, -230, 0.34, 0) })
-	tween(bannerTitle, 0.22, { TextTransparency = 0 })
-	tween(bannerSub, 0.22, { TextTransparency = 0 })
-
-	task.delay(hold, function()
-		if token ~= bannerToken then
-			return
-		end
-		tween(banner, 0.45, { BackgroundTransparency = 1, Position = UDim2.new(0.5, -230, 0.34, -18) })
-		tween(bannerTitle, 0.45, { TextTransparency = 1 })
-		tween(bannerSub, 0.45, { TextTransparency = 1 })
-		task.delay(0.5, function()
-			if token == bannerToken then
-				banner.Visible = false
-			end
-		end)
-	end)
-end
-
 local function pulseScore(times)
 	task.spawn(function()
 		for i = 1, times do
-			scoreLabel.TextColor3 = GOLD
+			scoreLabel.TextColor3 = UiTheme.Lantern
 			scoreLabel.TextSize = 24
 			task.wait(0.18)
-			scoreLabel.TextColor3 = WHITE
+			scoreLabel.TextColor3 = UiTheme.Text
 			scoreLabel.TextSize = 18
 			if i < times then
 				task.wait(0.12)
@@ -270,33 +162,39 @@ local function playEvent(event)
 		local delta = event.par - event.elapsed
 		local pace = delta >= 0 and string.format("%s under par", format(delta))
 			or string.format("%s over par", format(-delta))
-		showBanner(
+		banner.show(
 			string.format("Floor %d clear", event.level + 1),
 			string.format("+%d  |  %s", event.gained, pace),
-			GREEN,
+			UiTheme.Rune,
 			2,
 			false
 		)
 		for _, note in ipairs(Config.Sounds.FloorClearArpeggio) do
 			task.delay(note[1], function()
-				playSound(Config.Sounds.FloorClear, juice.FloorClearVolume, note[2])
+				UiTheme.playSound(Config.Sounds.FloorClear, juice.FloorClearVolume, note[2])
 			end)
 		end
 		confetti(juice.ConfettiFloor)
 		pulseScore(1)
 	elseif event.kind == "tower" then
-		showBanner(event.tower .. " topped out", string.format("+%d  |  roof reached", event.gained), GOLD, 4, true)
+		banner.show(
+			event.tower .. " topped out",
+			string.format("+%d  |  roof reached", event.gained),
+			UiTheme.Lantern,
+			4,
+			true
+		)
 		for _, note in ipairs(Config.Sounds.TowerClearArpeggio) do
 			task.delay(note[1], function()
-				playSound(Config.Sounds.TowerClear, juice.TowerClearVolume, note[2])
+				UiTheme.playSound(Config.Sounds.TowerClear, juice.TowerClearVolume, note[2])
 			end)
 		end
 		confetti(juice.ConfettiTower)
 		pulseScore(3)
 	elseif event.kind == "death" then
 		local where = event.restart == "tower" and "Back to the tower entrance" or "Back to the start of this floor"
-		showBanner("Caught", where, RED, 1.6, false)
-		playSound(Config.Sounds.Death, juice.DeathVolume)
+		banner.show("Caught", where, UiTheme.Ember, 1.6, false)
+		UiTheme.playSound(Config.Sounds.Death, juice.DeathVolume)
 	end
 end
 
@@ -357,6 +255,12 @@ local round = Instance.new("UICorner")
 round.CornerRadius = UDim.new(0.5, 0)
 round.Parent = moon
 
+-- The etch stroke is the one piece of theme chrome on the compass: the colours
+-- stay Config.Compass, and the stroke just sits the moon in the same cut-stone
+-- family as the slabs. On the erased half the stroke fades with the fill,
+-- UIStroke being subject to the same gradient.
+UiTheme.stroke(moon)
+
 -- The cut. Rotation 90 runs the ramp top to bottom, and the two keypoints five
 -- thousandths apart are a hard edge rather than a fade: a NumberSequence cannot
 -- hold two keypoints at the same time value, so this is as close to a step as it
@@ -376,8 +280,11 @@ cut.Parent = moon
 -- than replacing it, so tinting a gold label red gives a muddy orange that is
 -- neither colour. Leaving the label white makes the gradient below the only
 -- thing deciding what the arrow looks like, which is what its two config
--- colours then actually mean.
-local arrow = label(needle, UDim2.fromScale(1, 1), UDim2.fromScale(0, 0), Enum.Font.GothamBlack, 1, WHITE)
+-- colours then actually mean. Full white and not UiTheme.Text, because this is
+-- not chrome: it is the multiplicative identity under the semantic gradient,
+-- and the theme's off-white would tint the compass colours it frames.
+local arrow =
+	UiTheme.label(needle, UDim2.fromScale(1, 1), UDim2.fromScale(0, 0), UiTheme.BodyBlack, 1, Color3.new(1, 1, 1))
 arrow.Text = "▲"
 arrow.TextScaled = true
 arrow.TextStrokeTransparency = 0.4
@@ -849,7 +756,7 @@ end
 local function sparkle()
 	local juice = Config.Juice
 	emitBurst(juice.PhantomSparkleColor, juice.PhantomSparkleParticles, juice.PhantomSparkleSeconds)
-	playSound(Config.Sounds.PhantomPass, juice.PhantomSparkleVolume)
+	UiTheme.playSound(Config.Sounds.PhantomPass, juice.PhantomSparkleVolume)
 end
 
 local function bindPhantom(part)
@@ -1072,7 +979,7 @@ local function coinLanded(multiplier)
 	-- A doubled coin has to sound and look like one, or the multiplier is a
 	-- number changing faster on a chip nobody is watching mid-corridor.
 	local boosted = (multiplier or 1) > 1
-	playSound(Config.Sounds.CoinPickup, juice.CoinVolume, streakPitch)
+	UiTheme.playSound(Config.Sounds.CoinPickup, juice.CoinVolume, streakPitch)
 	emitBurst(
 		juice.CoinSparkleColor,
 		boosted and juice.CoinSparkleParticles * 2 or juice.CoinSparkleParticles,
@@ -1080,7 +987,7 @@ local function coinLanded(multiplier)
 	)
 	coinIcon.Size = UDim2.fromOffset(22, 22)
 	coinIcon.Position = UDim2.new(0, 9, 0.5, -11)
-	tween(coinIcon, 0.22, { Size = UDim2.fromOffset(16, 16), Position = UDim2.new(0, 12, 0.5, -8) })
+	UiTheme.tween(coinIcon, 0.22, { Size = UDim2.fromOffset(16, 16), Position = UDim2.new(0, 12, 0.5, -8) })
 end
 
 -- The Coin Magnet's flight. The server hides the coin where the generator put it
@@ -1195,10 +1102,10 @@ local function powerupStarted(payload)
 	-- lands before the leaderstats change has replicated, so the banner is what
 	-- tells the player what they just got.
 	local sub = payload.coins and string.format("+%d coins", payload.coins) or ""
-	showBanner(payload.label or profile.label, sub, profile.color, juice.PowerupBannerSeconds, false)
+	banner.show(payload.label or profile.label, sub, profile.color, juice.PowerupBannerSeconds, false)
 	for _, note in ipairs(Config.Sounds.PowerupArpeggio) do
 		task.delay(note[1], function()
-			playSound(Config.Sounds.PowerupPickup, juice.PowerupVolume, note[2])
+			UiTheme.playSound(Config.Sounds.PowerupPickup, juice.PowerupVolume, note[2])
 		end)
 	end
 	emitBurst(profile.color, juice.CoinSparkleParticles * 2, juice.PhantomSparkleSeconds)
@@ -1262,10 +1169,10 @@ shopRemote.OnClientEvent:Connect(function(payload)
 	end
 	local juice = Config.Juice
 	local def = Config.Shop.Upgrades[payload.upgrade]
-	local color = def and def.Color or Color3.fromRGB(255, 255, 255)
+	local color = def and def.Color or UiTheme.Text
 
 	if payload.kind == "bought" then
-		showBanner(
+		banner.show(
 			string.format("%s %d/%d", payload.label, payload.tier, payload.maxTier),
 			string.format("-%d coins", payload.cost),
 			color,
@@ -1274,21 +1181,21 @@ shopRemote.OnClientEvent:Connect(function(payload)
 		)
 		for _, note in ipairs(Config.Sounds.PowerupArpeggio) do
 			task.delay(note[1], function()
-				playSound(Config.Sounds.PowerupPickup, juice.PowerupVolume, note[2])
+				UiTheme.playSound(Config.Sounds.PowerupPickup, juice.PowerupVolume, note[2])
 			end)
 		end
 	elseif payload.kind == "poor" then
-		showBanner(
+		banner.show(
 			"Not enough coins",
 			string.format("%d more for %s", payload.need, payload.label),
 			color,
 			juice.ShopBannerSeconds,
 			false
 		)
-		playSound(Config.Sounds.CoinPickup, juice.CoinVolume, juice.ShopDeniedPitch)
+		UiTheme.playSound(Config.Sounds.CoinPickup, juice.CoinVolume, juice.ShopDeniedPitch)
 	elseif payload.kind == "maxed" then
-		showBanner(payload.label, "Maxed out!", color, juice.ShopBannerSeconds, false)
-		playSound(Config.Sounds.CoinPickup, juice.CoinVolume, juice.ShopDeniedPitch)
+		banner.show(payload.label, "Maxed out!", color, juice.ShopBannerSeconds, false)
+		UiTheme.playSound(Config.Sounds.CoinPickup, juice.CoinVolume, juice.ShopDeniedPitch)
 	elseif payload.kind == "robuxRefused" then
 		-- The prompt gate said no before any money moved. The reasons are the
 		-- gate's vocabulary; anything unmapped falls back to the generic line
@@ -1299,14 +1206,14 @@ shopRemote.OnClientEvent:Connect(function(payload)
 			loading = "Your save is still loading, try again",
 			disabled = "Robux purchases are off right now",
 		}
-		showBanner(
+		banner.show(
 			payload.label,
 			reasons[payload.reason] or "Robux purchase refused",
 			color,
 			juice.ShopBannerSeconds,
 			false
 		)
-		playSound(Config.Sounds.CoinPickup, juice.CoinVolume, juice.ShopDeniedPitch)
+		UiTheme.playSound(Config.Sounds.CoinPickup, juice.CoinVolume, juice.ShopDeniedPitch)
 	end
 end)
 
@@ -1329,8 +1236,8 @@ remote.OnClientEvent:Connect(function(payload)
 		timeLabel.Text = format(payload.elapsed)
 
 		local ratio = math.clamp(payload.elapsed / math.max(1, payload.par), 0, 1)
-		bar.Size = UDim2.new(ratio, 0, 0, 4)
-		bar.BackgroundColor3 = ratio > 0.7 and AMBER or GREEN
+		bar.Size = UDim2.fromScale(ratio, 1)
+		bar.BackgroundColor3 = ratio > 0.7 and UiTheme.Lantern or UiTheme.Rune
 
 		if
 			floorContext == nil
@@ -1380,5 +1287,5 @@ abilityRemote.OnClientEvent:Connect(function(payload)
 		return
 	end
 	local def = Config.abilityDef("Trailblazer")
-	showReveal(def and def.Color or GREEN, event.seconds)
+	showReveal(def and def.Color or UiTheme.Rune, event.seconds)
 end)

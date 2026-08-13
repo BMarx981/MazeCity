@@ -209,6 +209,8 @@ The Compass Crow clamping is the ladder telling the truth about its top rung. If
 
 **Exit:** a Pets tab at the roost sells all five, each at the price above, each landing in the shelf through `PetInventory` with the storage cap enforced. The egg loop is untouched.
 
+**Done, pending the Studio play test above, with three things decided along the way.** The shop is the bottom half of the existing Pets tab rather than a fifth tab, mirroring how the Gear tab carries its shop: owned things first, a FOR SALE header, then every pet with an offer, so before the dashboard products exist the section simply is not there. Rows sort by `impliedCoinsForPet` rather than by rung, because three pets share the top rung and the order should still be the order of the gamble. And the intent (`buyPetRobux` in IncubatorService, through the same roost proximity and prompt gate as eggs and gear) checks no expiry, a pet row having no `availableUntil`; the storage cap is the gate's `hasRoom`, and the grant is the same `PetInventory.grantPet` a hatch lands through, so a bought pet and a hatched one are indistinguishable downstream.
+
 ## Invariants this adds
 
 1. **One ProcessReceipt, in `PurchaseService`, and nowhere else.**

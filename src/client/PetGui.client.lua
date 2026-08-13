@@ -30,6 +30,10 @@ local EggCatalog = require(ReplicatedStorage:WaitForChild("EggCatalog"))
 -- what a raw 0.25 means still comes from Config.Accessories, and nothing here
 -- resolves an effect. A storefront has to be able to name a thing nobody owns.
 local AccessoryCatalog = require(ReplicatedStorage:WaitForChild("AccessoryCatalog"))
+-- Read for the R5 pet shop only, under the same bargain as the two above: a
+-- storefront has to name a thing nobody owns, and nothing here resolves an
+-- ability or a rate. Owned pets still draw from the projection alone.
+local PetCatalog = require(ReplicatedStorage:WaitForChild("PetCatalog"))
 -- Portraits are built here, from the recipes, not sent: the projection already
 -- names the pet and the stage, so a row draws the same rig the follower is
 -- without one extra byte over the remote.
@@ -644,6 +648,57 @@ local function petRow(pet, order)
 	wornChips(frame, pet.worn)
 end
 
+-- The R5 shop half of the Pets tab. Robux only, no coin twin: the price is
+-- what rolling for the pet costs, so the button is certainty for sale beside
+-- the gamble the eggs already are. Drawn only for a pet with an offer, so
+-- before the dashboard products exist this section simply is not there.
+local function petShelfRow(petConfig, order, canBuy, offer)
+	local frame = row(order, 58)
+	frame.BackgroundTransparency = 0.35
+
+	local swatch = Instance.new("Frame")
+	swatch.Size = UDim2.fromOffset(6, 42)
+	swatch.Position = UDim2.new(0, 8, 0, 8)
+	swatch.BackgroundColor3 = Config.rarityColor(petConfig.rarity)
+	swatch.BorderSizePixel = 0
+	swatch.Parent = frame
+	rounded(swatch, 3)
+
+	local portrait = petPortrait(petConfig.id, 0, false)
+	if portrait then
+		portrait.Size = UDim2.fromOffset(44, 44)
+		portrait.Position = UDim2.new(0, 18, 0, 7)
+		portrait.Parent = frame
+	end
+
+	local name = label(
+		frame,
+		UDim2.new(0, 180, 0, 18),
+		UDim2.new(0, 70, 0, 10),
+		Enum.Font.GothamBold,
+		14,
+		Config.rarityColor(petConfig.rarity)
+	)
+	name.TextXAlignment = Enum.TextXAlignment.Left
+	name.Text = petConfig.name
+
+	local sub = label(frame, UDim2.new(0, 180, 0, 14), UDim2.new(0, 70, 0, 29), Enum.Font.Gotham, 11, DIM)
+	sub.TextXAlignment = Enum.TextXAlignment.Left
+	sub.Text = string.format("%s  |  %s", petConfig.rarity, petConfig.ability.type)
+
+	local robux = button(
+		frame,
+		UDim2.fromOffset(96, 26),
+		UDim2.new(1, -108, 0, 16),
+		string.format("R$ %d", offer.robux),
+		canBuy and GREEN or Color3.fromRGB(52, 54, 64)
+	)
+	robux.TextSize = 13
+	robux.MouseButton1Click:Connect(function()
+		send({ kind = "buyPetRobux", petId = petConfig.id })
+	end)
+end
+
 -- The button says why it cannot be pressed rather than going grey and silent: a
 -- Place that does nothing is the exact failure the REASONS table exists to stop,
 -- and here the reason is knowable before the press.
@@ -982,12 +1037,52 @@ local function drawPets()
 		#state.equipped,
 		state.maxEquipped
 	)
+	local order = 0
 	if #state.pets == 0 then
+		order = order + 1
 		emptyNote("No pets yet. Put an egg on a roof roost and climb.")
-		return
 	end
 	for i, pet in ipairs(state.pets) do
+		order = i
 		petRow(pet, i)
+	end
+
+	-- The R5 shop: every pet with an offer, cheapest roll first. Sorted by the
+	-- implied coin value the price was derived from rather than by the rung,
+	-- because three pets share the top rung and the order should still be the
+	-- order of the gamble.
+	local forSale = {}
+	for _, petConfig in pairs(PetCatalog) do
+		local offer = Storefront.offerFor("pet", petConfig.id)
+		if offer then
+			table.insert(forSale, {
+				config = petConfig,
+				offer = offer,
+				implied = Storefront.impliedCoinsForPet(petConfig.id) or math.huge,
+			})
+		end
+	end
+	if #forSale == 0 then
+		return
+	end
+	table.sort(forSale, function(a, b)
+		if a.implied ~= b.implied then
+			return a.implied < b.implied
+		end
+		return a.config.id < b.config.id
+	end)
+
+	local canReach = nearRoost()
+	order = order + 1
+	local header = row(order, 26)
+	header.BackgroundTransparency = 1
+	local heading = label(header, UDim2.new(1, -24, 1, 0), UDim2.new(0, 14, 0, 0), Enum.Font.GothamBold, 12, GOLD)
+	heading.TextXAlignment = Enum.TextXAlignment.Left
+	heading.Text = canReach and "FOR SALE" or "FOR SALE AT ANY ROOF ROOST"
+
+	for _, entry in ipairs(forSale) do
+		order = order + 1
+		petShelfRow(entry.config, order, canReach, entry.offer)
 	end
 end
 
@@ -1223,12 +1318,12 @@ end
 -- button, and no server message accompanies a walk. Redrawn only when
 -- reachability actually flips, because a rebuild every half second would reset
 -- the scroll position under anyone reading the list. The Gear tab joined this
--- when it grew a shop: buying and selling are the same counter and the same
--- proximity re-check on the server.
+-- when it grew a shop, and the Pets tab when R5 gave it one: buying is the same
+-- counter and the same proximity re-check on the server for all three.
 task.spawn(function()
 	local lastReach = nil
 	while true do
-		if panel.Visible and (openTab == "Eggs" or openTab == "Gear") then
+		if panel.Visible and (openTab == "Pets" or openTab == "Eggs" or openTab == "Gear") then
 			local reach = nearRoost()
 			if reach ~= lastReach then
 				lastReach = reach
