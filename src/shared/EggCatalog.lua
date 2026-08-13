@@ -45,15 +45,20 @@ Eggs.summit_royal = {
 	},
 }
 
--- Day seven of a daily streak, and the only way to get one. No coinCost, which
--- is what keeps it out of the pedestal's buy list without needing a second flag:
--- an egg with no price cannot be sold.
+-- Day seven of a daily streak, and the only coin-free way to get one. No
+-- coinCost, which is what keeps it out of the pedestal's buy list without
+-- needing a second flag: an egg with no price cannot be sold. robuxCost is the
+-- authored exception to the derived ladder, there being no coin price to derive
+-- from, and it is inert until a robuxProductId joins it. Whether selling this
+-- for Robux at all guts the streak is docs/ROBUX_PLAN.md's first open decision;
+-- holding it back is deleting this one field.
 Eggs.streak_seven = {
 	id = "streak_seven",
 	name = "Streak Egg",
 	color = Color3.fromRGB(120, 235, 190),
 	mazesRequired = 4,
 	source = "Streak",
+	robuxCost = 799,
 	hatchTable = {
 		{ petId = "lumen_moth", weight = 20 },
 		{ petId = "ward_hound", weight = 30 },

@@ -167,6 +167,10 @@ export type PetConfig = {
 	evolutions: { EvolutionStage },
 	maxLevel: number,
 	xpCurve: { base: number, growth: number },
+	-- A pet has no coinCost because it is gambled for, so its Robux price is
+	-- derived from what rolling for it costs (Storefront.impliedCoinsForPet)
+	-- rather than from a field here; only the dashboard id lives on the row.
+	robuxProductId: number?,
 }
 
 export type HatchEntry = {
@@ -181,7 +185,12 @@ export type EggConfig = {
 	mazesRequired: number,
 	hatchTable: { HatchEntry },
 	source: "Climb" | "Premium" | "Event" | "Streak",
+	-- Two independent one-field rules (docs/ROBUX_PLAN.md): coinCost absent
+	-- means not for coins, robuxProductId absent means not for Robux, and
+	-- neither knows about the other. robuxCost is authored only on a row with no
+	-- coinCost to derive from; everything else is priced by Storefront.robuxFor.
 	robuxCost: number?,
+	robuxProductId: number?,
 	coinCost: number?,
 	availableUntil: number?,
 }
@@ -235,7 +244,10 @@ export type AccessoryConfig = {
 	model: string,
 	placeholder: AccessoryPlaceholder,
 	effects: { AccessoryEffect },
+	-- Same pair of one-field rules as EggConfig, same authored-price exception.
 	coinCost: number?,
+	robuxCost: number?,
+	robuxProductId: number?,
 	availableUntil: number?,
 }
 

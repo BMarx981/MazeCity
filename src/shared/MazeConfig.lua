@@ -546,6 +546,43 @@ Config.Persistence = {
 }
 
 -- ============================================================
+-- Robux
+-- ============================================================
+-- The second price on the same shelves. A Robux price is never authored, with
+-- one stated exception: Storefront derives it from the row's coin price, so the
+-- one ladder the game already tuned against effectiveness is the only ladder
+-- either currency reads and a coin rebalance moves both. The exception is the
+-- rows with no coin price at all, which carry an explicit robuxCost instead.
+-- Sibling of Config.Shop rather than inside it because the roost sells through
+-- this too. See docs/ROBUX_PLAN.md.
+
+Config.Robux = {
+	Enabled = true,
+	-- Developer product price points, ascending. Every item is sold at one of
+	-- these, so the dashboard holds eight distinct prices however many products
+	-- exist, and a coin rebalance only needs a dashboard edit when it crosses a
+	-- rung.
+	Rungs = { 25, 49, 99, 199, 299, 399, 599, 799 },
+	-- The curve is whatever passes through these two points. Written as anchors
+	-- rather than as an exponent because an exponent is a number nobody can
+	-- sanity check: these say "the cheapest thing in the game is a bottom rung
+	-- and the dearest is a top rung", which is a claim a playtest can disagree
+	-- with. AnchorHighCoins is pinned to today's dearest catalogue row rather
+	-- than computed from max(coinCost), so adding something dearer later moves
+	-- no price until this number is moved on purpose: repricing everything is a
+	-- decision, not a side effect.
+	AnchorLowCoins = 25,
+	AnchorLowRobux = 25,
+	AnchorHighCoins = 3500,
+	AnchorHighRobux = 799,
+	-- PurchaseService's startup check that every row's dashboard price still
+	-- matches the rung the ladder computes. One GetProductInfo web call per
+	-- product, 45 of them, so it ships off and is flipped in Studio after a
+	-- repricing pass.
+	AuditOnStart = false,
+}
+
+-- ============================================================
 -- Pets and eggs
 -- ============================================================
 -- Tuning only. The pet and egg catalogues are content and live in

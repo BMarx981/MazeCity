@@ -97,7 +97,11 @@ Accessories.gilded_crown = {
 	coinCost = 3000,
 }
 
--- No coinCost: day seven of a streak is the only way to get one.
+-- No coinCost: day seven of a streak is the only coin-free way to get one, and
+-- no coinCost still means no coin purchase and no sell-back. robuxCost is the
+-- authored exception to the derived ladder (docs/ROBUX_PLAN.md), inert until a
+-- robuxProductId joins it, and whether to sell it at all is the plan's open
+-- decision on the streak items: holding it back is deleting this one field.
 Accessories.beacon_crown = {
 	id = "beacon_crown",
 	name = "Beacon Crown",
@@ -109,6 +113,7 @@ Accessories.beacon_crown = {
 		{ type = "RouteVision", value = 14 },
 		{ type = "GlowRange", value = 20 },
 	},
+	robuxCost = 799,
 }
 
 -- ============================================================
@@ -324,8 +329,9 @@ Accessories.wayfinder_halo = {
 	coinCost = 3400,
 }
 
--- No coinCost: event gear, and the second of the two items that are not for
--- sale at any price.
+-- No coinCost: event gear, never for coins and never sold back. The authored
+-- robuxCost is the same exception beacon_crown carries, and the easy yes of the
+-- plan's open decision: this has no retention role to protect.
 Accessories.ember_trail = {
 	id = "ember_trail",
 	name = "Ember Trail",
@@ -342,6 +348,7 @@ Accessories.ember_trail = {
 		{ type = "GlowRange", value = 14 },
 		{ type = "WalkSpeed", value = 1 },
 	},
+	robuxCost = 799,
 }
 
 return Accessories

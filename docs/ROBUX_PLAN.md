@@ -161,6 +161,8 @@ Studio cannot complete a real purchase, so R2 ships its own way in, modelled on 
 
 **Exit:** `tools/robux/products.lua` prints all 45 rows with prices matching the table above. `selene src/` clean. Every existing coin path behaves identically.
 
+**Done, with three things decided along the way.** The rung search runs on `raw` rounded to whole Robux, because a price is whole Robux and the fraction bit exactly once: Coin Satchel's 1300 coins computes 399.02, which unrounded lands on 599 where this table says 399; no other row is within half a Robux of a rung. `Storefront.rows()` is the one enumeration of what the game sells, shared by the tool and the audit so the two cannot cover different sets. And every `robuxProductId` is deliberately unset until the 45 dashboard products exist: absent means not for sale, so nothing is promptable before R2 lands, and the tool's id column is the paste-in worklist. The audit lives in `PurchaseService.server.lua`, which today is the audit and nothing else; R2 grows the receipt spine in the same file. The tool runs as `tools/robux/products.sh` (assembly, reusing petlooks' stubs) around `products.lua` (the driver), the same split petlooks uses.
+
 ### R2: The receipt spine
 
 `PurchaseService`, the profile's `receipts` field, the `UpgradesChanged` bindable and `SaveService`'s listener, the Studio `/buy` command. Prompts are not yet reachable from any UI.
