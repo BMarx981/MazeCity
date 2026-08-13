@@ -38,6 +38,10 @@ local remote = findOrCreate(ReplicatedStorage, "RemoteEvent", "PetUpdate")
 local intents = findOrCreate(ReplicatedStorage, "RemoteEvent", "PetIntent")
 local changed = findOrCreate(ServerScriptService, "BindableEvent", "PetsChanged")
 local progress = findOrCreate(ServerScriptService, "BindableEvent", "MazeProgress")
+-- Waited on rather than found-or-created, against the convention above,
+-- because a BindableFunction has a single owner: PurchaseService makes it, and
+-- a copy made here would be a gate nothing answers.
+local promptPurchase = ServerScriptService:WaitForChild("PromptPurchase")
 
 -- The prompt reaches PromptDistance from the pedestal's centre; this check is
 -- against the root part, which sits about three studs off the floor and can be
@@ -384,6 +388,63 @@ local function buyAccessory(player, payload)
 	announce(player, { kind = "bought", accessoryId = config.id, name = config.name, cost = config.coinCost })
 end
 
+-- The Robux half of the same two storefronts (docs/ROBUX_PLAN.md, R3). An
+-- intent here validates what only this service can, which is the player still
+-- standing at a roost and the row existing and not having expired, then asks
+-- the prompt gate, which re-checks everything a receipt would refuse: the
+-- offer, the loaded profile, the storage caps. Deliberately no coinCost check,
+-- coinCost and robuxProductId being two independent one-field rules; the gate
+-- refuses a row with no offer on its own. Nothing is granted here and no coin
+-- moves: the grant is PurchaseService's, on the receipt, and a refusal from
+-- either side rides the same denied message the coin paths send.
+local function buyEggRobux(player, payload)
+	local data = Profiles.data(player)
+	if not data or type(payload.eggId) ~= "string" then
+		return
+	end
+	if not atRoost(player) then
+		deny(player, "buyEggRobux", "notatroost")
+		return
+	end
+	local eggConfig = Inventory.eggConfig(payload.eggId)
+	if not eggConfig then
+		deny(player, "buyEggRobux", "unknown")
+		return
+	end
+	if eggConfig.availableUntil and os.time() > eggConfig.availableUntil then
+		deny(player, "buyEggRobux", "expired")
+		return
+	end
+	local ok, reason = promptPurchase:Invoke(player, "egg", payload.eggId)
+	if not ok then
+		deny(player, "buyEggRobux", reason)
+	end
+end
+
+local function buyAccessoryRobux(player, payload)
+	local data = Profiles.data(player)
+	if not data or type(payload.accessoryId) ~= "string" then
+		return
+	end
+	if not atRoost(player) then
+		deny(player, "buyAccessoryRobux", "notatroost")
+		return
+	end
+	local config = Inventory.accessoryConfig(payload.accessoryId)
+	if not config then
+		deny(player, "buyAccessoryRobux", "unknown")
+		return
+	end
+	if config.availableUntil and os.time() > config.availableUntil then
+		deny(player, "buyAccessoryRobux", "expired")
+		return
+	end
+	local ok, reason = promptPurchase:Invoke(player, "accessory", payload.accessoryId)
+	if not ok then
+		deny(player, "buyAccessoryRobux", reason)
+	end
+end
+
 -- The refusals are all Inventory.sellAccessory's: locked, worn, an item that was
 -- never for sale, and an id this player does not own. Nothing is checked twice
 -- here, and the coins are paid after the instance is gone rather than before, so
@@ -419,6 +480,10 @@ intents.OnServerEvent:Connect(function(player, payload)
 		buyEgg(player, payload)
 	elseif payload.kind == "buyAccessory" then
 		buyAccessory(player, payload)
+	elseif payload.kind == "buyEggRobux" then
+		buyEggRobux(player, payload)
+	elseif payload.kind == "buyAccessoryRobux" then
+		buyAccessoryRobux(player, payload)
 	elseif payload.kind == "sellAccessory" then
 		sellAccessory(player, payload)
 	elseif payload.kind == "hatch" then

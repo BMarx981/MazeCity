@@ -1289,6 +1289,24 @@ shopRemote.OnClientEvent:Connect(function(payload)
 	elseif payload.kind == "maxed" then
 		showBanner(payload.label, "Maxed out!", color, juice.ShopBannerSeconds, false)
 		playSound(Config.Sounds.CoinPickup, juice.CoinVolume, juice.ShopDeniedPitch)
+	elseif payload.kind == "robuxRefused" then
+		-- The prompt gate said no before any money moved. The reasons are the
+		-- gate's vocabulary; anything unmapped falls back to the generic line
+		-- rather than to silence, a refusal the player cannot read being the
+		-- failure the reason field exists to stop.
+		local reasons = {
+			unavailable = "Not for sale for Robux yet",
+			loading = "Your save is still loading, try again",
+			disabled = "Robux purchases are off right now",
+		}
+		showBanner(
+			payload.label,
+			reasons[payload.reason] or "Robux purchase refused",
+			color,
+			juice.ShopBannerSeconds,
+			false
+		)
+		playSound(Config.Sounds.CoinPickup, juice.CoinVolume, juice.ShopDeniedPitch)
 	end
 end)
 

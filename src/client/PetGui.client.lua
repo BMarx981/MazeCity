@@ -35,10 +35,26 @@ local AccessoryCatalog = require(ReplicatedStorage:WaitForChild("AccessoryCatalo
 -- without one extra byte over the remote.
 local PetModelGenerator = require(ReplicatedStorage:WaitForChild("PetModelGenerator"))
 local PortraitGenerator = require(ReplicatedStorage:WaitForChild("PortraitGenerator"))
+-- The second price on the same rows. Pure, so this client prices a row with
+-- the same function the server validates the prompt with, and a row with no
+-- product id on the dashboard simply draws one price.
+local Storefront = require(ReplicatedStorage:WaitForChild("Storefront"))
 
 local remote = ReplicatedStorage:WaitForChild("PetUpdate")
 local intents = ReplicatedStorage:WaitForChild("PetIntent")
+-- PurchaseService's remote: only what happened (granted, or paid out as
+-- coins). The granted thing itself arrives through the projection push the
+-- grant's PetsChanged already triggers.
+local purchases = ReplicatedStorage:WaitForChild("PurchaseUpdate")
 local player = Players.LocalPlayer
+
+-- The synthetic Studio product ids PurchaseService stamps exist only in the
+-- server's catalogue copies, module state not replicating, so without this the
+-- Robux buttons would be undrawable exactly where /buy is testable. Both sides
+-- walk the same rows() order, so the ids agree.
+if RunService:IsStudio() then
+	Storefront.stampSyntheticProductIds()
+end
 
 local WHITE = Color3.fromRGB(255, 255, 255)
 local DIM = Color3.fromRGB(150, 160, 175)
@@ -450,6 +466,9 @@ local REASONS = {
 	locked = "That item is locked",
 	worn = "Take it off a pet first",
 	notforsale = "That one is not for sale",
+	unavailable = "Not for sale for Robux",
+	loading = "Your save is still loading, try again",
+	disabled = "Robux purchases are off right now",
 	nopet = nil,
 	notequipped = nil,
 	notworn = nil,
@@ -660,8 +679,16 @@ local function eggRow(egg, order, canPlace, blockedBy)
 	end)
 end
 
+-- Either price can be absent, coinCost and robuxProductId being two
+-- independent one-field rules, so the row grows only when it carries both
+-- buttons. The Robux button keeps its price when the roost is out of reach
+-- rather than turning into a second AT A ROOST: the price is the information,
+-- the coin button beside it already says why nothing is pressable, and the
+-- press still gets the readable refusal either way.
 local function shelfRow(eggConfig, order, canBuy)
-	local frame = row(order, 46)
+	local offer = Storefront.offerFor("egg", eggConfig.id)
+	local both = offer and eggConfig.coinCost
+	local frame = row(order, both and 72 or 46)
 	frame.BackgroundTransparency = 0.35
 
 	local name =
@@ -671,25 +698,38 @@ local function shelfRow(eggConfig, order, canBuy)
 
 	local sub = label(frame, UDim2.new(0, 210, 0, 14), UDim2.new(0, 14, 0, 24), Enum.Font.Gotham, 11, DIM)
 	sub.TextXAlignment = Enum.TextXAlignment.Left
-	sub.Text = string.format(
-		"%d coins  |  %d %s",
-		eggConfig.coinCost,
-		eggConfig.mazesRequired,
-		Config.Pets.HatchUnit == "tower" and "towers" or "floors"
-	)
+	local hatchText =
+		string.format("%d %s", eggConfig.mazesRequired, Config.Pets.HatchUnit == "tower" and "towers" or "floors")
+	sub.Text = eggConfig.coinCost and string.format("%d coins  |  %s", eggConfig.coinCost, hatchText) or hatchText
 
-	local buy = button(
-		frame,
-		UDim2.fromOffset(96, 26),
-		UDim2.new(1, -108, 0, 10),
-		canBuy and "BUY" or "AT A ROOST",
-		canBuy and GOLD or Color3.fromRGB(52, 54, 64)
-	)
-	buy.TextSize = canBuy and 13 or 10
-	buy.TextColor3 = canBuy and Color3.fromRGB(30, 26, 12) or WHITE
-	buy.MouseButton1Click:Connect(function()
-		send({ kind = "buyEgg", eggId = eggConfig.id })
-	end)
+	if eggConfig.coinCost then
+		local buy = button(
+			frame,
+			UDim2.fromOffset(96, 26),
+			UDim2.new(1, -108, 0, both and 8 or 10),
+			canBuy and "BUY" or "AT A ROOST",
+			canBuy and GOLD or Color3.fromRGB(52, 54, 64)
+		)
+		buy.TextSize = canBuy and 13 or 10
+		buy.TextColor3 = canBuy and Color3.fromRGB(30, 26, 12) or WHITE
+		buy.MouseButton1Click:Connect(function()
+			send({ kind = "buyEgg", eggId = eggConfig.id })
+		end)
+	end
+
+	if offer then
+		local robux = button(
+			frame,
+			UDim2.fromOffset(96, 26),
+			UDim2.new(1, -108, 0, both and 40 or 10),
+			string.format("R$ %d", offer.robux),
+			canBuy and GREEN or Color3.fromRGB(52, 54, 64)
+		)
+		robux.TextSize = 13
+		robux.MouseButton1Click:Connect(function()
+			send({ kind = "buyEggRobux", eggId = eggConfig.id })
+		end)
+	end
 end
 
 -- What a raw effect value means in words. The projection carries numbers and the
@@ -808,7 +848,9 @@ end
 -- thing somebody may well want, and hiding what is owned would make the list
 -- change shape as it is bought out.
 local function gearShelfRow(config, order, canBuy)
-	local frame = row(order, 52)
+	local offer = Storefront.offerFor("accessory", config.id)
+	local both = offer and config.coinCost
+	local frame = row(order, both and 78 or 52)
 	frame.BackgroundTransparency = 0.35
 
 	local name = label(
@@ -829,20 +871,36 @@ local function gearShelfRow(config, order, canBuy)
 
 	local price = label(frame, UDim2.new(0, 250, 0, 14), UDim2.new(0, 14, 0, 35), Enum.Font.Gotham, 11, GOLD)
 	price.TextXAlignment = Enum.TextXAlignment.Left
-	price.Text = string.format("%d coins", config.coinCost)
+	price.Text = config.coinCost and string.format("%d coins", config.coinCost) or "Robux only"
 
-	local buy = button(
-		frame,
-		UDim2.fromOffset(96, 26),
-		UDim2.new(1, -108, 0, 13),
-		canBuy and "BUY" or "AT A ROOST",
-		canBuy and GOLD or Color3.fromRGB(52, 54, 64)
-	)
-	buy.TextSize = canBuy and 13 or 10
-	buy.TextColor3 = canBuy and Color3.fromRGB(30, 26, 12) or WHITE
-	buy.MouseButton1Click:Connect(function()
-		send({ kind = "buyAccessory", accessoryId = config.id })
-	end)
+	if config.coinCost then
+		local buy = button(
+			frame,
+			UDim2.fromOffset(96, 26),
+			UDim2.new(1, -108, 0, both and 8 or 13),
+			canBuy and "BUY" or "AT A ROOST",
+			canBuy and GOLD or Color3.fromRGB(52, 54, 64)
+		)
+		buy.TextSize = canBuy and 13 or 10
+		buy.TextColor3 = canBuy and Color3.fromRGB(30, 26, 12) or WHITE
+		buy.MouseButton1Click:Connect(function()
+			send({ kind = "buyAccessory", accessoryId = config.id })
+		end)
+	end
+
+	if offer then
+		local robux = button(
+			frame,
+			UDim2.fromOffset(96, 26),
+			UDim2.new(1, -108, 0, both and 42 or 13),
+			string.format("R$ %d", offer.robux),
+			canBuy and GREEN or Color3.fromRGB(52, 54, 64)
+		)
+		robux.TextSize = 13
+		robux.MouseButton1Click:Connect(function()
+			send({ kind = "buyAccessoryRobux", accessoryId = config.id })
+		end)
+	end
 end
 
 -- One line per pet while a piece of gear is waiting to be put on. It says what
@@ -954,16 +1012,20 @@ local function drawEggs()
 		emptyNote("No eggs. Buy one at a roof roost below.")
 	end
 
-	-- The shelf is every catalogued egg with a price. Sorted by cost so the one a
-	-- new player can afford is the one at the top.
+	-- The shelf is every catalogued egg with a price in either currency. Sorted
+	-- by coin cost so the one a new player can afford is the one at the top, and
+	-- a Robux-only egg sorts to the bottom: nothing down there is a beginner's.
 	local forSale = {}
 	for _, eggConfig in pairs(EggCatalog) do
-		if eggConfig.coinCost then
+		if eggConfig.coinCost or Storefront.offerFor("egg", eggConfig.id) then
 			table.insert(forSale, eggConfig)
 		end
 	end
 	table.sort(forSale, function(a, b)
-		return a.coinCost < b.coinCost
+		if a.coinCost ~= b.coinCost then
+			return (a.coinCost or math.huge) < (b.coinCost or math.huge)
+		end
+		return a.id < b.id
 	end)
 	for _, eggConfig in ipairs(forSale) do
 		order = order + 1
@@ -1040,18 +1102,21 @@ local function drawGear()
 		gearRow(item, order, item.wornBy and names[item.wornBy] or nil, canReach)
 	end
 
-	-- The shop is every catalogued piece with a price, cheapest first, and the two
-	-- without one are absent rather than greyed: an item that is only ever earned
-	-- has no business taking up a row in a shop.
+	-- The shop is every catalogued piece with a price in either currency,
+	-- cheapest first with Robux-only rows last. An item with no price at all is
+	-- absent rather than greyed: an item that is only ever earned has no
+	-- business taking up a row in a shop, and whether the streak pieces stay
+	-- that way is the plan's open decision, decided by their fields and not
+	-- here.
 	local forSale = {}
 	for _, config in pairs(AccessoryCatalog) do
-		if config.coinCost then
+		if config.coinCost or Storefront.offerFor("accessory", config.id) then
 			table.insert(forSale, config)
 		end
 	end
 	table.sort(forSale, function(a, b)
 		if a.coinCost ~= b.coinCost then
-			return a.coinCost < b.coinCost
+			return (a.coinCost or math.huge) < (b.coinCost or math.huge)
 		end
 		return a.id < b.id
 	end)
@@ -1425,6 +1490,27 @@ remote.OnClientEvent:Connect(function(payload)
 			string.upper(payload.rarity),
 			Config.rarityColor(payload.rarity),
 			Config.Pets.BroadcastSeconds
+		)
+	end
+end)
+
+-- The Robux side says only what happened; the bought thing itself redraws the
+-- panel through the projection push its grant already triggered. coinsInstead
+-- is the receipt that could never be granted as bought paying out the row's
+-- coin price, and it gets the longer banner because it is the one outcome the
+-- player did not ask for.
+purchases.OnClientEvent:Connect(function(payload)
+	if type(payload) ~= "table" then
+		return
+	end
+	if payload.kind == "granted" then
+		showBanner(payload.label, "Bought with Robux", GOLD, 2.5)
+	elseif payload.kind == "coinsInstead" then
+		showBanner(
+			string.format("+%d coins", payload.coins),
+			string.format("%s could not be granted, so it paid out as coins", payload.label),
+			GOLD,
+			3.5
 		)
 	end
 end)

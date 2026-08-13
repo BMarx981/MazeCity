@@ -21,19 +21,20 @@ local ContextActionService = game:GetService("ContextActionService")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
-local SoundService = game:GetService("SoundService")
-local Debris = game:GetService("Debris")
 
 local Config = require(ReplicatedStorage:WaitForChild("MazeConfig"))
+local UiTheme = require(ReplicatedStorage:WaitForChild("UiTheme"))
 local remote = ReplicatedStorage:WaitForChild("SprintUpdate")
 local intents = ReplicatedStorage:WaitForChild("SprintIntent")
 local player = Players.LocalPlayer
 
 local ACTION = "Sprint"
 local LABEL = "Sprint gauge"
-local COLOR = Config.Sprint.Color
-local SPENT = Color3.fromRGB(230, 80, 80)
-local ACTIVE = Color3.fromRGB(255, 240, 150)
+-- Ready is the rune teal, running is the lantern being spent, and winded is
+-- the one place this chip is allowed to show danger red: the meter is empty.
+local READY = UiTheme.Rune
+local RUNNING = UiTheme.Lantern
+local WINDED = UiTheme.Ember
 
 local gui = Instance.new("ScreenGui")
 gui.Name = "SprintHud"
@@ -44,42 +45,18 @@ gui.Parent = player:WaitForChild("PlayerGui")
 -- Bottom right corner, anchored to it rather than positioned from the top left,
 -- so the chip stays put on a tall phone as well as a wide monitor. Same 16px
 -- margin the right column above it uses.
-local chip = Instance.new("Frame")
-chip.Size = UDim2.fromOffset(178, 34)
-chip.AnchorPoint = Vector2.new(1, 1)
-chip.Position = UDim2.new(1, -16, 1, -16)
-chip.BackgroundColor3 = Color3.fromRGB(16, 16, 20)
-chip.BackgroundTransparency = 0.25
-chip.BorderSizePixel = 0
-chip.Parent = gui
+local chip = UiTheme.chip(gui, UDim2.fromOffset(178, 34), UDim2.new(1, -16, 1, -16), {
+	anchor = Vector2.new(1, 1),
+})
 
-local corner = Instance.new("UICorner")
-corner.CornerRadius = UDim.new(0, 8)
-corner.Parent = chip
-
-local title = Instance.new("TextLabel")
-title.Size = UDim2.new(1, -20, 0, 16)
-title.Position = UDim2.new(0, 10, 0, 3)
-title.BackgroundTransparency = 1
-title.Font = Enum.Font.GothamBold
-title.TextSize = 12
-title.TextColor3 = COLOR
+local title = UiTheme.label(chip, UDim2.new(1, -20, 0, 16), UDim2.new(0, 10, 0, 4), UiTheme.BodyBold, 12, READY)
 title.TextXAlignment = Enum.TextXAlignment.Left
 title.Text = LABEL
-title.Parent = chip
 
-local track = Instance.new("Frame")
-track.Size = UDim2.new(1, -20, 0, 6)
-track.Position = UDim2.new(0, 10, 0, 22)
-track.BackgroundColor3 = Color3.fromRGB(50, 52, 62)
-track.BorderSizePixel = 0
-track.Parent = chip
-
-local fill = Instance.new("Frame")
-fill.Size = UDim2.fromScale(1, 1)
-fill.BackgroundColor3 = COLOR
-fill.BorderSizePixel = 0
-fill.Parent = track
+-- The meter is the chip's rune seam: one glowing line along the bottom edge
+-- doing both jobs, rather than a static seam with a second bar above it.
+local _track, fill =
+	UiTheme.bar(chip, UDim2.new(1, -UiTheme.ChipRadius * 2, 0, 3), UDim2.new(0, UiTheme.ChipRadius, 1, -6), READY)
 
 -- Server truth, plus the clock it arrived on. Seeded full rather than empty so
 -- the chip is correct on the frame it is drawn, before the first push lands.
@@ -88,16 +65,6 @@ local capacity = Config.Sprint.Seconds
 local sprinting = false
 local regenIn = 0
 local sampledAt = os.clock()
-
-local function playSound(assetId, volume, speed)
-	local sound = Instance.new("Sound")
-	sound.SoundId = assetId
-	sound.Volume = volume
-	sound.PlaybackSpeed = speed or 1
-	sound.Parent = SoundService
-	sound:Play()
-	Debris:AddItem(sound, sound.TimeLength > 0 and sound.TimeLength + 1 or 5)
-end
 
 -- The same test the server drains on. Reading it locally is what lets the bar
 -- hold still while the player stands on the key instead of falling and being
@@ -135,14 +102,14 @@ RunService.RenderStepped:Connect(function()
 	-- because a colour set once at build time is the same hint nobody sees that
 	-- the old per-branch text was written to avoid.
 	if sprinting then
-		fill.BackgroundColor3 = ACTIVE
-		title.TextColor3 = ACTIVE
+		fill.BackgroundColor3 = RUNNING
+		title.TextColor3 = RUNNING
 	elseif left < Config.Sprint.MinimumToStart then
-		fill.BackgroundColor3 = SPENT
-		title.TextColor3 = SPENT
+		fill.BackgroundColor3 = WINDED
+		title.TextColor3 = WINDED
 	else
-		fill.BackgroundColor3 = COLOR
-		title.TextColor3 = COLOR
+		fill.BackgroundColor3 = READY
+		title.TextColor3 = READY
 	end
 end)
 
@@ -183,13 +150,13 @@ remote.OnClientEvent:Connect(function(payload)
 		return
 	end
 	if event.kind == "spent" then
-		playSound(Config.Sounds.CoinPickup, Config.Juice.CoinVolume, Config.Juice.ShopDeniedPitch)
+		UiTheme.playSound(Config.Sounds.CoinPickup, Config.Juice.CoinVolume, Config.Juice.ShopDeniedPitch)
 	elseif event.kind == "ready" then
 		-- A flash rather than a chime. The meter refills after every sprint, so a
 		-- sound here would be the most repeated noise in the game.
 		chip.BackgroundTransparency = 0.05
 		task.delay(0.25, function()
-			chip.BackgroundTransparency = 0.25
+			chip.BackgroundTransparency = UiTheme.ChipTransparency
 		end)
 	end
 end)

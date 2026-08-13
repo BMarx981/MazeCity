@@ -89,6 +89,19 @@ Write `UiTheme.lua`, then convert SprintGui (195 lines, one chip, no catalogue r
 as the pilot. Exit: the sprint chip is a stone slab with a rune seam, its three bar
 states read Rune / Lantern / Ember, every other GUI is untouched, `selene src/` clean.
 
+*Done, with four decisions recorded.* (1) The state mapping is ready = Rune,
+running = Lantern, winded = Ember: this doc listed "winded" under Lantern's warnings,
+but winded is the below-minimum state, which is "empty, spent", and that is Ember's
+whole job; the burn of an active sprint is what Lantern takes. (2) The sprint meter
+*is* the chip's rune seam, one line along the bottom edge doing both jobs, the same
+move Slate 2 makes with the par bar, rather than a static seam with a second bar
+above it. (3) `Config.Sprint.Color` turned out to have exactly one reader, the chip,
+so it is chrome and Rune absorbed it; the config field is now unread and should be
+deleted in a later MazeConfig pass (left alone for now because the Robux Registers
+are in that file). (4) "Two font values" is two families: the Body family ships as
+`Body`/`BodyBold`/`BodyBlack`, three weights of GothamSSm, because the old files used
+all three and a weight option on every label call read worse.
+
 **Slate 2: TimerGui.**
 The flagship surface. Floor/timer holder gets the Display font on the floor number and
 the par bar becomes the rune seam it was always shaped like. Score, coin and powerup

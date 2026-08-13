@@ -39,6 +39,11 @@ if not remote then
 	remote.Parent = ReplicatedStorage
 end
 
+-- Waited on rather than found-or-created, against the bindable convention,
+-- because a BindableFunction has a single owner: PurchaseService makes it, and
+-- a copy made here would be a gate nothing answers.
+local promptPurchase = ServerScriptService:WaitForChild("PromptPurchase")
+
 local function tier(data, key)
 	return data.upgrades[key] or 0
 end
@@ -139,14 +144,49 @@ local function buy(player, upgradeKey)
 	})
 end
 
-local function bindShopItem(part)
-	local prompt = part:FindFirstChildOfClass("ProximityPrompt")
-	if not prompt then
+-- The Robux press on the same pedestal (docs/ROBUX_PLAN.md R4). Maxed is
+-- answered here with the same message the coin path sends, because the gate
+-- would only say "unavailable" about a tier past the ladder's end; everything
+-- else is the gate's to refuse (the offer, the loaded profile, Enabled), and
+-- its reason comes back over ShopUpdate so the refusal is readable. Nothing is
+-- granted here: the grant arrives as a receipt in PurchaseService, which fires
+-- UpgradesChanged, which the listener at the bottom answers with applyStats.
+local function buyRobux(player, upgradeKey)
+	local data = Profiles.data(player)
+	local def = Config.Shop.Upgrades[upgradeKey]
+	if not data or not def then
 		return
 	end
-	prompt.Triggered:Connect(function(player)
-		buy(player, part:GetAttribute("Upgrade"))
-	end)
+
+	local owned = tier(data, upgradeKey)
+	if owned >= #def.Costs then
+		remote:FireClient(player, { kind = "maxed", upgrade = upgradeKey, label = def.Label })
+		return
+	end
+
+	local ok, reason = promptPurchase:Invoke(player, "upgrade", upgradeKey, owned + 1)
+	if not ok then
+		remote:FireClient(player, { kind = "robuxRefused", upgrade = upgradeKey, label = def.Label, reason = reason })
+	end
+end
+
+-- Two prompts per pedestal since R4, told apart by name, and both reading the
+-- same Upgrade attribute: whether a press is coins or Robux is a property of
+-- the prompt, what it buys is a property of the pedestal.
+local function bindShopItem(part)
+	for _, prompt in ipairs(part:GetChildren()) do
+		if prompt:IsA("ProximityPrompt") then
+			if prompt.Name == "RobuxPrompt" then
+				prompt.Triggered:Connect(function(player)
+					buyRobux(player, part:GetAttribute("Upgrade"))
+				end)
+			else
+				prompt.Triggered:Connect(function(player)
+					buy(player, part:GetAttribute("Upgrade"))
+				end)
+			end
+		end
+	end
 end
 
 for _, part in ipairs(CollectionService:GetTagged("ShopItem")) do

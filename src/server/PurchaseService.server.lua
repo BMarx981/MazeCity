@@ -49,9 +49,6 @@ local TextChatService = game:GetService("TextChatService")
 
 local Config = require(ReplicatedStorage:WaitForChild("MazeConfig"))
 local Storefront = require(ReplicatedStorage:WaitForChild("Storefront"))
-local EggCatalog = require(ReplicatedStorage:WaitForChild("EggCatalog"))
-local AccessoryCatalog = require(ReplicatedStorage:WaitForChild("AccessoryCatalog"))
-local PetCatalog = require(ReplicatedStorage:WaitForChild("PetCatalog"))
 local Profiles = require(ServerScriptService:WaitForChild("PlayerProfiles"))
 local Inventory = require(ServerScriptService:WaitForChild("PetInventory"))
 
@@ -299,25 +296,10 @@ end
 --   game:GetService("ServerScriptService").PurchaseDebugCommand:Invoke("egg", "summit_common")
 
 if RunService:IsStudio() then
-	local DEBUG_PRODUCT_BASE = 9000000
-	local stamped = 0
-	for index, row in ipairs(Storefront.rows()) do
-		if not row.productId then
-			local syntheticId = DEBUG_PRODUCT_BASE + index
-			if row.kind == "upgrade" then
-				local def = Config.Shop.Upgrades[row.id]
-				def.ProductIds = def.ProductIds or {}
-				def.ProductIds[row.tier] = syntheticId
-			elseif row.kind == "egg" then
-				EggCatalog[row.id].robuxProductId = syntheticId
-			elseif row.kind == "accessory" then
-				AccessoryCatalog[row.id].robuxProductId = syntheticId
-			elseif row.kind == "pet" then
-				PetCatalog[row.id].robuxProductId = syntheticId
-			end
-			stamped = stamped + 1
-		end
-	end
+	-- The loop lives in Storefront rather than here since R3, because the client
+	-- has to stamp its own catalogue copies to draw the Robux buttons in Studio,
+	-- and two copies of the id assignment would be two chances to disagree.
+	local stamped = Storefront.stampSyntheticProductIds()
 	if stamped > 0 then
 		rebuildIndex()
 		print(("[PurchaseService] stamped %d synthetic Studio product ids"):format(stamped))

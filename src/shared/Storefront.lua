@@ -181,4 +181,37 @@ function Storefront.rows()
 	return rows
 end
 
+-- Studio's stand-in for the dashboard: synthetic ids (9000001 up, by row
+-- index) stamped onto every row that has none, which is what makes anything
+-- promptable before a single real product exists. Mutates this environment's
+-- copies of the catalogues only, and module state does not replicate, so the
+-- server (PurchaseService) and the client (PetGui) each call it themselves;
+-- both walking the same rows() order is what keeps their ids identical.
+-- Callers guard with RunService:IsStudio(). The guard stays with them rather
+-- than here so this module keeps requiring no services, which is what lets
+-- tools/robux/products.lua run it under the luau CLI.
+local SYNTHETIC_PRODUCT_BASE = 9000000
+
+function Storefront.stampSyntheticProductIds()
+	local stamped = 0
+	for index, row in ipairs(Storefront.rows()) do
+		if not row.productId then
+			local syntheticId = SYNTHETIC_PRODUCT_BASE + index
+			if row.kind == "upgrade" then
+				local def = Config.Shop.Upgrades[row.id]
+				def.ProductIds = def.ProductIds or {}
+				def.ProductIds[row.tier] = syntheticId
+			elseif row.kind == "egg" then
+				EggCatalog[row.id].robuxProductId = syntheticId
+			elseif row.kind == "accessory" then
+				AccessoryCatalog[row.id].robuxProductId = syntheticId
+			elseif row.kind == "pet" then
+				PetCatalog[row.id].robuxProductId = syntheticId
+			end
+			stamped = stamped + 1
+		end
+	end
+	return stamped
+end
+
 return Storefront

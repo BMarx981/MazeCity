@@ -2752,6 +2752,27 @@ local function buildShop(parent, origin, style, entrySide, entryCell, ctx)
 		prompt.RequiresLineOfSight = false
 		prompt.Parent = pedestal
 
+		-- The second price on the same pedestal (docs/ROBUX_PLAN.md R4), named so
+		-- SaveService can tell the two apart. A pure function of the pedestal that
+		-- already exists, no draw (invariant 6), so the delta is countable: one
+		-- instance here, five pedestals per building, +30 per section. Its own key
+		-- on both input families, because the engine shows one prompt per key at a
+		-- time, and lifted above the coin prompt so the two read as a stack.
+		-- Enabled is the storefront switch doing its job at the door; the instance
+		-- always exists, so the part count never depends on the flag.
+		local robuxPrompt = Instance.new("ProximityPrompt")
+		robuxPrompt.Name = "RobuxPrompt"
+		robuxPrompt.ActionText = "Buy with Robux"
+		robuxPrompt.ObjectText = def.Label
+		robuxPrompt.KeyboardKeyCode = Enum.KeyCode.R
+		robuxPrompt.GamepadKeyCode = Enum.KeyCode.ButtonY
+		robuxPrompt.UIOffset = Vector2.new(0, -56)
+		robuxPrompt.MaxActivationDistance = Config.Shop.PromptDistance
+		robuxPrompt.HoldDuration = Config.Shop.PromptHoldSeconds
+		robuxPrompt.RequiresLineOfSight = false
+		robuxPrompt.Enabled = Config.Robux.Enabled
+		robuxPrompt.Parent = pedestal
+
 		pedestal:SetAttribute("Upgrade", key)
 		tagWithContext(pedestal, "ShopItem", ctx.section, ctx.building, 0)
 	end
