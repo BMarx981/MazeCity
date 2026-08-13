@@ -135,6 +135,21 @@ its time). Charge bar states map to Rune / Lantern (grace) / Ember (empty), repl
 the `Config.Abilities` colour reads with tokens where the colour is chrome and keeping
 them where it is semantic (per-ability accent from `Upgrades[*].Color` stays).
 
+*Done, pending the play test of its states, with four decisions recorded.* (1) The
+Rune of the three-state mapping is USING: the old active yellow is exactly the
+literal the token table assigned to Rune, grace takes Lantern's warning, empty takes
+Ember, and ready is deliberately none of them, staying the selected ability's own
+accent so the bar names its ability the way the stall's orbs do. (2) The selection
+stroke is Rune always, per the plan, and the selected box keeps its accent fill
+underneath it with `Ink` digits: selection belongs to the theme, the accent to the
+ability, and the two read together rather than competing. (3) `EmptyColor` and
+`GraceColor` in `Config.Abilities` are now unread and join `Config.Sprint.Color` in
+the deferred MazeConfig cleanup, left in place while the Robux Registers are active
+in that file. (4) The charge bar stays mid-chip rather than becoming the seam: the
+seam move belongs to a chip whose bar was already its bottom edge, and this chip's
+bottom edge is the hint line that carries the key. This file now holds zero colour
+literals of any kind, the compass identity white being TimerGui's alone.
+
 **Slate 4: PetGui and BestiaryGui.**
 The big modal: panel to `panel` with Display title, tabs to Stone/Rune active states,
 all seven row constructors restyled through the shared helpers, rarity swatches and

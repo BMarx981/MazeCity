@@ -36,15 +36,19 @@
 -- the first purchase is what teaches it. They hide together and on the same
 -- count, because a name with no box to press is as useless as a box with nothing
 -- to name.
+--
+-- Chrome comes from UiTheme and nowhere else (docs/HUD_THEME_PLAN.md, Slate 3).
+-- The per-ability accent from Config.Shop.Upgrades[*].Color is semantic, shared
+-- with the stall's orbs, and stays; the charge bar's state colours are chrome
+-- and are the theme's three accents.
 
 local ContextActionService = game:GetService("ContextActionService")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
-local SoundService = game:GetService("SoundService")
-local Debris = game:GetService("Debris")
 
 local Config = require(ReplicatedStorage:WaitForChild("MazeConfig"))
+local UiTheme = require(ReplicatedStorage:WaitForChild("UiTheme"))
 local remote = ReplicatedStorage:WaitForChild("AbilityUpdate")
 local intents = ReplicatedStorage:WaitForChild("AbilityIntent")
 local player = Players.LocalPlayer
@@ -53,10 +57,13 @@ local USE_ACTION = "UseAbility"
 local CYCLE_ACTION = "CycleAbility"
 local SELECT_ACTION = "SelectAbility"
 
-local EMPTY = Config.Abilities.EmptyColor
-local GRACE = Config.Abilities.GraceColor
-local PANEL = Color3.fromRGB(16, 16, 20)
-local DIM = Color3.fromRGB(150, 160, 175)
+-- The three chrome states of the charge, out of the same box the sprint meter
+-- draws from: a hold under way is the active colour Rune absorbed, the grace
+-- squeeze is Lantern's warning, and empty is Ember's whole job. Ready is the
+-- one state that is not chrome, being the selected ability's own accent.
+local USING = UiTheme.Rune
+local GRACE = UiTheme.Lantern
+local EMPTY = UiTheme.Ember
 
 -- The chip is the width of the sprint meter and the powerup chip, which is what
 -- keeps the right column a column. The box is sized to a digit and nothing else.
@@ -85,64 +92,26 @@ gui.ResetOnSpawn = false
 gui.IgnoreGuiInset = true
 gui.Parent = player:WaitForChild("PlayerGui")
 
-local function rounded(inst, radius)
-	local corner = Instance.new("UICorner")
-	corner.CornerRadius = UDim.new(0, radius)
-	corner.Parent = inst
-	return inst
-end
-
-local chip = Instance.new("Frame")
+local chip = UiTheme.chip(gui, UDim2.fromOffset(CHIP_W, CHIP_H), UDim2.new(1, -16, 0, 136), {
+	anchor = Vector2.new(1, 0),
+})
 chip.Name = "AbilityChip"
-chip.AnchorPoint = Vector2.new(1, 0)
-chip.Position = UDim2.new(1, -16, 0, 136)
-chip.Size = UDim2.fromOffset(CHIP_W, CHIP_H)
-chip.BackgroundColor3 = PANEL
-chip.BackgroundTransparency = 0.25
-chip.BorderSizePixel = 0
 chip.Visible = false
-chip.Parent = gui
-rounded(chip, 10)
 
 -- Truncated rather than scaled or wrapped: the chip is a fixed width and a long
 -- name has to lose its tail rather than take the chip's shape with it.
-local nameLabel = Instance.new("TextLabel")
-nameLabel.Position = UDim2.fromOffset(PAD, 4)
-nameLabel.Size = UDim2.new(1, -PAD * 2, 0, 16)
-nameLabel.BackgroundTransparency = 1
-nameLabel.Font = Enum.Font.GothamBold
-nameLabel.TextSize = 14
-nameLabel.TextColor3 = DIM
+local nameLabel =
+	UiTheme.label(chip, UDim2.new(1, -PAD * 2, 0, 16), UDim2.fromOffset(PAD, 4), UiTheme.BodyBold, 14, UiTheme.Dim)
 nameLabel.TextXAlignment = Enum.TextXAlignment.Left
 nameLabel.TextTruncate = Enum.TextTruncate.AtEnd
-nameLabel.Text = ""
-nameLabel.Parent = chip
 
-local track = Instance.new("Frame")
-track.Position = UDim2.fromOffset(PAD, 24)
-track.Size = UDim2.new(1, -PAD * 2, 0, 6)
-track.BackgroundColor3 = Color3.fromRGB(50, 52, 62)
-track.BorderSizePixel = 0
-track.Parent = chip
-rounded(track, 3)
+local track, fill = UiTheme.bar(chip, UDim2.new(1, -PAD * 2, 0, 6), UDim2.fromOffset(PAD, 24))
+UiTheme.rounded(track, 3)
+UiTheme.rounded(fill, 3)
 
-local fill = Instance.new("Frame")
-fill.Size = UDim2.fromScale(1, 1)
-fill.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-fill.BorderSizePixel = 0
-fill.Parent = track
-rounded(fill, 3)
-
-local hint = Instance.new("TextLabel")
-hint.Position = UDim2.fromOffset(PAD, 33)
-hint.Size = UDim2.new(1, -PAD * 2, 0, 15)
-hint.BackgroundTransparency = 1
-hint.Font = Enum.Font.GothamBold
-hint.TextSize = 12
-hint.TextColor3 = DIM
+local hint =
+	UiTheme.label(chip, UDim2.new(1, -PAD * 2, 0, 15), UDim2.fromOffset(PAD, 33), UiTheme.BodyBold, 12, UiTheme.Dim)
 hint.TextXAlignment = Enum.TextXAlignment.Left
-hint.Text = ""
-hint.Parent = chip
 
 -- Bottom edge, centred, anchored to that edge so the row stays on it whatever
 -- the screen is. The margin matches the sprint meter's, which is the nearest
@@ -171,16 +140,6 @@ local sampledAt = os.clock()
 local owned = {}
 local buttons = {}
 
-local function playSound(assetId, volume, speed)
-	local sound = Instance.new("Sound")
-	sound.SoundId = assetId
-	sound.Volume = volume
-	sound.PlaybackSpeed = speed or 1
-	sound.Parent = SoundService
-	sound:Play()
-	Debris:AddItem(sound, sound.TimeLength > 0 and sound.TimeLength + 1 or 5)
-end
-
 local function tierOf(key)
 	return player:GetAttribute("AbilityTier_" .. key) or 0
 end
@@ -207,7 +166,7 @@ local setBound
 
 local function colorOf(key)
 	local def = Config.abilityDef(key)
-	return def and def.Color or Color3.fromRGB(255, 255, 255)
+	return def and def.Color or UiTheme.Text
 end
 
 local function paintButtons()
@@ -215,16 +174,18 @@ local function paintButtons()
 	for key, button in pairs(buttons) do
 		local isSelected = key == selected
 		local color = colorOf(key)
-		button.BackgroundColor3 = isSelected and color or Color3.fromRGB(38, 38, 46)
+		button.BackgroundColor3 = isSelected and color or UiTheme.Stone
 		button.BackgroundTransparency = isSelected and 0.15 or 0.45
-		button.TextColor3 = isSelected and Color3.fromRGB(20, 20, 24) or color
+		button.TextColor3 = isSelected and UiTheme.Ink or color
 		-- The border is the selection, and it is the only border in the row. A box
 		-- carries no name, so a row of outlined boxes would be a row of identical
 		-- squares; exactly one outline is what makes the answer readable without
-		-- reading anything. The name it belongs to is on the chip.
+		-- reading anything. The name it belongs to is on the chip. Rune, not the
+		-- ability's accent: selection is the theme's, and the accent is already
+		-- the fill it is drawn around.
 		local stroke = button:FindFirstChildOfClass("UIStroke")
 		if stroke then
-			stroke.Color = color
+			stroke.Color = UiTheme.Rune
 			stroke.Enabled = isSelected
 		end
 	end
@@ -260,13 +221,13 @@ local function rebuild()
 		button.Position = UDim2.fromOffset((i - 1) * (BOX + GAP), 0)
 		button.BorderSizePixel = 0
 		button.AutoButtonColor = false
-		button.Font = Enum.Font.GothamBold
+		button.FontFace = UiTheme.BodyBold
 		button.TextSize = 14
 		-- Past the ninth there is no key to print, and a box with nothing in it is
 		-- still tappable, which is the only selector that ability has left.
 		button.Text = i <= #NUMBER_KEYS and tostring(i) or ""
 		button.Parent = keys
-		rounded(button, 7)
+		UiTheme.rounded(button, 7)
 
 		local stroke = Instance.new("UIStroke")
 		stroke.Thickness = 2
@@ -333,11 +294,11 @@ RunService.RenderStepped:Connect(function()
 	fill.Size = UDim2.fromScale(math.clamp(left, 0, 1), 1)
 
 	if not def then
-		fill.BackgroundColor3 = DIM
+		fill.BackgroundColor3 = UiTheme.Dim
 		nameLabel.Text = "No ability"
-		nameLabel.TextColor3 = DIM
+		nameLabel.TextColor3 = UiTheme.Dim
 		hint.Text = "Pick one below"
-		hint.TextColor3 = DIM
+		hint.TextColor3 = UiTheme.Dim
 		return
 	end
 
@@ -373,9 +334,9 @@ RunService.RenderStepped:Connect(function()
 		-- phase already under way runs the charge to zero. Reading them the other
 		-- way round put "empty" under a player who was still walking through a wall.
 		if active then
-			fill.BackgroundColor3 = Color3.fromRGB(255, 240, 150)
+			fill.BackgroundColor3 = USING
 			hint.Text = string.format("USING  %.1fs", seconds)
-			hint.TextColor3 = Color3.fromRGB(255, 240, 150)
+			hint.TextColor3 = USING
 		elseif left <= Config.Abilities.MinimumToStart then
 			fill.BackgroundColor3 = EMPTY
 			hint.Text = "HOLD [Q]  empty"
@@ -500,19 +461,19 @@ remote.OnClientEvent:Connect(function(payload)
 
 	local juice = Config.Juice
 	if event.kind == "started" then
-		playSound(Config.Sounds.PhantomPass, juice.PhantomSparkleVolume, 0.8)
+		UiTheme.playSound(Config.Sounds.PhantomPass, juice.PhantomSparkleVolume, 0.8)
 	elseif event.kind == "cast" then
-		playSound(Config.Sounds.PowerupPickup, juice.PowerupVolume, 1.1)
+		UiTheme.playSound(Config.Sounds.PowerupPickup, juice.PowerupVolume, 1.1)
 	elseif event.kind == "empty" or event.kind == "denied" then
-		playSound(Config.Sounds.CoinPickup, juice.CoinVolume, juice.ShopDeniedPitch)
+		UiTheme.playSound(Config.Sounds.CoinPickup, juice.CoinVolume, juice.ShopDeniedPitch)
 	elseif event.kind == "selected" then
-		playSound(Config.Sounds.CoinPickup, juice.CoinVolume * 0.6, 1.4)
+		UiTheme.playSound(Config.Sounds.CoinPickup, juice.CoinVolume * 0.6, 1.4)
 	elseif event.kind == "refilled" or event.kind == "respawn" then
 		-- A flash rather than a chime. The charge refills on every floor, and a
 		-- sound there would be the most repeated noise in a ten floor climb.
 		chip.BackgroundTransparency = 0.05
 		task.delay(0.25, function()
-			chip.BackgroundTransparency = 0.25
+			chip.BackgroundTransparency = UiTheme.ChipTransparency
 		end)
 	end
 end)
