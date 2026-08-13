@@ -580,6 +580,11 @@ Config.Robux = {
 	-- product, 45 of them, so it ships off and is flipped in Studio after a
 	-- repricing pass.
 	AuditOnStart = false,
+	-- How long a granted PurchaseId is remembered in the profile's receipts
+	-- table. A receipt's whole job is making Roblox's retries idempotent, and a
+	-- retry arrives in days at the outside, so the table stays bounded by a
+	-- month of buying; pruned in PlayerProfiles.adopt.
+	ReceiptKeepDays = 30,
 }
 
 -- ============================================================

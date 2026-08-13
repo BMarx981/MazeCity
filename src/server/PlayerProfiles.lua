@@ -82,6 +82,12 @@ local function defaults()
 		-- accomplishments that happened before the fragment owed them came up.
 		codex = { pets = {}, kept = {}, relics = {}, journal = { unlocked = 0, banked = {} } },
 		gamepasses = {},
+		-- Robux purchase ids already granted, PurchaseId -> os.time() of the
+		-- grant. The idempotency half of PurchaseService's receipt spine: a
+		-- Roblox retry that finds its id here is answered Granted without
+		-- granting again. Pruned in adopt, so it stays bounded by a month of
+		-- buying.
+		receipts = {},
 		starterGranted = false,
 	}
 end
@@ -198,6 +204,17 @@ local function adopt(data, result)
 		journal = { unlocked = journal.unlocked or 0, banked = journal.banked or {} },
 	}
 	data.gamepasses = result.gamepasses or {}
+	-- Pruned on the way in rather than on a timer: a receipt's whole job is
+	-- making Roblox's retries idempotent, and a retry arrives in days at the
+	-- outside, so anything older than the keep window is a key that can never be
+	-- asked about again.
+	data.receipts = {}
+	local receiptCutoff = os.time() - Config.Robux.ReceiptKeepDays * 86400
+	for purchaseId, grantedAt in pairs(result.receipts or {}) do
+		if type(grantedAt) == "number" and grantedAt >= receiptCutoff then
+			data.receipts[purchaseId] = grantedAt
+		end
+	end
 	data.starterGranted = result.starterGranted == true
 end
 
@@ -238,10 +255,14 @@ local function load(player)
 	fireReady(player, entry)
 end
 
+-- Returns whether the profile actually reached the DataStore, because the
+-- receipt spine's "granted means saved" rule needs the answer: PurchaseService
+-- returns PurchaseGranted only on true and lets Roblox retry otherwise. Every
+-- older caller ignores the return, which is unchanged behaviour.
 function Profiles.save(player)
 	local entry = profiles[player]
 	if not entry or not entry.loaded or not store then
-		return
+		return false
 	end
 
 	local stats = player:FindFirstChild("leaderstats")
@@ -267,6 +288,7 @@ function Profiles.save(player)
 		stats = data.stats,
 		codex = data.codex,
 		gamepasses = data.gamepasses,
+		receipts = data.receipts,
 		starterGranted = data.starterGranted,
 		savedAt = os.time(),
 	}
@@ -279,6 +301,7 @@ function Profiles.save(player)
 	if not ok then
 		warn("PlayerProfiles: save failed for " .. player.Name .. ": " .. tostring(err))
 	end
+	return ok
 end
 
 local function bindPlayer(player)

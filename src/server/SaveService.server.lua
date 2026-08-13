@@ -215,3 +215,20 @@ Players.PlayerAdded:Connect(bindPlayer)
 Profiles.onReady(function(player)
 	applyStats(player)
 end)
+
+-- A Robux receipt landing an upgrade tier (docs/ROBUX_PLAN.md). PurchaseService
+-- writes data.upgrades exactly as buy above does and says so here; answering
+-- with applyStats is how the bought tier reaches the character without this
+-- service learning what a receipt is. FindFirstChild-or-create on both ends,
+-- per the server-to-server convention, because either script may run first.
+local upgradesChanged = ServerScriptService:FindFirstChild("UpgradesChanged")
+if not upgradesChanged then
+	upgradesChanged = Instance.new("BindableEvent")
+	upgradesChanged.Name = "UpgradesChanged"
+	upgradesChanged.Parent = ServerScriptService
+end
+upgradesChanged.Event:Connect(function(payload)
+	if payload and payload.player then
+		applyStats(payload.player)
+	end
+end)

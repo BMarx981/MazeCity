@@ -402,6 +402,10 @@ export type PlayerData = {
 	stats: PlayerStats,
 	codex: CodexState,
 	gamepasses: { [string]: boolean },
+	-- Robux PurchaseIds already granted, mapped to when. The idempotency half of
+	-- PurchaseService's receipt spine; pruned to Config.Robux.ReceiptKeepDays in
+	-- PlayerProfiles.adopt.
+	receipts: { [string]: number },
 	starterGranted: boolean,
 }
 

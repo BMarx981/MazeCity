@@ -168,6 +168,28 @@ end
 -- Granting
 -- ============================================================
 
+-- One more of this kind fits, or the reason it does not. The single statement
+-- of the three storage caps: the grants below refuse with it, and
+-- PurchaseService's prompt gate asks it up front so a Robux receipt landing on
+-- a full shelf is the rare path (a retry on the next join) rather than the
+-- check (docs/ROBUX_PLAN.md, receipt rule 5).
+function Inventory.hasRoom(data, kind)
+	if kind == "egg" then
+		if count(data.eggs) >= data.eggStorageCap then
+			return false, "eggsfull"
+		end
+	elseif kind == "pet" then
+		if count(data.pets) >= data.petStorageCap then
+			return false, "petsfull"
+		end
+	elseif kind == "accessory" then
+		if count(data.accessories) >= data.accessoryStorageCap then
+			return false, "gearfull"
+		end
+	end
+	return true
+end
+
 function Inventory.grantEgg(data, eggId)
 	local eggConfig = EggCatalog[eggId]
 	if not eggConfig then
@@ -180,8 +202,9 @@ function Inventory.grantEgg(data, eggId)
 	-- count against the cap: a full shelf plus one hatching is the honest reading
 	-- of "five eggs", and the alternative strands a player who placed their last
 	-- one.
-	if count(data.eggs) >= data.eggStorageCap then
-		return false, "eggsfull"
+	local room, reason = Inventory.hasRoom(data, "egg")
+	if not room then
+		return false, reason
 	end
 
 	local egg = { uid = uid(), eggId = eggId, acquiredAt = os.time() }
@@ -194,8 +217,9 @@ function Inventory.grantPet(data, petId, sourceEggId)
 	if not petConfig then
 		return false, "unknown"
 	end
-	if count(data.pets) >= data.petStorageCap then
-		return false, "petsfull"
+	local room, reason = Inventory.hasRoom(data, "pet")
+	if not room then
+		return false, reason
 	end
 
 	local pet = {
@@ -225,8 +249,9 @@ function Inventory.grantAccessory(data, accessoryId)
 	-- A worn item is still in this map, so it counts. Gear that vanished from the
 	-- bag the moment it went on a pet would make the cap mean something different
 	-- depending on how many pets a player owns.
-	if count(data.accessories) >= data.accessoryStorageCap then
-		return false, "gearfull"
+	local room, reason = Inventory.hasRoom(data, "accessory")
+	if not room then
+		return false, reason
 	end
 
 	local instance = { uid = uid(), accessoryId = accessoryId, locked = false, acquiredAt = os.time() }
