@@ -185,6 +185,39 @@ give them one `plateGui` helper inside the generator using the same token values
 server but the generator should not depend on a UI module; a comment names UiTheme as
 the source of truth). Determinism ritual applies.
 
+*Done, pending the play test (a walk from a plaza to a shop counter and up to a roost),
+with six decisions recorded.* (1) It is **two helpers, not one**: `plateGui` is a
+billboard holding a stone slab with the full HUD chrome, and `carvedPlate` is lettering
+cut into a part's own face with nothing behind it. The plan counted the roof SurfaceGui
+among "the five BillboardGui sites" and it is not one of them; putting a slab behind
+letters already painted on a lit neon plate would have hung a floating rectangle on a
+sign the city itself made. (2) **The seam marks a door.** The plaza name, EGG ROOST and
+UPGRADE SHOP carry it; the pedestal boards do not, because a pedestal is a row inside
+the stall and the sign over the counter is what marks the way in. That is the HUD's own
+rule outdoors: chips and panels seam, rows do not. (3) **Both storefront signs are
+Lantern.** The roost was pale blue and the stall was gold, and they are the two counters
+in this city that spend coins, so one colour with one meaning beats two colours telling
+the player nothing. What tells them apart is what they stand on. (4) Open decision 1 is
+answered for the world, not yet for the HUD: **Display goes on a plate that names a
+place** (the tower in its plaza, the roof board, EGG ROOST, UPGRADE SHOP) and **Body on
+a plate that states a number or a direction** (the pedestal boards, the signposts). The
+face sets wider than the Gotham these boxes were measured for, so the roost and stall
+plates took ten more pixels of width and the tower's name became TextScaled under a
+22 px ceiling: clipping a tower's name is the one failure that plate has, and the
+ceiling is what stops a short name ballooning to fill the slab. (5) The pedestal board's
+single newline-joined string became **two lines**: the name keeps the upgrade's accent,
+which is the orb's colour and semantic, and the cost ladder underneath goes Lantern like
+every other coin number in the game. (6) The street's signposts postdate this plan's
+survey and joined the Slate for their one plate, the way BuildingLights joined Slate 4.
+
+The determinism ritual passed and is the sharpest form of it yet: **+246 instances per
+section, uniform across all three, and not one dumped line carrying a position changed.**
+Per building that is 8 chrome instances at the plaza plate, 6 each at the roost and the
+stall sign and 6 at each of five pedestals, against the 9 bare TextLabels removed; the
+two carved plates are unchanged in shape and so do not appear in the diff at all. Both
+sides double-built byte-identical. The harness needed three fixes to run it, all stub
+gaps rather than generator ones, and they are recorded in the determinism memory.
+
 **Slate 6, open: prompts and wordmark.**
 Two things to decide after playing Slates 1 to 5, not before. (a) Stock ProximityPrompts
 will now be the only unthemed UI in the game; theming them means

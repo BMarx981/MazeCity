@@ -622,6 +622,112 @@ local function tagWithContext(part, tag, section, building, level)
 	CollectionService:AddTag(part, tag)
 end
 
+-- ============================================================
+-- Plates
+-- ============================================================
+
+-- The city's signage wears the same chrome the HUD does (docs/HUD_THEME_PLAN.md
+-- Slate 5): a dark stone slab, an etched border, moonlight from above, and a
+-- rune seam on the plates that mark a door. `src/shared/UiTheme.lua` is the
+-- source of truth for every value here; they are copied rather than required
+-- because the generator must not depend on a client UI module, so a token
+-- retuned there is retuned here by hand. That is the price of the one-way
+-- dependency and it is cheaper than a world builder that needs a GUI module
+-- loaded before it can draw a wall.
+local PLATE = {
+	Ink = Color3.fromRGB(8, 11, 20),
+	Slab = Color3.fromRGB(17, 22, 34),
+	Etch = Color3.fromRGB(74, 86, 108),
+	Rune = Color3.fromRGB(92, 230, 208),
+	Lantern = Color3.fromRGB(255, 205, 105),
+	Text = Color3.fromRGB(228, 233, 242),
+	Radius = 6,
+	Transparency = 0.25,
+	StrokeTransparency = 0.5,
+	SeamTransparency = 0.35,
+	Display = Font.fromName("GrenzeGotisch", Enum.FontWeight.Bold),
+	Body = Font.fromName("GothamSSm", Enum.FontWeight.Bold),
+}
+
+-- One plate: a billboard holding a single stone slab. Returns the slab and never
+-- the BillboardGui, because a caller reaching past it is a caller drawing its
+-- own chrome. `seam` is the teal line along the bottom edge and it means here
+-- what it means on a HUD chip: this is a door, something can be done at it.
+local function plateGui(parent, width, height, studsUp, maxDistance, seam)
+	local bb = Instance.new("BillboardGui")
+	bb.Size = UDim2.new(0, width, 0, height)
+	bb.StudsOffset = Vector3.new(0, studsUp, 0)
+	bb.MaxDistance = maxDistance
+	bb.Parent = parent
+
+	local slab = Instance.new("Frame")
+	slab.Size = UDim2.new(1, 0, 1, 0)
+	slab.BackgroundColor3 = PLATE.Slab
+	slab.BackgroundTransparency = PLATE.Transparency
+	slab.BorderSizePixel = 0
+	slab.Parent = bb
+
+	local corner = Instance.new("UICorner")
+	corner.CornerRadius = UDim.new(0, PLATE.Radius)
+	corner.Parent = slab
+
+	local grad = Instance.new("UIGradient")
+	grad.Rotation = 90
+	grad.Color = ColorSequence.new(Color3.fromRGB(255, 255, 255), Color3.fromRGB(196, 200, 212))
+	grad.Parent = slab
+
+	local stroke = Instance.new("UIStroke")
+	stroke.Color = PLATE.Etch
+	stroke.Transparency = PLATE.StrokeTransparency
+	stroke.Parent = slab
+
+	if seam then
+		local line = Instance.new("Frame")
+		line.Size = UDim2.new(1, -PLATE.Radius * 2, 0, 2)
+		line.Position = UDim2.new(0, PLATE.Radius, 1, -3)
+		line.BackgroundColor3 = PLATE.Rune
+		line.BackgroundTransparency = PLATE.SeamTransparency
+		line.BorderSizePixel = 0
+		line.Parent = slab
+	end
+
+	return slab
+end
+
+local function plateLine(slab, size, position, font, textSize, color, text)
+	local label = Instance.new("TextLabel")
+	label.Size = size
+	label.Position = position
+	label.BackgroundTransparency = 1
+	label.FontFace = font
+	label.TextSize = textSize
+	label.TextColor3 = color
+	label.Text = text
+	label.Parent = slab
+	return label
+end
+
+-- The other kind of plate: lettering cut into a part's own face with no slab
+-- behind it, because there the part is the sign. The two that use it are the
+-- two signs somebody in this city actually made, the roof's name board and a
+-- climber's signpost, which is why neither gets the HUD's stone frame.
+local function carvedPlate(part, canvasWidth, canvasHeight, font, color, text)
+	local sg = Instance.new("SurfaceGui")
+	sg.Face = Enum.NormalId.Front
+	sg.CanvasSize = Vector2.new(canvasWidth, canvasHeight)
+	sg.Parent = part
+
+	local label = Instance.new("TextLabel")
+	label.Size = UDim2.new(1, 0, 1, 0)
+	label.BackgroundTransparency = 1
+	label.FontFace = font
+	label.TextScaled = true
+	label.TextColor3 = color
+	label.Text = text
+	label.Parent = sg
+	return label
+end
+
 local function cellCenter(x, z)
 	return Vector3.new((x - 0.5) * CFG.CELL, 0, (z - 0.5) * CFG.CELL)
 end
@@ -2409,34 +2515,22 @@ local function buildFacade(parent, origin, style, entrySide, entryCell, ctx)
 	-- Two lines rather than one, and wider than it was: the name went from six
 	-- characters to about thirty when the towers stopped being called S1-E2, and
 	-- a fixed TextSize in a fixed box clips rather than shrinks. The tower is the
-	-- thing being pointed at, so it is the larger line; the district is the
-	-- qualifier and sits under it.
-	local bb = Instance.new("BillboardGui")
-	bb.Size = UDim2.new(0, 300, 0, 54)
-	bb.StudsOffset = Vector3.new(0, 6.5, 0)
-	bb.MaxDistance = 400
-	bb.Parent = spawn
+	-- thing being pointed at, so it is the larger line and it is the one carved
+	-- letter in the plaza; the district is the qualifier, sits under it, and
+	-- keeps the building style's own accent, which is world colour and not
+	-- chrome. The name is scaled under a ceiling rather than set at a size,
+	-- because a blackletter face sets wider than the Gotham this box was
+	-- measured for and clipping the tower's name is the one failure this plate
+	-- has: the ceiling stops a short name from ballooning to fill the slab.
+	local slab = plateGui(spawn, 300, 54, 6.5, 400, true)
+	local name =
+		plateLine(slab, UDim2.new(1, -14, 0.58, 0), UDim2.new(0, 7, 0, 3), PLATE.Display, 22, PLATE.Text, ctx.shortName)
+	name.TextScaled = true
+	local fit = Instance.new("UITextSizeConstraint")
+	fit.MaxTextSize = 22
+	fit.Parent = name
 
-	local label = Instance.new("TextLabel")
-	label.Size = UDim2.new(1, 0, 0.62, 0)
-	label.BackgroundColor3 = Color3.fromRGB(18, 18, 20)
-	label.BackgroundTransparency = 0.25
-	label.TextColor3 = Color3.fromRGB(255, 255, 255)
-	label.Font = Enum.Font.GothamBold
-	label.TextSize = 18
-	label.Text = ctx.shortName
-	label.Parent = bb
-
-	local sub = Instance.new("TextLabel")
-	sub.Size = UDim2.new(1, 0, 0.38, 0)
-	sub.Position = UDim2.new(0, 0, 0.62, 0)
-	sub.BackgroundColor3 = Color3.fromRGB(18, 18, 20)
-	sub.BackgroundTransparency = 0.25
-	sub.TextColor3 = style.accent
-	sub.Font = Enum.Font.GothamBold
-	sub.TextSize = 13
-	sub.Text = ctx.district
-	sub.Parent = bb
+	plateLine(slab, UDim2.new(1, -14, 0.32, 0), UDim2.new(0, 7, 0.6, 0), PLATE.Body, 13, style.accent, ctx.district)
 
 	buildCrown(folder, origin, style)
 end
@@ -2479,21 +2573,12 @@ local function buildEggRoost(parent, origin, style, ctx)
 	egg.CanCollide = false
 	egg.CastShadow = false
 
-	local board = Instance.new("BillboardGui")
-	board.Size = UDim2.new(0, 150, 0, 34)
-	board.StudsOffset = Vector3.new(0, 5.2, 0)
-	board.MaxDistance = 120
-	board.Parent = pedestal
-
-	local boardLabel = Instance.new("TextLabel")
-	boardLabel.Size = UDim2.new(1, 0, 1, 0)
-	boardLabel.BackgroundColor3 = Color3.fromRGB(18, 18, 20)
-	boardLabel.BackgroundTransparency = 0.35
-	boardLabel.TextColor3 = Color3.fromRGB(215, 235, 255)
-	boardLabel.Font = Enum.Font.GothamBold
-	boardLabel.TextSize = 15
-	boardLabel.Text = "EGG ROOST"
-	boardLabel.Parent = board
+	-- Lantern, the same gold the stall's sign wears, because the two counters in
+	-- this city that spend coins are the two counters that spend coins and the
+	-- theme gives one colour one meaning. What tells them apart is what they
+	-- stand on, not what colour they are.
+	local slab = plateGui(pedestal, 160, 34, 5.2, 120, true)
+	plateLine(slab, UDim2.new(1, 0, 1, 0), UDim2.new(0, 0, 0, 0), PLATE.Display, 17, PLATE.Lantern, "EGG ROOST")
 
 	local prompt = Instance.new("ProximityPrompt")
 	prompt.ActionText = "Eggs"
@@ -2658,22 +2743,14 @@ local function buildRoof(parent, origin, hole, style, isExit, ctx)
 	)
 	sign.CanCollide = false
 
-	local sg = Instance.new("SurfaceGui")
-	sg.Face = Enum.NormalId.Front
-	sg.CanvasSize = Vector2.new(600, 120)
-	sg.Parent = sign
-	local st = Instance.new("TextLabel")
-	st.Size = UDim2.new(1, 0, 1, 0)
-	st.BackgroundTransparency = 1
-	st.Font = Enum.Font.GothamBlack
-	st.TextScaled = true
-	st.TextColor3 = Color3.fromRGB(20, 20, 24)
 	-- The short name, not the full one. This is TextScaled on a plate 125 studs
 	-- wide and 10 tall, so every extra character costs height on a sign read
 	-- from the roof of the building three plots over; and a climber standing on
-	-- a roof already knows which district they are in.
-	st.Text = ctx.shortName
-	st.Parent = sg
+	-- a roof already knows which district they are in. Ink on a neon plate, so
+	-- the letters are the unlit part of a lit sign, which is the largest carved
+	-- lettering in the game and the one place the Display face gets to be huge
+	-- outside a hatch reveal.
+	carvedPlate(sign, 600, 120, PLATE.Display, PLATE.Ink, ctx.shortName)
 
 	local amb = Instance.new("PointLight")
 	amb.Brightness = 0.8
@@ -2882,21 +2959,11 @@ local function buildShop(parent, origin, style, entrySide, entryCell, ctx)
 		style.material
 	)
 
-	local sign = Instance.new("BillboardGui")
-	sign.Size = UDim2.new(0, 170, 0, 34)
-	sign.StudsOffset = Vector3.new(0, 3, 0)
-	sign.MaxDistance = 300
-	sign.Parent = canopy
-
-	local signLabel = Instance.new("TextLabel")
-	signLabel.Size = UDim2.new(1, 0, 1, 0)
-	signLabel.BackgroundColor3 = Color3.fromRGB(18, 18, 20)
-	signLabel.BackgroundTransparency = 0.25
-	signLabel.TextColor3 = Color3.fromRGB(255, 224, 130)
-	signLabel.Font = Enum.Font.GothamBold
-	signLabel.TextSize = 18
-	signLabel.Text = "UPGRADE SHOP"
-	signLabel.Parent = sign
+	-- Wider than it was by ten pixels, which is the blackletter face setting
+	-- wider than the Gotham the old box was measured for; the plate above the
+	-- roost took the same ten for the same reason.
+	local signSlab = plateGui(canopy, 180, 34, 3, 300, true)
+	plateLine(signSlab, UDim2.new(1, 0, 1, 0), UDim2.new(0, 0, 0, 0), PLATE.Display, 18, PLATE.Lantern, "UPGRADE SHOP")
 
 	for i, key in ipairs(pedestals) do
 		local def = Config.Shop.Upgrades[key]
@@ -2922,21 +2989,23 @@ local function buildShop(parent, origin, style, entrySide, entryCell, ctx)
 		orb.Shape = Enum.PartType.Ball
 		orb.CanCollide = false
 
-		local board = Instance.new("BillboardGui")
-		board.Size = UDim2.new(0, 130, 0, 40)
-		board.StudsOffset = Vector3.new(0, 4.4, 0)
-		board.MaxDistance = 90
-		board.Parent = pedestal
-
-		local boardLabel = Instance.new("TextLabel")
-		boardLabel.Size = UDim2.new(1, 0, 1, 0)
-		boardLabel.BackgroundColor3 = Color3.fromRGB(18, 18, 20)
-		boardLabel.BackgroundTransparency = 0.35
-		boardLabel.TextColor3 = def.Color
-		boardLabel.Font = Enum.Font.GothamBold
-		boardLabel.TextSize = 13
-		boardLabel.Text = def.Label .. "\n" .. table.concat(def.Costs, " / ")
-		boardLabel.Parent = board
+		-- No seam: a pedestal is a row inside the stall, and the sign over the
+		-- counter is what marks the door. The two lines were one string with a
+		-- newline in it, which meant the price wore the upgrade's accent; the
+		-- name keeps that accent, because it is the orb's colour and semantic,
+		-- and the ladder underneath it goes Lantern like every other coin
+		-- number in the game.
+		local boardSlab = plateGui(pedestal, 140, 42, 4.4, 90, false)
+		plateLine(boardSlab, UDim2.new(1, 0, 0.5, 0), UDim2.new(0, 0, 0, 3), PLATE.Body, 13, def.Color, def.Label)
+		plateLine(
+			boardSlab,
+			UDim2.new(1, 0, 0.4, 0),
+			UDim2.new(0, 0, 0.52, 0),
+			PLATE.Body,
+			12,
+			PLATE.Lantern,
+			table.concat(def.Costs, " / ")
+		)
 
 		local prompt = Instance.new("ProximityPrompt")
 		prompt.ActionText = "Buy"
@@ -3566,19 +3635,9 @@ local function buildSignpost(parent, origin, sign, style)
 		)
 		plate.CastShadow = false
 
-		local sg = Instance.new("SurfaceGui")
-		sg.Face = Enum.NormalId.Front
-		sg.CanvasSize = Vector2.new(440, 88)
-		sg.Parent = plate
-
-		local label = Instance.new("TextLabel")
-		label.Size = UDim2.new(1, 0, 1, 0)
-		label.BackgroundTransparency = 1
-		label.Font = Enum.Font.GothamBold
-		label.TextScaled = true
-		label.TextColor3 = Color3.fromRGB(38, 30, 22)
-		label.Text = arm.label
-		label.Parent = sg
+		-- Body, not the Display face the roof board wears: a climber painted
+		-- this, and a direction read at a walking pace is legibility work.
+		carvedPlate(plate, 440, 88, PLATE.Body, PLATE.Ink, arm.label)
 	end
 end
 
