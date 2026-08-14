@@ -11,6 +11,13 @@ local Config = require(ReplicatedStorage:WaitForChild("MazeConfig"))
 -- The shape of the roof zipline, shared with TraversalService so the cable this
 -- file draws and the curve that file rides are the same curve.
 local ZipPath = require(script.Parent:WaitForChild("ZipPath"))
+-- Player-facing names for the districts and the towers. Content, so it lives
+-- with the catalogues rather than in MazeConfig, and docs/LORE.MD is the source
+-- of truth for every word of it.
+local Lore = require(ReplicatedStorage:WaitForChild("Lore"))
+-- The shape of a section's street maze. Pure, and checked outside Roblox by
+-- tools/street: this file draws what that one decides and decides none of it.
+local StreetPlan = require(script.Parent:WaitForChild("StreetPlan"))
 
 local MazeGenerator = {}
 
@@ -318,6 +325,79 @@ local CFG = {
 	-- drop, which is why there is no LandingRamp any more.
 	SLIDE_LANDING_X = -80,
 	SLIDE_LANDING_Y = 2,
+
+	-- The street maze. Structural, so it lives here; what a playtest moves
+	-- (braid, wall height, how many props and signs) is in Config.World and
+	-- lands on these through refreshFromConfig.
+	--
+	-- The target is not a cell size, it is the size the subdivision aims at.
+	-- Gridlines have to fall exactly on every plot boundary or a tower gets a
+	-- walkable ring around it that no wall can close, so each strip between two
+	-- boundaries is cut into round(width / target) cells and the real sizes come
+	-- out between 37.33 and 44.33. One constant produces all of it and it
+	-- survives a change to STREET, FACADE_OUTSET or PLOT_COLS.
+	STREET_CELL_TARGET = 44,
+	STREET_ENABLED = true,
+	STREET_BRAID = 0.8,
+	STREET_BLOCK_PROPS = 30,
+	STREET_TRIM_PROPS = 50,
+	STREET_SIGNPOSTS = 16,
+	STREET_SIGN_ARMS = 3,
+	STREET_WALL_HEIGHT = 12,
+	STREET_WALL_THICKNESS = 2,
+	-- Growth on the reserved apron around each door, applied along the facade
+	-- and outward but never inward: the inner edge is pinned to the tower's own
+	-- exterior boundary, and a margin inward is a room overlapping the tower.
+	STREET_APRON_MARGIN = 6,
+	-- How high above the wall top the zip cable is still treated as low, and how
+	-- finely it is sampled. The cable descends linearly from 201 to 4 over a
+	-- 1100-stud wrap, so its last eight per cent runs along the entry facade
+	-- under wall height, which is two or three cells further along than anything
+	-- the door alone reserves. A rider is anchored and driven by CFrame: a wall
+	-- there is not scenery, they pass through it and step out somewhere else.
+	STREET_ZIP_CLEARANCE = 8,
+	STREET_ZIP_SAMPLES = 256,
+	-- A cable is a line with clearance, not a point. Half a wall plus a stud.
+	STREET_CABLE_MARGIN = 3,
+	-- The slide's landing, reserved in every section including the first, which
+	-- never sees one. Grown from the 70-stud pad because the slide's tail
+	-- descends into it across the west edge of the ground.
+	STREET_LANDING_MARGIN = 40,
+
+	-- An overlook. Deck well above the wall top so the maze reads from up there,
+	-- and glass on every side so it reads and nothing else: one stair up, the
+	-- same stair down. The dome is a prism of flat panels rather than a Ball,
+	-- which has a sphere collision primitive and ejects a character instead of
+	-- containing one.
+	STREET_DOME_DECK_Y = 26,
+	STREET_DOME_HEIGHT = 13,
+	STREET_DOME_INSET = 3,
+	STREET_DOME_GLASS = 0.4,
+	-- The flight and its hole are the tower stairwell's arrangement at a
+	-- different scale, and for the same reason: 26 studs of climb needs more run
+	-- than a cell has left over beside a deck, so the flight goes under the deck
+	-- and comes up through a hole in it. holeAlong is sized off the headroom
+	-- exactly as buildStairs sizes its own, so the covered part of the flight is
+	-- the part a player can stand up in.
+	STREET_STAIR_RISER = 1.3,
+	STREET_STAIR_WIDTH = 8,
+	STREET_STAIR_HEADROOM = 8,
+	STREET_STAIR_HOLE_MARGIN = 1,
+
+	STREET_PROP_HEIGHT = 15,
+	STREET_TRIM_HEIGHT = 7,
+
+	STREET_SIGN_HEIGHT = 11,
+
+	-- The street's own random stream, and the reason every tower in the city
+	-- stayed exactly where it was when the street arrived. The streams already
+	-- in this file are `seed + section*7919` for a section, `+ k*104729` for
+	-- k in 1..6 for a building, `buildingSeed + level*31` for a floor and
+	-- `buildingSeed + 61291` for the exterior relief, so the largest offset any
+	-- of them reaches is 689665. Colliding with one of those from here needs
+	-- (s' - s) * 7919 = 15485863 - d for some d under 689665, so two sections
+	-- 1868 apart. Nobody is building 1868 sections.
+	STREET_SEED_OFFSET = 15485863,
 }
 
 local LEVEL_HEIGHT = CFG.WALL_HEIGHT + CFG.SLAB
@@ -363,6 +443,14 @@ local function refreshFromConfig()
 	CFG.COIN_PATH_PER_LEVEL = setting(w.PathCoinsPerLevel, CFG.COIN_PATH_PER_LEVEL)
 	CFG.POWERUPS_PER_LEVEL = setting(w.PowerupsPerLevel, CFG.POWERUPS_PER_LEVEL)
 	CFG.ROOF_ARC_COINS = setting(w.RoofArcCoins, CFG.ROOF_ARC_COINS)
+	CFG.STREET_ENABLED = setting(w.StreetMazeEnabled, CFG.STREET_ENABLED)
+	CFG.STREET_BRAID = setting(w.StreetBraidFraction, CFG.STREET_BRAID)
+	CFG.STREET_WALL_HEIGHT = setting(w.StreetWallHeight, CFG.STREET_WALL_HEIGHT)
+	CFG.STREET_BLOCK_PROPS = setting(w.StreetBlockProps, CFG.STREET_BLOCK_PROPS)
+	CFG.STREET_TRIM_PROPS = setting(w.StreetTrimProps, CFG.STREET_TRIM_PROPS)
+	CFG.STREET_SIGNPOSTS = setting(w.StreetSignposts, CFG.STREET_SIGNPOSTS)
+	CFG.STREET_SIGN_ARMS = setting(w.StreetSignArms, CFG.STREET_SIGN_ARMS)
+	CFG.STREET_DOME_DECK_Y = setting(w.StreetDomeDeckHeight, CFG.STREET_DOME_DECK_Y)
 	ROOF_Y = CFG.LEVELS * LEVEL_HEIGHT
 end
 
@@ -476,6 +564,17 @@ local STYLES = {
 	},
 }
 
+-- The other half of Lore.towers' check, run from this side because that file is
+-- in ReplicatedStorage and this one is not: requiring MazeGenerator from Lore to
+-- validate a theme would put the whole of world generation into every client.
+-- A warning rather than an error, and one per style: a tower with no Codex line
+-- is still a tower, where a server that refuses to start is no city at all.
+for _, style in ipairs(STYLES) do
+	if Lore.towers[style.theme] == nil then
+		warn(string.format("MazeGenerator: style %q has theme %q with no Lore.towers entry", style.name, style.theme))
+	end
+end
+
 -- ============================================================
 -- Geometry helpers
 -- ============================================================
@@ -494,6 +593,23 @@ local function makePart(parent, name, cf, size, color, material)
 	return p
 end
 
+-- makePart plus the one assignment that puts a part in the Wall Walker's
+-- collision group. buildWalls has its own `wallPart` closure doing the same
+-- thing over `parent`, `origin`, `wallY` and `style`, and it keeps it: that
+-- function is invariant 7's machinery and the smallest diff there is the safest
+-- one. This is for the street, whose walls are the second family of thing a
+-- phasing player may cross.
+--
+-- What must NOT come through here is a boundary. The street's perimeter ring
+-- and every part of an overlook are built by their own functions at Default,
+-- deliberately, because past the perimeter is the void between two section
+-- grounds and past an overlook's glass is the whole maze seen from above.
+local function mazeWallPart(parent, name, cf, size, color, material)
+	local part = makePart(parent, name, cf, size, color, material)
+	part.CollisionGroup = MazeGenerator.WALL_GROUP
+	return part
+end
+
 -- Every tagged part must carry Section/Building/Level: runtime services key
 -- all of their lookups off those three attributes, so a tag applied without
 -- them is invisible to whichever service consumes it. Attributes are set
@@ -508,6 +624,29 @@ end
 
 local function cellCenter(x, z)
 	return Vector3.new((x - 0.5) * CFG.CELL, 0, (z - 0.5) * CFG.CELL)
+end
+
+-- The u of a door along the face it is cut in, and the point on the facade
+-- plane it sits at. Both are what buildFacade, buildShop and buildZipline each
+-- work out for themselves off the same two values; the street needs them too
+-- and gets them here rather than by a fourth derivation.
+local function faceU(side, cell)
+	local horizontal = (side == "north" or side == "south")
+	local centre = cellCenter(cell.x, cell.z)
+	return horizontal and centre.X or centre.Z
+end
+
+local function doorWorldPoint(origin, side, cell)
+	local u = faceU(side, cell)
+	local out = CFG.FACADE_OUTSET + CFG.FACADE_THICKNESS
+	if side == "north" then
+		return origin + Vector3.new(u, 0, -out)
+	elseif side == "south" then
+		return origin + Vector3.new(u, 0, FZ + out)
+	elseif side == "west" then
+		return origin + Vector3.new(-out, 0, u)
+	end
+	return origin + Vector3.new(FX + out, 0, u)
 end
 
 local function edgeCell(side, i)
@@ -2267,21 +2406,37 @@ local function buildFacade(parent, origin, style, entrySide, entryCell, ctx)
 	-- of how far up the tower the player has climbed.
 	tagWithContext(spawn, "TowerStart", ctx.section, ctx.building, 0)
 
+	-- Two lines rather than one, and wider than it was: the name went from six
+	-- characters to about thirty when the towers stopped being called S1-E2, and
+	-- a fixed TextSize in a fixed box clips rather than shrinks. The tower is the
+	-- thing being pointed at, so it is the larger line; the district is the
+	-- qualifier and sits under it.
 	local bb = Instance.new("BillboardGui")
-	bb.Size = UDim2.new(0, 190, 0, 42)
-	bb.StudsOffset = Vector3.new(0, 6, 0)
+	bb.Size = UDim2.new(0, 300, 0, 54)
+	bb.StudsOffset = Vector3.new(0, 6.5, 0)
 	bb.MaxDistance = 400
 	bb.Parent = spawn
 
 	local label = Instance.new("TextLabel")
-	label.Size = UDim2.new(1, 0, 1, 0)
+	label.Size = UDim2.new(1, 0, 0.62, 0)
 	label.BackgroundColor3 = Color3.fromRGB(18, 18, 20)
 	label.BackgroundTransparency = 0.25
 	label.TextColor3 = Color3.fromRGB(255, 255, 255)
 	label.Font = Enum.Font.GothamBold
 	label.TextSize = 18
-	label.Text = towerName
+	label.Text = ctx.shortName
 	label.Parent = bb
+
+	local sub = Instance.new("TextLabel")
+	sub.Size = UDim2.new(1, 0, 0.38, 0)
+	sub.Position = UDim2.new(0, 0, 0.62, 0)
+	sub.BackgroundColor3 = Color3.fromRGB(18, 18, 20)
+	sub.BackgroundTransparency = 0.25
+	sub.TextColor3 = style.accent
+	sub.Font = Enum.Font.GothamBold
+	sub.TextSize = 13
+	sub.Text = ctx.district
+	sub.Parent = bb
 
 	buildCrown(folder, origin, style)
 end
@@ -2513,7 +2668,11 @@ local function buildRoof(parent, origin, hole, style, isExit, ctx)
 	st.Font = Enum.Font.GothamBlack
 	st.TextScaled = true
 	st.TextColor3 = Color3.fromRGB(20, 20, 24)
-	st.Text = towerName
+	-- The short name, not the full one. This is TextScaled on a plate 125 studs
+	-- wide and 10 tall, so every extra character costs height on a sign read
+	-- from the roof of the building three plots over; and a climber standing on
+	-- a roof already knows which district they are in.
+	st.Text = ctx.shortName
 	st.Parent = sg
 
 	local amb = Instance.new("PointLight")
@@ -2812,7 +2971,12 @@ local function buildShop(parent, origin, style, entrySide, entryCell, ctx)
 		tagWithContext(pedestal, "ShopItem", ctx.section, ctx.building, 0)
 	end
 
-	return folder
+	-- Where the counter actually ended up and how wide it actually is, handed
+	-- back rather than recomputed by the street. `baseWidth` is a function of
+	-- how many things the shop sells, which CLAUDE.md calls the only place a
+	-- config edit changes geometry: a street that reserved a literal 31 studs
+	-- would run a wall through the counter the day a fourth ability shipped.
+	return folder, shopU, (baseWidth + 2) / 2
 end
 
 local function buildZipline(parent, origin, entrySide, entryCell, ctx)
@@ -2922,7 +3086,12 @@ local function buildZipline(parent, origin, entrySide, entryCell, ctx)
 	)
 	tagWithContext(landing, "ZipExit", ctx.section, ctx.building, 0)
 
-	return folder
+	-- The curve goes back out with the folder. The street has to reserve the
+	-- ground under the last stretch of it, and reading the curve generation
+	-- already fixed is the only way to do that without drawing anything
+	-- (invariant 6): the alternative is approximating a corkscrewed wrap from
+	-- the door position, which is wrong on exactly the doors near a corner.
+	return folder, path
 end
 
 -- ============================================================
@@ -2932,7 +3101,17 @@ end
 local function buildBuilding(sectionFolder, origin, sectionIndex, buildingIndex, isExit, seed)
 	local rng = Random.new(seed)
 	local style = STYLES[((sectionIndex + buildingIndex) % #STYLES) + 1]
-	local towerName = string.format("S%d-%s%d", sectionIndex, style.name:sub(1, 1), buildingIndex)
+
+	-- A tower is named for what it was before the Maze took it, qualified by the
+	-- district it stands in. Style index is ((section + building) % 6) + 1 and
+	-- building runs 1..6, so all six themes appear exactly once in every
+	-- section: the short name alone is unambiguous to somebody standing in the
+	-- district, which is why a signpost arm and the roof sign can use it. The
+	-- full name is for the plaza billboard, where it has to be unambiguous
+	-- across the whole city.
+	local district = Lore.districts[((sectionIndex - 1) % #Lore.districts) + 1]
+	local shortName = "The " .. style.theme
+	local towerName = shortName .. ", " .. district
 
 	local folder = Instance.new("Folder")
 	folder.Name = "Building_" .. buildingIndex
@@ -2940,6 +3119,9 @@ local function buildBuilding(sectionFolder, origin, sectionIndex, buildingIndex,
 	folder:SetAttribute("Building", buildingIndex)
 	folder:SetAttribute("Style", style.name)
 	folder:SetAttribute("TowerName", towerName)
+	folder:SetAttribute("TowerShortName", shortName)
+	folder:SetAttribute("TowerTheme", style.theme)
+	folder:SetAttribute("District", district)
 	folder:SetAttribute("IsExit", isExit)
 	folder:SetAttribute("EnemyType", style.enemy)
 	folder:SetAttribute("CompletionLightColor", style.accent)
@@ -2958,6 +3140,8 @@ local function buildBuilding(sectionFolder, origin, sectionIndex, buildingIndex,
 		section = sectionIndex,
 		building = buildingIndex,
 		towerName = towerName,
+		shortName = shortName,
+		district = district,
 		level = 0,
 		-- Carried so anything added after the maze baseline can derive its own
 		-- random stream instead of drawing from `rng` and moving the city.
@@ -2968,7 +3152,7 @@ local function buildBuilding(sectionFolder, origin, sectionIndex, buildingIndex,
 	local entryCell = edgeCell(entrySide, rng:NextInteger(2, sideRunLength(entrySide) - 1))
 
 	buildFacade(folder, origin, style, entrySide, entryCell, ctx)
-	buildShop(folder, origin, style, entrySide, entryCell, ctx)
+	local _, shopCentreU, shopHalfU = buildShop(folder, origin, style, entrySide, entryCell, ctx)
 
 	-- The level loop below reassigns both of these as it spirals up, so the
 	-- ground entry has to be kept if anything after the loop wants it. The
@@ -2989,8 +3173,559 @@ local function buildBuilding(sectionFolder, origin, sectionIndex, buildingIndex,
 	end
 
 	buildRoof(folder, origin, pendingHole, style, isExit, ctx)
-	buildZipline(folder, origin, groundEntrySide, groundEntryCell, ctx)
-	return folder, style
+	local _, zipPath = buildZipline(folder, origin, groundEntrySide, groundEntryCell, ctx)
+
+	folder:SetAttribute("DoorSide", groundEntrySide)
+	local doorPoint = doorWorldPoint(origin, groundEntrySide, groundEntryCell)
+	folder:SetAttribute("DoorWorldX", doorPoint.X)
+	folder:SetAttribute("DoorWorldZ", doorPoint.Z)
+
+	-- The record is generation talking to itself inside one module, so it is a
+	-- return value rather than an attribute: CLAUDE.md's attribute rule governs
+	-- the generation-to-runtime line, and no service reads any of this. The
+	-- attributes above are for a human with an explorer open during a Play
+	-- session, which is the only way to eyeball generated geometry at all.
+	return folder,
+		style,
+		{
+			index = buildingIndex,
+			name = shortName,
+			origin = origin,
+			doorSide = groundEntrySide,
+			doorCell = groundEntryCell,
+			door = doorPoint,
+			shopCentreU = shopCentreU,
+			shopHalfU = shopHalfU,
+			zipPath = zipPath,
+		}
+end
+
+-- ============================================================
+-- Street
+-- ============================================================
+-- The ground between the towers, which until now was one asphalt slab and
+-- nothing else. StreetPlan decides the shape; everything here draws it.
+--
+-- Three things are worth knowing before changing any of it.
+--
+-- **It adds no tag, no prompt and no service.** Nothing in this section is read
+-- at runtime by anything. A signpost is a painted plate, a house is a box, an
+-- overlook is a stair and some glass. The instinct on reading it will be to tag
+-- the overlooks; there is nothing that would consume the tag.
+--
+-- **Nothing here sells anything.** The only counter in the city that trades is
+-- the lit one buildShop makes, with its canopy, its neon orbs and its billboard.
+-- A shuttered shopfront gets none of the three, and that is the whole of the
+-- distinction a player has to read at a glance. docs/LORE.MD Section 10 states
+-- it as a rule because it is one.
+--
+-- **Containment is split three ways** and invariant 7 is why. Street walls go
+-- through mazeWallPart into the Wall Walker's group, because phasing across a
+-- street strands nobody. The perimeter ring and every part of an overlook are
+-- built by their own functions at Default: past the perimeter is 380 studs of
+-- void between two section grounds, and past an overlook's glass is the maze
+-- seen from above, which is the one thing an overlook must never be a way into.
+
+local function streetWallColor(style)
+	return style.skin:Lerp(Color3.fromRGB(150, 150, 156), 0.35)
+end
+
+local function buildStreetWalls(parent, origin, plan, style)
+	local color = streetWallColor(style)
+	for _, w in ipairs(plan.walls) do
+		mazeWallPart(
+			parent,
+			"StreetWall",
+			CFrame.new(origin + Vector3.new(w.x, CFG.STREET_WALL_HEIGHT / 2, w.z)),
+			Vector3.new(w.sizeX, CFG.STREET_WALL_HEIGHT, w.sizeZ),
+			color,
+			Enum.Material.Concrete
+		)
+	end
+end
+
+-- Default collision group, deliberately, and its own function so that stays a
+-- property of what built it rather than of a flag somebody has to remember.
+-- Four parts rather than one per cell edge: it is a boundary, not a maze.
+local function buildStreetPerimeter(parent, origin, plan, style)
+	for _, w in ipairs(plan.perimeter) do
+		local part = makePart(
+			parent,
+			"StreetEdge",
+			CFrame.new(origin + Vector3.new(w.x, CFG.STREET_WALL_HEIGHT / 2, w.z)),
+			Vector3.new(w.sizeX, CFG.STREET_WALL_HEIGHT, w.sizeZ),
+			style.skin:Lerp(Color3.fromRGB(20, 20, 24), 0.5),
+			Enum.Material.Slate
+		)
+		part.CastShadow = false
+	end
+end
+
+-- One overlook per tower: a flight up, a deck, and glass on every side. The
+-- plan has already made its cell a leaf with exactly one way in, so the seal
+-- here is the visible half of a rule the graph already enforces.
+--
+-- What holds is a box of flat glass panels, not the Ball on top of it. A Ball
+-- part has a sphere collision primitive: half-sink a collidable one into a deck
+-- and it ejects whoever stands there rather than containing them, which is the
+-- opposite of what it is for. So the sphere is scenery and the box is the seal.
+--
+-- The flight and the hole it comes up through are the tower stairwell's own
+-- arrangement, for the same reason it exists there: 26 studs of climb needs
+-- more run than one cell has left over beside a deck, so the flight goes under
+-- the deck and the hole is sized off headroom.
+local function buildOverlook(parent, origin, dome, style)
+	local folder = Instance.new("Folder")
+	folder.Name = "Overlook_" .. dome.building
+	folder.Parent = parent
+
+	local cx = (dome.minX + dome.maxX) / 2
+	local cz = (dome.minZ + dome.maxZ) / 2
+	local deckY = CFG.STREET_DOME_DECK_Y
+	-- Square, off the narrower of the two cell dimensions, so an overlook is the
+	-- same object wherever the grid put it rather than one stretched by whichever
+	-- strip its cell fell in.
+	local span = math.min(dome.maxX - dome.minX, dome.maxZ - dome.minZ) - CFG.STREET_DOME_INSET * 2
+
+	-- `a` runs along the flight, +a at the entrance edge where it starts on the
+	-- ground and -a at the far edge where it arrives at deck height. `l` is
+	-- across it. The entrance side is the one edge the plan left unsealed, so
+	-- the way in from the street and the way up are the same opening.
+	local dirX = (dome.entranceSide == "east") and 1 or ((dome.entranceSide == "west") and -1 or 0)
+	local dirZ = (dome.entranceSide == "south") and 1 or ((dome.entranceSide == "north") and -1 or 0)
+	local function place(a, l)
+		if dirX ~= 0 then
+			return Vector3.new(cx + dirX * a, 0, cz + l)
+		end
+		return Vector3.new(cx + l, 0, cz + dirZ * a)
+	end
+	local function extent(alongLen, acrossLen)
+		if dirX ~= 0 then
+			return Vector3.new(alongLen, 1, acrossLen)
+		end
+		return Vector3.new(acrossLen, 1, alongLen)
+	end
+
+	local steps = math.ceil(deckY / CFG.STREET_STAIR_RISER)
+	local riser = deckY / steps
+	local tread = span / steps
+
+	-- Solid blocks from the ground to each step's top, the way buildStairs makes
+	-- them, so there is nothing to fall through underneath.
+	for i = 0, steps - 1 do
+		local h = (i + 1) * riser
+		local a = span / 2 - (i + 0.5) * tread
+		local at = place(a, 0)
+		local size = (dirX ~= 0) and Vector3.new(tread, h, CFG.STREET_STAIR_WIDTH)
+			or Vector3.new(CFG.STREET_STAIR_WIDTH, h, tread)
+		makePart(
+			folder,
+			"OverlookStep" .. i,
+			CFrame.new(origin + Vector3.new(at.X, h / 2, at.Z)),
+			size,
+			style.skin,
+			Enum.Material.Slate
+		)
+	end
+
+	-- The deck, and the hole the flight comes up through. Sized off headroom the
+	-- same way the tower's stairwell hole is: the flight is covered for exactly
+	-- as long as a player can stand up under it, and open from there to the top.
+	local holeAlong = math.min(span, span * (1 + CFG.STREET_STAIR_HEADROOM) / deckY)
+	local holeWide = CFG.STREET_STAIR_WIDTH + 2 * CFG.STREET_STAIR_HOLE_MARGIN
+	local flank = (span - holeWide) / 2
+
+	local function slab(name, aCentre, alongLen, lCentre, acrossLen)
+		if alongLen <= 0 or acrossLen <= 0 then
+			return
+		end
+		local at = place(aCentre, lCentre)
+		makePart(
+			folder,
+			name,
+			CFrame.new(origin + Vector3.new(at.X, deckY, at.Z)),
+			extent(alongLen, acrossLen),
+			style.trim,
+			Enum.Material.Slate
+		)
+	end
+
+	slab("OverlookDeck", span / 2 - (span - holeAlong) / 2, span - holeAlong, 0, span)
+	slab("OverlookDeckFlank", -span / 2 + holeAlong / 2, holeAlong, -(holeWide + flank) / 2, flank)
+	slab("OverlookDeckFlank", -span / 2 + holeAlong / 2, holeAlong, (holeWide + flank) / 2, flank)
+
+	-- Glass on every side and a lid. Default collision group, all of it: this is
+	-- the seal on "you may see the way out, you may not take it from up there",
+	-- and a Wall Walker phasing through it would be the one way to break that.
+	-- Flat panels rather than a Ball, which has a sphere collision primitive and
+	-- ejects whoever stands in it instead of containing them.
+	local half = span / 2
+	local glass = CFG.STREET_DOME_GLASS
+	local panels = {
+		{ x = cx, z = cz - half, sx = span + glass, sz = glass },
+		{ x = cx, z = cz + half, sx = span + glass, sz = glass },
+		{ x = cx - half, z = cz, sx = glass, sz = span + glass },
+		{ x = cx + half, z = cz, sx = glass, sz = span + glass },
+	}
+	for _, pane in ipairs(panels) do
+		local panel = makePart(
+			folder,
+			"OverlookGlass",
+			CFrame.new(origin + Vector3.new(pane.x, deckY + CFG.STREET_DOME_HEIGHT / 2 + 0.5, pane.z)),
+			Vector3.new(pane.sx, CFG.STREET_DOME_HEIGHT, pane.sz),
+			style.glass,
+			Enum.Material.Glass
+		)
+		panel.Transparency = 0.6
+		panel.Reflectance = 0.15
+		panel.CastShadow = false
+	end
+
+	local lid = makePart(
+		folder,
+		"OverlookCap",
+		CFrame.new(origin + Vector3.new(cx, deckY + CFG.STREET_DOME_HEIGHT + 0.8, cz)),
+		Vector3.new(span + 1.6, 0.6, span + 1.6),
+		style.trim,
+		Enum.Material.Metal
+	)
+	lid.CastShadow = false
+
+	-- The dome the thing is named for, and the one part of it that is only a
+	-- silhouette: not collidable, so it can never be the surface somebody stands
+	-- on or the one a phasing player is stopped by. The glass box below is what
+	-- actually holds.
+	local cupolaSize = span * 0.45
+	local cupola = makePart(
+		folder,
+		"OverlookDome",
+		-- Resting on the lid rather than wrapped around the box. A sphere wide
+		-- enough to envelop the glass reaches below the deck it is standing on.
+		CFrame.new(origin + Vector3.new(cx, deckY + CFG.STREET_DOME_HEIGHT + 1.1 + cupolaSize / 2, cz)),
+		Vector3.new(cupolaSize, cupolaSize, cupolaSize),
+		style.glass,
+		Enum.Material.Glass
+	)
+	cupola.Shape = Enum.PartType.Ball
+	cupola.CanCollide = false
+	cupola.CanQuery = false
+	cupola.CanTouch = false
+	cupola.Transparency = 0.72
+	cupola.Reflectance = 0.2
+	cupola.CastShadow = false
+
+	return folder
+end
+
+-- Homes and shuttered shopfronts. A block prop fills its cell, which is why the
+-- plan draws no wall on a blocked cell's edge: the house is the boundary. No
+-- light, no billboard, no prompt, no name.
+local function buildBlockProp(parent, origin, prop, style, rng)
+	local width = prop.maxX - prop.minX
+	local depth = prop.maxZ - prop.minZ
+	local cx = (prop.minX + prop.maxX) / 2
+	local cz = (prop.minZ + prop.maxZ) / 2
+	local height = CFG.STREET_PROP_HEIGHT + prop.variant * 2
+
+	local body = makePart(
+		parent,
+		"StreetHouse",
+		CFrame.new(origin + Vector3.new(cx, height / 2, cz)),
+		Vector3.new(width, height, depth),
+		style.skin:Lerp(Color3.fromRGB(110, 104, 96), 0.4 + prop.variant * 0.08),
+		(prop.variant % 2 == 0) and Enum.Material.Brick or Enum.Material.Concrete
+	)
+	body.CollisionGroup = "Default"
+
+	-- A roof course and a sealed door, which is the whole of what makes it read
+	-- as somewhere people used to live rather than as a block.
+	local roof = makePart(
+		parent,
+		"StreetHouseRoof",
+		CFrame.new(origin + Vector3.new(cx, height + 0.9, cz)),
+		Vector3.new(width + 2, 1.8, depth + 2),
+		style.trim:Lerp(Color3.fromRGB(60, 58, 62), 0.5),
+		Enum.Material.Slate
+	)
+	roof.CastShadow = false
+
+	local side = rng:NextInteger(0, 3)
+	local ax = (side == 0 and 1) or (side == 2 and -1) or 0
+	local az = (side == 1 and 1) or (side == 3 and -1) or 0
+	local door = makePart(
+		parent,
+		"StreetHouseDoor",
+		CFrame.new(origin + Vector3.new(cx + ax * (width / 2 + 0.1), 4.5, cz + az * (depth / 2 + 0.1))),
+		(ax ~= 0) and Vector3.new(0.4, 9, 6) or Vector3.new(6, 9, 0.4),
+		Color3.fromRGB(52, 42, 34),
+		Enum.Material.WoodPlanks
+	)
+	door.CanCollide = false
+	door.CastShadow = false
+end
+
+-- Lamp posts, planters and crates. Unlike a house these stand in an open cell,
+-- so they narrow a street rather than closing it and nothing has to be
+-- re-checked for connectivity.
+local function buildTrimProp(parent, origin, prop, style)
+	if prop.variant == 1 then
+		local post = makePart(
+			parent,
+			"StreetLampPost",
+			CFrame.new(origin + Vector3.new(prop.x, CFG.STREET_TRIM_HEIGHT / 2, prop.z)),
+			Vector3.new(0.6, CFG.STREET_TRIM_HEIGHT, 0.6),
+			Color3.fromRGB(42, 44, 50),
+			Enum.Material.Metal
+		)
+		post.CastShadow = false
+		local head = makePart(
+			parent,
+			"StreetLamp",
+			CFrame.new(origin + Vector3.new(prop.x, CFG.STREET_TRIM_HEIGHT + 0.6, prop.z)),
+			Vector3.new(1.8, 1.2, 1.8),
+			Color3.fromRGB(255, 226, 170),
+			Enum.Material.Neon
+		)
+		head.CastShadow = false
+		local light = Instance.new("PointLight")
+		light.Brightness = 0.7
+		light.Range = 34
+		light.Color = Color3.fromRGB(255, 226, 170)
+		-- Off, and not negotiable at this count. Config.World.LampShadows governs
+		-- the per-floor lamps, which light one enclosed room each; a street lamp
+		-- is in line of sight of most of a district.
+		light.Shadows = false
+		light.Parent = head
+	elseif prop.variant == 2 then
+		makePart(
+			parent,
+			"StreetPlanter",
+			CFrame.new(origin + Vector3.new(prop.x, 1.2, prop.z)),
+			Vector3.new(5, 2.4, 5),
+			style.trim:Lerp(Color3.fromRGB(80, 78, 74), 0.55),
+			Enum.Material.Concrete
+		)
+		local growth = makePart(
+			parent,
+			"StreetPlanterGrowth",
+			CFrame.new(origin + Vector3.new(prop.x, 3, prop.z)),
+			Vector3.new(4.2, 1.2, 4.2),
+			Color3.fromRGB(74, 104, 62),
+			Enum.Material.Grass
+		)
+		growth.CastShadow = false
+	elseif prop.variant == 3 then
+		makePart(
+			parent,
+			"StreetCrates",
+			CFrame.new(origin + Vector3.new(prop.x, 1.6, prop.z)) * CFrame.Angles(0, math.rad(prop.rotation), 0),
+			Vector3.new(4, 3.2, 3.4),
+			Color3.fromRGB(96, 74, 50),
+			Enum.Material.WoodPlanks
+		)
+	else
+		local bench = makePart(
+			parent,
+			"StreetBench",
+			CFrame.new(origin + Vector3.new(prop.x, 1.5, prop.z)) * CFrame.Angles(0, math.rad(prop.rotation), 0),
+			Vector3.new(6, 0.5, 2),
+			Color3.fromRGB(88, 68, 46),
+			Enum.Material.WoodPlanks
+		)
+		bench.CastShadow = false
+	end
+end
+
+-- A climber put these up, which is the lore and also the reason they are plain:
+-- a post and one plate per tower named, each plate turned to face the way it
+-- points. The arrow is in the text rather than in geometry, so a plate is one
+-- part and one SurfaceGui however many towers a post names.
+local SIGN_TURN = { north = 180, south = 0, east = 270, west = 90 }
+
+local function buildSignpost(parent, origin, sign, style)
+	local post = makePart(
+		parent,
+		"Signpost",
+		CFrame.new(origin + Vector3.new(sign.x, CFG.STREET_SIGN_HEIGHT / 2, sign.z)),
+		Vector3.new(0.7, CFG.STREET_SIGN_HEIGHT, 0.7),
+		Color3.fromRGB(58, 46, 34),
+		Enum.Material.WoodPlanks
+	)
+	post.CastShadow = false
+
+	for i, arm in ipairs(sign.arms) do
+		local height = CFG.STREET_SIGN_HEIGHT - 1.4 - (i - 1) * 2.6
+		local turn = math.rad(SIGN_TURN[arm.side] or 0)
+		local plate = makePart(
+			parent,
+			"SignPlate",
+			CFrame.new(origin + Vector3.new(sign.x, height, sign.z)) * CFrame.Angles(0, turn, 0) * CFrame.new(0, 0, -5),
+			Vector3.new(11, 2.2, 0.3),
+			style.trim:Lerp(Color3.fromRGB(228, 216, 188), 0.6),
+			Enum.Material.WoodPlanks
+		)
+		plate.CastShadow = false
+
+		local sg = Instance.new("SurfaceGui")
+		sg.Face = Enum.NormalId.Front
+		sg.CanvasSize = Vector2.new(440, 88)
+		sg.Parent = plate
+
+		local label = Instance.new("TextLabel")
+		label.Size = UDim2.new(1, 0, 1, 0)
+		label.BackgroundTransparency = 1
+		label.Font = Enum.Font.GothamBold
+		label.TextScaled = true
+		label.TextColor3 = Color3.fromRGB(38, 30, 22)
+		label.Text = arm.label
+		label.Parent = sg
+	end
+end
+
+-- The apron: the spawn pad, the shop counter and the zipline's landing are all
+-- on one face, so they are one reserved room and not three. The inner edge is
+-- pinned to the tower's exterior boundary rather than given the margin, because
+-- a margin inward is a room that overlaps the tower.
+local function apronRect(record)
+	local u = faceU(record.doorSide, record.doorCell)
+	local padHalf = (CFG.DOOR_WIDTH + 6) / 2
+	local zipHalf = (CFG.ZIP_PAD + 8) / 2
+
+	local uMin = math.min(u - padHalf, record.shopCentreU - record.shopHalfU, u - zipHalf) - CFG.STREET_APRON_MARGIN
+	local uMax = math.max(u + padHalf, record.shopCentreU + record.shopHalfU, u + zipHalf) + CFG.STREET_APRON_MARGIN
+	local vMin = CFG.FACADE_OUTSET + CFG.FACADE_THICKNESS
+	local vMax = CFG.ZIP_OUTSET + zipHalf + CFG.STREET_APRON_MARGIN
+
+	local ox, oz = record.origin.X, record.origin.Z
+	if record.doorSide == "north" then
+		return { minX = ox + uMin, maxX = ox + uMax, minZ = oz - vMax, maxZ = oz - vMin }
+	elseif record.doorSide == "south" then
+		return { minX = ox + uMin, maxX = ox + uMax, minZ = oz + FZ + vMin, maxZ = oz + FZ + vMax }
+	elseif record.doorSide == "west" then
+		return { minX = ox - vMax, maxX = ox - vMin, minZ = oz + uMin, maxZ = oz + uMax }
+	end
+	return { minX = ox + FX + vMin, maxX = ox + FX + vMax, minZ = oz + uMin, maxZ = oz + uMax }
+end
+
+-- Every sample of the zip curve that runs below wall height plus clearance. A
+-- pure read of a curve generation has already fixed, which is what lets the
+-- street reserve the ground under it without drawing anything (invariant 6).
+local function zipLowSamples(path)
+	local ceiling = CFG.STREET_WALL_HEIGHT + CFG.STREET_ZIP_CLEARANCE
+	local points = {}
+	for i = 0, CFG.STREET_ZIP_SAMPLES do
+		local p = ZipPath.pointAt(path, i / CFG.STREET_ZIP_SAMPLES)
+		if p.Y < ceiling then
+			points[#points + 1] = { x = p.X, z = p.Z }
+		end
+	end
+	return points
+end
+
+local function buildStreet(sectionFolder, sectionOrigin, sectionIndex, records, seed)
+	local folder = Instance.new("Folder")
+	folder.Name = "Street"
+	folder:SetAttribute("Section", sectionIndex)
+	folder.Parent = sectionFolder
+
+	local groundW = CFG.PLOT_COLS * PLOT_SPAN_X + 240
+	local groundD = CFG.PLOT_ROWS * PLOT_SPAN_Z + 240
+
+	local plots, buildings = {}, {}
+	for _, record in ipairs(records) do
+		local ox, oz = record.origin.X - sectionOrigin.X, record.origin.Z - sectionOrigin.Z
+		local box = {
+			minX = ox - CFG.FACADE_OUTSET - CFG.FACADE_THICKNESS,
+			maxX = ox + FX + CFG.FACADE_OUTSET + CFG.FACADE_THICKNESS,
+			minZ = oz - CFG.FACADE_OUTSET - CFG.FACADE_THICKNESS,
+			maxZ = oz + FZ + CFG.FACADE_OUTSET + CFG.FACADE_THICKNESS,
+		}
+		plots[#plots + 1] = box
+
+		local apron = apronRect(record)
+		local cable = {}
+		for _, p in ipairs(zipLowSamples(record.zipPath)) do
+			cable[#cable + 1] = { x = p.x - sectionOrigin.X, z = p.z - sectionOrigin.Z }
+		end
+
+		buildings[#buildings + 1] = {
+			index = record.index,
+			name = record.name,
+			plot = box,
+			door = { x = record.door.X - sectionOrigin.X, z = record.door.Z - sectionOrigin.Z },
+			apron = {
+				minX = apron.minX - sectionOrigin.X,
+				maxX = apron.maxX - sectionOrigin.X,
+				minZ = apron.minZ - sectionOrigin.Z,
+				maxZ = apron.maxZ - sectionOrigin.Z,
+			},
+			lowCable = cable,
+		}
+	end
+
+	-- The street's own stream, and the reason every tower stayed where it was.
+	-- See CFG.STREET_SEED_OFFSET for why it cannot collide with any other.
+	local rng = Random.new(seed + sectionIndex * 7919 + CFG.STREET_SEED_OFFSET)
+
+	local plan = StreetPlan.build({
+		rng = rng,
+		cellTarget = CFG.STREET_CELL_TARGET,
+		wallThickness = CFG.STREET_WALL_THICKNESS,
+		cableMargin = CFG.STREET_CABLE_MARGIN,
+		braid = CFG.STREET_BRAID,
+		plots = plots,
+		buildings = buildings,
+		groundMinX = -120,
+		groundMaxX = groundW - 120,
+		groundMinZ = -120,
+		groundMaxZ = groundD - 120,
+		-- Derived from the same constants buildSection targets the slide with,
+		-- which is the pure-maths channel invariant 4 already sanctions for the
+		-- one thing a section knows about its neighbour.
+		slideLanding = {
+			minX = -120,
+			maxX = CFG.SLIDE_LANDING_X + CFG.STREET_LANDING_MARGIN,
+			minZ = PLOT_SPAN_Z * 0.5 - CFG.STREET_LANDING_MARGIN,
+			maxZ = PLOT_SPAN_Z * 0.5 + CFG.STREET_LANDING_MARGIN,
+		},
+		blockProps = CFG.STREET_BLOCK_PROPS,
+		trimProps = CFG.STREET_TRIM_PROPS,
+		signposts = CFG.STREET_SIGNPOSTS,
+		signArms = CFG.STREET_SIGN_ARMS,
+	})
+
+	-- The style the district reads as, taken from the first plot so a section
+	-- is one place rather than six palettes meeting in the middle of a street.
+	local style = STYLES[((sectionIndex + 1) % #STYLES) + 1]
+
+	buildStreetWalls(folder, sectionOrigin, plan, style)
+	buildStreetPerimeter(folder, sectionOrigin, plan, style)
+
+	for _, dome in ipairs(plan.domes) do
+		buildOverlook(folder, sectionOrigin, dome, STYLES[((sectionIndex + dome.building) % #STYLES) + 1])
+	end
+
+	for _, prop in ipairs(plan.props) do
+		if prop.kind == "block" then
+			buildBlockProp(folder, sectionOrigin, prop, style, rng)
+		else
+			buildTrimProp(folder, sectionOrigin, prop, style)
+		end
+	end
+
+	for _, sign in ipairs(plan.signs) do
+		buildSignpost(folder, sectionOrigin, sign, style)
+	end
+
+	-- Stamped so a Studio check is a read rather than a #GetDescendants(), and
+	-- so the one count that is not a function of the settings (the walls, which
+	-- move with where the six doors landed) is written down somewhere.
+	folder:SetAttribute("StreetWallCount", plan.counts.walls)
+	folder:SetAttribute("StreetPropCount", plan.counts.blockProps + plan.counts.trimProps)
+	folder:SetAttribute("StreetSignCount", plan.counts.signs)
+	folder:SetAttribute("StreetOverlookCount", plan.counts.domes)
+
+	return folder
 end
 
 -- ============================================================
@@ -3042,6 +3777,7 @@ function MazeGenerator.buildSection(root, sectionIndex, seed)
 		table.remove(pool, i)
 	end
 
+	local records = {}
 	for row = 0, CFG.PLOT_ROWS - 1 do
 		for col = 0, CFG.PLOT_COLS - 1 do
 			local index = row * CFG.PLOT_COLS + col + 1
@@ -3054,7 +3790,8 @@ function MazeGenerator.buildSection(root, sectionIndex, seed)
 			-- pure function of (Seed, section, plot), which is what lets a lazily
 			-- built section come out identical to a pregenerated one.
 			local buildingSeed = seed + sectionIndex * 7919 + index * 104729
-			local buildingFolder = buildBuilding(folder, origin, sectionIndex, index, isExit, buildingSeed)
+			local buildingFolder, _, record = buildBuilding(folder, origin, sectionIndex, index, isExit, buildingSeed)
+			records[#records + 1] = record
 
 			if isExit then
 				local start = origin + Vector3.new(FX + CFG.FACADE_OUTSET, ROOF_Y + 2, FZ / 2)
@@ -3069,6 +3806,18 @@ function MazeGenerator.buildSection(root, sectionIndex, seed)
 
 			task.wait()
 		end
+	end
+
+	-- After the plot loop, and from its own stream. Both halves matter: the
+	-- street reads where the six doors, counters and cables ended up, and it
+	-- draws none of its randomness from `rng` or from any building's, so every
+	-- part that existed before the street did keeps the exact position it had
+	-- and the per-section delta is one countable number. Setting
+	-- Config.World.StreetMazeEnabled to false restores the old count exactly,
+	-- which is the sharpest check available that no draw leaked (invariant 6).
+	if CFG.STREET_ENABLED then
+		buildStreet(folder, sectionOrigin, sectionIndex, records, seed)
+		task.wait()
 	end
 
 	return folder

@@ -110,6 +110,47 @@ Config.World = {
 	-- Coins in the arc above each roof bounce pad, which until now launched the
 	-- player at nothing. Placed by pure geometry, drawing no random numbers.
 	RoofArcCoins = 6,
+
+	-- The street maze: the ground between the towers, which was one asphalt slab
+	-- and nothing else. Shape lives in StreetPlan, geometry constants in
+	-- MazeGenerator.CFG, and these are the knobs a playtest moves.
+	--
+	-- False restores the old world exactly, part for part. That is worth keeping
+	-- true of it: it is the sharpest available check that the street draws none
+	-- of its randomness from a stream anything else reads.
+	StreetMazeEnabled = true,
+	-- The fraction of DEAD ENDS the braid removes, not the fraction of walls it
+	-- opens. At 1 there are no dead ends left and it is still a maze; opening
+	-- every candidate edge would be no maze at all. This is the one number that
+	-- decides whether the street is easier than a tower, and it should stay well
+	-- above the towers' zero: a street is connective tissue, and a player who
+	-- has to solve it twice per section is a player who stops climbing.
+	StreetBraidFraction = 0.8,
+	-- Low enough to see over from an overlook deck at 26 and not from the
+	-- ground, and low enough that the slide from the previous section clears it
+	-- where it crosses the west edge of the ground at Y 14.3. That clearance is
+	-- 1.5 studs and it is asserted by tools/street/check.sh, so raising this
+	-- fails there rather than silently in a lazily generated section: a slide is
+	-- a physics ride, and a wall standing in it stops the rider over the void.
+	StreetWallHeight = 12,
+	-- Homes and shuttered shopfronts, each filling one cell so the maze is
+	-- carved around it and the house is its own boundary. Every one is placed
+	-- behind a connectivity check, because thirty blocked cells can wall a
+	-- district in half.
+	StreetBlockProps = 30,
+	-- Lamp posts, planters, crates, benches. These stand in a corner of an open
+	-- cell, so they narrow a street rather than closing one.
+	StreetTrimProps = 50,
+	-- Signposts, and how many towers each one names. Four arms on every post to
+	-- cover the one tower three would miss is three hundred plates a section
+	-- nobody reads, so the count stays at three and StreetPlan gives the sign
+	-- nearest an unnamed tower one extra arm instead. Every tower in a district
+	-- is named by at least one sign, which tools/street asserts.
+	StreetSignposts = 16,
+	StreetSignArms = 3,
+	-- Deck height for an overlook. Above the wall top by enough that the maze
+	-- reads as a maze from up there, which is the whole point of climbing one.
+	StreetDomeDeckHeight = 26,
 }
 
 -- ============================================================

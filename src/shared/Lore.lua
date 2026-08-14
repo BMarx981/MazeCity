@@ -178,6 +178,61 @@ Lore.kept = {
 Lore.relics = {}
 
 -- ============================================================
+-- The city
+-- ============================================================
+-- The two chapters that name places rather than things, so neither is keyed by
+-- a catalogue id and neither goes through checkKeys below. What checks them is
+-- at the bottom: both are read by MazeGenerator at build time to compose a
+-- tower's name, and an empty list there is a city of towers called nil.
+--
+-- Districts wrap. `Lore.districts[((section - 1) % #Lore.districts) + 1]`, which
+-- is the whole of the rule and is why the list may grow or shrink freely: it
+-- renames districts, it cannot break one. A city does not end, so the names
+-- coming back around past section 8 is the intent and not an overflow.
+
+Lore.districts = {
+	"Lowwater",
+	"Ashfall",
+	"Thirdmarch",
+	"Netherstair",
+	"Greyhollow",
+	"Coldmouth",
+	"Lanternreach",
+	"Saltgate",
+}
+
+-- Keyed by the `theme` on a MazeGenerator STYLES row, which is the one id in
+-- this file that lives in a server module rather than in a catalogue. It cannot
+-- be checked from here: MazeGenerator is in ServerScriptService and this is
+-- ReplicatedStorage, so requiring it would put world generation in every
+-- client. The generator checks the other way instead, at build time, warning
+-- once for a style whose theme has no entry.
+--
+-- A tower is named for what it was before the Maze took it. The line is the
+-- Codex entry; the name is what a signpost points at.
+
+Lore.towers = {
+	["Drowned Archive"] = {
+		line = "Everything written here was written twice, because the first copy is under the water and the second is a guess.",
+	},
+	["Buried Reliquary"] = {
+		line = "It was a place for keeping things safe. It is still very good at the keeping and has forgotten the rest.",
+	},
+	["Silent Monolith"] = {
+		line = "No door was ever cut in it. The one you are walking through was not cut by anybody.",
+	},
+	["Alchemist Stack"] = {
+		line = "Ten floors of somebody trying to turn one thing into another. The Maze finished the work and did not say what into what.",
+	},
+	["Ivory Ossuary"] = {
+		line = "The climbers who did not come down are all still here, and the building is politely built out of the fact.",
+	},
+	["Cinder Sanctum"] = {
+		line = "It burned. It is still burning, somewhere around floor six, and has been for longer than the district has had a name.",
+	},
+}
+
+-- ============================================================
 -- Validation
 -- ============================================================
 
@@ -193,6 +248,20 @@ checkKeys(Lore.pets, "pets", PetCatalog, "PetCatalog")
 checkKeys(Lore.eggs, "eggs", EggCatalog, "EggCatalog")
 checkKeys(Lore.kept, "kept", EnemyDefinitions.types, "EnemyDefinitions.types")
 checkKeys(Lore.relics, "relics", AccessoryCatalog, "AccessoryCatalog")
+
+-- The place chapters have no catalogue to resolve against, so what is checked is
+-- that they are usable at all. MazeGenerator indexes districts modulo the count
+-- on every building it builds; an empty list is a divide by zero on the first
+-- tower of the first section, which is a server that never finishes starting.
+if #Lore.districts == 0 then
+	error("Lore.districts is empty: every tower in the city is named after one")
+end
+
+for _, name in ipairs(Lore.districts) do
+	if type(name) ~= "string" or name == "" then
+		error("Lore.districts: every entry must be a non-empty string")
+	end
+end
 
 for petId, entry in pairs(Lore.pets) do
 	local stages = PetCatalog[petId].evolutions or {}

@@ -421,7 +421,67 @@ Season 2 is another climber's journal, someone who read the Cartographer's writi
 
 ---
 
-## 10. Build Integration
+## 10. The City: Districts and Towers
+
+The Maze rebuilds its floors overnight. It rebuilds the streets too, only slower, and that difference is the whole of why the ground level is survivable and the towers are not.
+
+### 10.1 Why the streets are a maze at all
+
+**The street is the Maze's ground floor.** It moves on a longer clock than the floors above it, slow enough that a climber can learn a route and slow enough that somebody once had time to write the route down. That is the premise the whole street layer hangs off: everything a player finds down there was put there by a climber, and the Maze has never bothered to take any of it back.
+
+**Signposts.** Climbers put them up. They are hand-cut, they point at towers by name, and they are correct because the streets have not moved since the last climber corrected them. A sign is a kindness from somebody who is not coming back.
+
+**The empty homes and shopfronts.** From before. The Maze grew through a city that was already standing, and the doors it did not need it simply sealed. Nobody lives there. Nothing in them is for sale.
+
+> **Rule this encodes, and it is an implementation rule as much as a lore one: nothing on the street sells anything.** The only counter in the city that trades is the lit one with the canopy, and the only roost is the one at the summit. A shuttered shopfront carries no light, no sign, no prompt and no name. A player must never walk up to a decoration expecting a shop.
+
+**The overlooks.** Climbers built them to read the streets from above, and the Maze allowed it on one condition, which it has never once relaxed: an overlook must lead nowhere. One stair up, the same stair down, glass on every side. You may see the way out. You may not take it from up there.
+
+### 10.2 Districts
+
+A section of the city is a district. Eight names, in order, wrapping when the city runs past them:
+
+| # | District |
+|---|---|
+| 1 | Lowwater |
+| 2 | Ashfall |
+| 3 | Thirdmarch |
+| 4 | Netherstair |
+| 5 | Greyhollow |
+| 6 | Coldmouth |
+| 7 | Lanternreach |
+| 8 | Saltgate |
+
+They wrap rather than run out because the city does not end. A climber who reaches Lowwater a second time has gone further than anyone has records for, and the name coming back around is the point rather than a bug.
+
+### 10.3 Towers
+
+A tower is named for what it was before the Maze took it. The six names are the six building themes, already carried on each style, and they are used with the definite article:
+
+| Style | Tower | Line |
+|---|---|---|
+| Cobalt | **The Drowned Archive** | Everything written here was written twice, because the first copy is under the water and the second is a guess. |
+| Ochre | **The Buried Reliquary** | It was a place for keeping things safe. It is still very good at the keeping and has forgotten the rest. |
+| Slate | **The Silent Monolith** | No door was ever cut in it. The one you are walking through was not cut by anybody. |
+| Verdigris | **The Alchemist Stack** | Ten floors of somebody trying to turn one thing into another. The Maze finished the work and did not say what into what. |
+| Bone | **The Ivory Ossuary** | The climbers who did not come down are all still here, and the building is politely built out of the fact. |
+| Ember | **The Cinder Sanctum** | It burned. It is still burning, somewhere around floor six, and has been for longer than the district has had a name. |
+
+### 10.4 Display format
+
+Full name, for the plaza billboard and anywhere a tower must be unambiguous across the whole city:
+
+> **The Drowned Archive, Lowwater**
+
+Short name, for the roof sign and for a signpost arm, where the reader is already standing in the district:
+
+> **The Drowned Archive**
+
+The short name is safe to use alone because a tower's style index is `((section + building) % 6) + 1`, and building index runs 1 to 6, so **all six themes appear exactly once in every district**. Two towers can never share a name inside a section, and `theme + district` is unique city-wide until the districts wrap at section 9.
+
+---
+
+## 11. Build Integration
 
 For PETS_PLAN.md, the lore system is its own Clutch, dependent on the enemy work and the Codex:
 
