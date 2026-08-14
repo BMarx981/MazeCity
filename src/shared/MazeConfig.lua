@@ -1101,14 +1101,39 @@ Config.BouncePadComboSeconds = 2.5
 Config.BouncePadPitchStep = 0.07
 Config.BouncePadPitchMax = 1.6
 
--- The roof zipline down to the plaza. The ride is a tween along the cable
--- rather than physics on a rope: the drop is 195 studs onto a street with a
--- 380-stud void two plots away, and a rider who clips off the line mid-descent
--- has no way back. Speed is studs per second along the cable; the boarding hop
--- is the short move from the deck pad out to the cable itself.
-Config.ZipSpeed = 95
+-- The roof zipline down to the plaza. The rider is carried along the cable
+-- rather than hung off physics on a rope: the drop is 195 studs onto a street
+-- with a 380-stud void two plots away, and a rider who clips off the line
+-- mid-descent has no way back. The shape of that cable is ZipPath's, a wrap of
+-- the tower corkscrewed about itself; everything below is how it feels to be on
+-- it, which is the half that belongs here.
+--
+-- Speed is the one that changed character. It was a constant 95 studs per
+-- second, which on a straight two-and-a-half-second run was the whole of the
+-- ride: no launch, no build, nothing to feel. A lap is roughly 1150 studs, so
+-- it now leaves the roof slowly and winds up, which is what makes the twist
+-- read as gathering pace rather than as a fixed carousel. The ramp reaches the
+-- ceiling after about 2.5 seconds and a full lap lands at about 6.5.
+Config.ZipSpeedStart = 55
+Config.ZipSpeedMax = 210
+Config.ZipAccel = 60 -- studs per second per second
 Config.ZipBoardSeconds = 0.35
 Config.ZipMaxSeconds = 20 -- safety release, mirroring SlideMaxSeconds
+-- How far the rider leans into the swing, in degrees at the widest part of the
+-- corkscrew. Roll only: the ride still keeps them upright and facing along the
+-- line, because pitching down the slope is what read as being impaled the first
+-- time round. ZipPath.bankAt says how much of this is applied where.
+Config.ZipBankDegrees = 34
+-- Letting go. The rider keeps this share of the speed they had built up, along
+-- their heading flattened to horizontal, plus a fixed lift so a dismount always
+-- throws forward and up rather than face down into the street. Flattened
+-- deliberately: the cable is descending, and a fling that inherited the descent
+-- would be a fast way to land on your own doorstep.
+Config.ZipDismountKeep = 0.85
+Config.ZipDismountLift = 62
+-- Two dismount requests inside this are one request. The remote ends the ride,
+-- so it is self-limiting; this is only so a held key cannot spam the server.
+Config.ZipDismountCooldown = 0.4
 -- How far under the cable the rider's root part hangs. The ride used to put the
 -- root exactly on the cable and aim it down the slope, so the line ran through
 -- the character lengthwise and the whole thing read as being impaled rather than
@@ -1132,6 +1157,8 @@ Config.Sounds = {
 	Death = "rbxasset://sounds/uuhhh.mp3", -- the classic Roblox grunt, used as the death sting
 	SlideWhoosh = "rbxasset://sounds/action_falling.mp3", -- looping wind, held for the length of a slide ride
 	ZipWhoosh = "rbxasset://sounds/action_falling.mp3", -- the same wind on the roof zipline, separate so it can be swapped for a metallic zing
+	ZipLaunch = "rbxasset://sounds/action_jump.mp3", -- one-shot as the pulley takes the weight, pitched up into a clack
+	ZipLand = "rbxasset://sounds/electronicpingshort.wav", -- one-shot on touching the plaza, pitched down so it never reads as a coin
 	BouncePad = "rbxasset://sounds/action_jump.mp3", -- boing on launching off a roof pad
 	EnemyGrowl = "rbxasset://sounds/bass.mp3", -- looping low drone, louder and higher the closer the enemy is
 	EnemyAlert = "rbxasset://sounds/impact_water.mp3", -- one-shot on acquiring a target, and on a Lurker revealing
@@ -1175,6 +1202,39 @@ Config.Juice = {
 	ConfettiSeconds = 2.2,
 	SlideWhooshVolume = 0.45,
 	ZipWhooshVolume = 0.5,
+	-- The zipline's own effects, all of them on the rider and none in the world:
+	-- the cable is generator output and stays exactly as it was built. The
+	-- whoosh is pitched by how fast the rider is actually going, so the ramp is
+	-- audible as well as visible, and the sparks are rated the same way, which
+	-- is why both take a pair of endpoints rather than a number.
+	ZipWhooshPitchSlow = 0.75,
+	ZipWhooshPitchFast = 1.35,
+	ZipSparkTexture = "rbxasset://textures/particles/sparkles_main.dds",
+	ZipSparkColor = Color3.fromRGB(255, 226, 150),
+	ZipSparkRateSlow = 12,
+	ZipSparkRateFast = 90,
+	ZipTrailColor = Color3.fromRGB(150, 226, 255),
+	ZipTrailSeconds = 0.45,
+	ZipLaunchVolume = 0.45,
+	ZipLaunchPitch = 1.7,
+	ZipLandVolume = 0.5,
+	ZipLandPitch = 0.55,
+	-- Dust on arrival, reusing the bounce pad's texture and colour: it is the
+	-- same street under both.
+	ZipLandDustParticles = 34,
+	-- The camera, which is the client's alone. FOV widens with speed and is
+	-- handed back over ZipCameraReleaseSeconds, from whatever the player's own
+	-- setting was rather than from a number written here: a HUD that resets
+	-- somebody's FOV to 70 because it assumed 70 is a bug they cannot undo.
+	-- The lag is studs of camera offset per stud per second of sideways
+	-- movement, clamped, which is what turns the corkscrew from something seen
+	-- into something the camera is being dragged through.
+	ZipCameraFovGain = 22,
+	ZipCameraReleaseSeconds = 0.5,
+	ZipCameraDismountPunch = 14,
+	ZipCameraLag = 0.05,
+	ZipCameraLagMax = 3.5,
+	ZipCameraLagSmoothing = 9, -- higher catches up faster
 	BouncePadVolume = 0.6,
 	BounceDustParticles = 26,
 	-- Particle textures ship with the client for the same reason the sounds do.

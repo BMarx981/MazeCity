@@ -8,6 +8,9 @@ local PhysicsService = game:GetService("PhysicsService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Config = require(ReplicatedStorage:WaitForChild("MazeConfig"))
+-- The shape of the roof zipline, shared with TraversalService so the cable this
+-- file draws and the curve that file rides are the same curve.
+local ZipPath = require(script.Parent:WaitForChild("ZipPath"))
 
 local MazeGenerator = {}
 
@@ -209,7 +212,10 @@ local CFG = {
 	-- it has to clear the facade face at FACADE_OUTSET + FACADE_THICKNESS = 8 and
 	-- the plaza, which reaches 36, without running into the neighbouring plot's
 	-- facade at STREET + 8 = 98. Fifty puts it a little past the middle of the
-	-- street with room for the landing pad either side.
+	-- street with room for the landing pad either side. It is now the offset of
+	-- the whole wrap rather than of one straight run, so that clearance is held
+	-- on all four faces; the corner arcs have the same radius, which is what
+	-- makes the spine a true constant-distance offset (see ZipPath).
 	ZIP_OUTSET = 50,
 	ZIP_DECK_INSET = 8, -- how far inside the parapet the boarding pad sits
 	ZIP_END_MARGIN = 14, -- how far in from the facade corner the cable starts
@@ -217,6 +223,28 @@ local CFG = {
 	ZIP_END_Y = 4, -- cable height where it meets the street
 	ZIP_CABLE_THICKNESS = 0.6,
 	ZIP_PAD = 12,
+	-- The corkscrew about the spine: four rotations, sixteen studs wide at the
+	-- roof, tapering to nothing at the landing pad. Sixteen is the widest the
+	-- twist can be and still keep the cable clear of the facade at 8 and the
+	-- spawn pad at 36 on its way past them, and four rotations over a lap of
+	-- roughly 1150 studs is about one turn a second at ride speed.
+	--
+	-- RISE squashes the swing vertically, and the three numbers are a set: a
+	-- circular corkscrew at these turns and this radius climbs 402 studs over a
+	-- ride that only descends 197, which puts genuine uphill in every turn.
+	-- 0.35 is the most vertical swing that keeps the whole curve descending,
+	-- with room to spare. tools/zipline/check.sh is what says so; raising any of
+	-- the three without running it is how the uphill comes back.
+	ZIP_TWIST_TURNS = 4,
+	ZIP_TWIST_RADIUS = 16,
+	ZIP_TWIST_RISE = 0.35,
+	-- A fixed count, not a length. Path length varies with the door cell, so
+	-- dividing by a target segment length would give a part count that differed
+	-- building to building for no reason anyone could confirm was the intended
+	-- one. Seventy-two is about sixteen studs a segment and eighteen segments a
+	-- rotation, which is smooth enough for a cable this thin, and it makes the
+	-- delta over the old three-part zipline exactly +71 per building.
+	ZIP_SEGMENTS = 72,
 
 	-- Upgrade shop stall on the plaza. OFFSET runs along the facade from the
 	-- door centre, putting the stall beside the spawn pad (which reaches 11
@@ -2592,15 +2620,22 @@ end
 -- ============================================================
 -- Topping out was a dead end on the five buildings in six that get no section
 -- slide: the only ways down were ten floors of maze in reverse or a 195-stud
--- drop. The cable runs along the entry-side facade at ZIP_OUTSET and lands on
--- the street outside the door the player came in by, so the climb ends where it
--- started.
+-- drop. The cable boards at a corner of the entry facade, wraps the tower the
+-- long way round at ZIP_OUTSET, and lands on the street outside the door the
+-- player came in by, so the climb ends where it started.
+--
+-- It was one straight run along the entry facade, which was a way down and
+-- nothing else: two and a half seconds in a straight line, facing one way. The
+-- shape is now ZipPath's, a lap of the building corkscrewed about itself, and
+-- the reason the whole curve lives in that module rather than here is that
+-- TraversalService has to put the rider on the same one.
 --
 -- It draws no random numbers, deliberately. It reads entrySide and entryCell,
 -- which the maze has already fixed, so every part that existed before this did
--- keeps the exact position it had and the part-count delta is exactly three per
--- building. Drawing from the threaded rng here would reshuffle every building
--- in the city and retire the M4 baseline for a feature that does not need it.
+-- keeps the exact position it had and the part-count delta is exactly
+-- ZIP_SEGMENTS + 2 per building. Drawing from the threaded rng here would
+-- reshuffle every building in the city and retire the M4 baseline for a feature
+-- that does not need it.
 -- ============================================================
 -- Upgrade shop
 -- ============================================================
@@ -2791,9 +2826,9 @@ local function buildZipline(parent, origin, entrySide, entryCell, ctx)
 	local doorU = horizontal and doorCenter.X or doorCenter.Z
 
 	-- u runs along the entry-side facade, v out away from it. Boarding starts at
-	-- whichever end of that facade is farther from the door, so the run is never
-	-- short enough for the cable to read as a fire pole: the shortest it can get
-	-- is 111 studs of travel against 197 of drop.
+	-- whichever end of that facade is farther from the door, which is now what
+	-- decides the direction of the lap rather than the length of the ride: the
+	-- long way round from there to the door is always at least half the wrap.
 	local startU = (doorU > span / 2) and CFG.ZIP_END_MARGIN or (span - CFG.ZIP_END_MARGIN)
 
 	local function at(u, v, y)
@@ -2807,45 +2842,80 @@ local function buildZipline(parent, origin, entrySide, entryCell, ctx)
 		return origin + Vector3.new(FX + v, y, u)
 	end
 
-	local padPos = at(startU, -CFG.ZIP_DECK_INSET, ROOF_Y + 0.6)
-	local cableStart = at(startU, CFG.ZIP_OUTSET, ROOF_Y + CFG.ZIP_START_LIFT)
-	local cableEnd = at(doorU, CFG.ZIP_OUTSET, CFG.ZIP_END_Y)
+	local box = {
+		minX = origin.X,
+		maxX = origin.X + FX,
+		minZ = origin.Z,
+		maxZ = origin.Z + FZ,
+		outset = CFG.ZIP_OUTSET,
+	}
+	local startS = ZipPath.arcLengthOfFacePoint(box, entrySide, startU)
+	local endS = ZipPath.arcLengthOfFacePoint(box, entrySide, doorU)
+	local dir, length = ZipPath.route(box, startS, endS)
 
-	-- One part, not a run of segments like the slide: a cable is a straight line
-	-- and has no boosters to hang along it.
-	local cable = makePart(
-		folder,
-		"ZipCable",
-		CFrame.lookAt((cableStart + cableEnd) / 2, cableEnd),
-		Vector3.new(CFG.ZIP_CABLE_THICKNESS, CFG.ZIP_CABLE_THICKNESS, (cableEnd - cableStart).Magnitude),
-		Color3.fromRGB(48, 50, 58),
-		Enum.Material.Metal
-	)
-	cable.CanCollide = false
+	local path = ZipPath.new({
+		minX = box.minX,
+		maxX = box.maxX,
+		minZ = box.minZ,
+		maxZ = box.maxZ,
+		outset = box.outset,
+		startS = startS,
+		dir = dir,
+		length = length,
+		topY = origin.Y + ROOF_Y + CFG.ZIP_START_LIFT,
+		endY = origin.Y + CFG.ZIP_END_Y,
+		turns = CFG.ZIP_TWIST_TURNS,
+		radius = CFG.ZIP_TWIST_RADIUS,
+		rise = CFG.ZIP_TWIST_RISE,
+	})
+
+	-- A run of segments now, where the old straight cable was a single part: the
+	-- spine wraps the tower and corkscrews about itself, so there is no one line
+	-- to draw. The chord between two samples is the part, exactly as buildSlide
+	-- does it, and the count is fixed rather than derived from the length so the
+	-- part-count delta stays the same on every building in the city.
+	--
+	-- On an exit building this crosses the section slide, which leaves the same
+	-- roof heading east: two lines meeting over a street, both of them scenery
+	-- to a rider who is anchored to a tween. Left as a crossing rather than
+	-- routed around, because routing around it would make one building in six
+	-- ride a different shape.
+	local previous = ZipPath.pointAt(path, 0)
+	for i = 1, CFG.ZIP_SEGMENTS do
+		local point = ZipPath.pointAt(path, i / CFG.ZIP_SEGMENTS)
+		local chord = (point - previous).Magnitude
+		local cable = makePart(
+			folder,
+			"ZipCable",
+			CFrame.lookAt((previous + point) / 2, point),
+			Vector3.new(CFG.ZIP_CABLE_THICKNESS, CFG.ZIP_CABLE_THICKNESS, chord),
+			Color3.fromRGB(48, 50, 58),
+			Enum.Material.Metal
+		)
+		cable.CanCollide = false
+		previous = point
+	end
 
 	local board = makePart(
 		folder,
 		"ZipEntrance",
-		CFrame.new(padPos),
+		CFrame.new(at(startU, -CFG.ZIP_DECK_INSET, ROOF_Y + 0.6)),
 		Vector3.new(CFG.ZIP_PAD, 1.2, CFG.ZIP_PAD),
 		Color3.fromRGB(120, 220, 255),
 		Enum.Material.Neon
 	)
-	-- The rider is carried to the cable before the descent starts, because the
-	-- pad has to be inside the parapet to be stood on and the cable has to be
-	-- outside it to clear the facade. TraversalService reads both points.
-	board:SetAttribute("StartX", cableStart.X)
-	board:SetAttribute("StartY", cableStart.Y)
-	board:SetAttribute("StartZ", cableStart.Z)
-	board:SetAttribute("EndX", cableEnd.X)
-	board:SetAttribute("EndY", cableEnd.Y)
-	board:SetAttribute("EndZ", cableEnd.Z)
+	-- The whole curve, as attributes, because the rider has to be on the same
+	-- one the cable was drawn from. The pad has to be inside the parapet to be
+	-- stood on and the cable has to be outside it to clear the facade, so the
+	-- ride still opens by carrying the rider from here out to point zero.
+	ZipPath.stamp(board, path)
 	tagWithContext(board, "ZipEntrance", ctx.section, ctx.building, CFG.LEVELS)
 
+	local finish = ZipPath.pointAt(path, 1)
 	local landing = makePart(
 		folder,
 		"ZipExit",
-		CFrame.new(cableEnd - Vector3.new(0, CFG.ZIP_END_Y - 0.6, 0)),
+		CFrame.new(Vector3.new(finish.X, origin.Y + 0.6, finish.Z)),
 		Vector3.new(CFG.ZIP_PAD + 8, 1.2, CFG.ZIP_PAD + 8),
 		Color3.fromRGB(120, 220, 255),
 		Enum.Material.Neon
