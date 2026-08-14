@@ -5,6 +5,11 @@
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
+-- Only the reset button is chrome (docs/HUD_THEME_PLAN.md, Slate 4). The style
+-- colours below are semantic: fallbacks for the CompletionLightColor the
+-- generator stamps on a building, shared with world geometry and kept.
+local UiTheme = require(ReplicatedStorage:WaitForChild("UiTheme"))
+
 local remote = ReplicatedStorage:WaitForChild("BuildingLightUpdate")
 local intents = ReplicatedStorage:WaitForChild("BuildingLightIntent")
 local player = Players.LocalPlayer
@@ -25,26 +30,22 @@ local lightsFolder = Instance.new("Folder")
 lightsFolder.Name = "PlayerBuildingLights"
 lightsFolder.Parent = workspace
 
-local function rounded(inst, radius)
-	local corner = Instance.new("UICorner")
-	corner.CornerRadius = UDim.new(0, radius)
-	corner.Parent = inst
-end
-
 local resetButton = Instance.new("TextButton")
 resetButton.Name = "ResetBuildingLights"
 resetButton.Size = UDim2.fromOffset(164, 34)
 resetButton.Position = UDim2.new(0, 16, 1, -50)
-resetButton.BackgroundColor3 = Color3.fromRGB(16, 16, 20)
-resetButton.BackgroundTransparency = 0.2
+resetButton.BackgroundColor3 = UiTheme.Slab
+resetButton.BackgroundTransparency = UiTheme.ChipTransparency
 resetButton.BorderSizePixel = 0
 resetButton.AutoButtonColor = false
-resetButton.Font = Enum.Font.GothamBold
+resetButton.FontFace = UiTheme.BodyBold
 resetButton.TextSize = 12
-resetButton.TextColor3 = Color3.fromRGB(215, 225, 235)
+resetButton.TextColor3 = UiTheme.Text
 resetButton.Text = "RESET LIGHTS"
 resetButton.Visible = false
-rounded(resetButton, 8)
+UiTheme.rounded(resetButton, 8)
+UiTheme.gradient(resetButton)
+UiTheme.stroke(resetButton)
 resetButton.Parent = player:WaitForChild("PlayerGui"):WaitForChild("FloorTimer")
 
 local function updateResetButton()

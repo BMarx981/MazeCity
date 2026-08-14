@@ -19,10 +19,13 @@ local Debris = game:GetService("Debris")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
-local SoundService = game:GetService("SoundService")
 local TweenService = game:GetService("TweenService")
 
 local Config = require(ReplicatedStorage:WaitForChild("MazeConfig"))
+-- Chrome comes from UiTheme and nowhere else (docs/HUD_THEME_PLAN.md, Slate 4).
+-- Rarity colours, egg colours and portrait chrome are semantic and stay with
+-- their configs; the theme frames them.
+local UiTheme = require(ReplicatedStorage:WaitForChild("UiTheme"))
 local EggCatalog = require(ReplicatedStorage:WaitForChild("EggCatalog"))
 -- Read for the shop list only, exactly as EggCatalog is above it, and that is
 -- not the accessories plan's third invariant being bent: what an item costs is
@@ -59,14 +62,6 @@ local player = Players.LocalPlayer
 if RunService:IsStudio() then
 	Storefront.stampSyntheticProductIds()
 end
-
-local WHITE = Color3.fromRGB(255, 255, 255)
-local DIM = Color3.fromRGB(150, 160, 175)
-local PANEL = Color3.fromRGB(16, 16, 20)
-local ROW = Color3.fromRGB(28, 29, 36)
-local GOLD = Color3.fromRGB(255, 214, 110)
-local GREEN = Color3.fromRGB(90, 200, 140)
-local RED = Color3.fromRGB(230, 80, 80)
 
 local SECONDS_PER_DAY = 86400
 local PANEL_W = Config.Pets.PanelWidth
@@ -113,56 +108,6 @@ gui.ResetOnSpawn = false
 gui.IgnoreGuiInset = true
 gui.Parent = player:WaitForChild("PlayerGui")
 
-local function rounded(inst, radius)
-	local corner = Instance.new("UICorner")
-	corner.CornerRadius = UDim.new(0, radius)
-	corner.Parent = inst
-	return inst
-end
-
-local function label(parent, size, position, font, textSize, color)
-	local l = Instance.new("TextLabel")
-	l.Size = size
-	l.Position = position
-	l.BackgroundTransparency = 1
-	l.Font = font
-	l.TextSize = textSize
-	l.TextColor3 = color
-	l.Text = ""
-	l.Parent = parent
-	return l
-end
-
-local function button(parent, size, position, text, color)
-	local b = Instance.new("TextButton")
-	b.Size = size
-	b.Position = position
-	b.BackgroundColor3 = color
-	b.BorderSizePixel = 0
-	b.AutoButtonColor = true
-	b.Font = Enum.Font.GothamBold
-	b.TextSize = 14
-	b.TextColor3 = WHITE
-	b.Text = text
-	b.Parent = parent
-	rounded(b, 6)
-	return b
-end
-
-local function tween(inst, time, props)
-	TweenService:Create(inst, TweenInfo.new(time, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), props):Play()
-end
-
-local function playSound(assetId, volume, playbackSpeed)
-	local sound = Instance.new("Sound")
-	sound.SoundId = assetId
-	sound.Volume = volume
-	sound.PlaybackSpeed = playbackSpeed or 1
-	sound.Parent = SoundService
-	sound:Play()
-	Debris:AddItem(sound, sound.TimeLength > 0 and sound.TimeLength + 1 or 5)
-end
-
 -- A ViewportFrame of the pet at that stage, or nil for a petId this client's
 -- catalogue does not have. Nil rather than a fallback square: a row missing its
 -- picture still says everything it said before Set 3, and the caller only has
@@ -194,9 +139,13 @@ end
 -- floor panel is top centre, the sprint meter is the bottom right corner, and on
 -- a phone the bottom two corners are the thumbstick and the jump button.
 
-local toggle = button(gui, UDim2.fromOffset(112, 40), UDim2.new(0, 16, 0.5, 0), "PETS", PANEL)
+-- A chip that happens to be pressable, so it wears the chip's chrome: slab,
+-- moonlit gradient, etch stroke.
+local toggle = UiTheme.button(gui, UDim2.fromOffset(112, 40), UDim2.new(0, 16, 0.5, 0), "PETS", UiTheme.Slab)
 toggle.AnchorPoint = Vector2.new(0, 0.5)
-toggle.BackgroundTransparency = 0.25
+toggle.BackgroundTransparency = UiTheme.ChipTransparency
+UiTheme.gradient(toggle)
+UiTheme.stroke(toggle)
 
 -- The one thing on the toggle that is not a label: an unclaimed daily, or an egg
 -- that has finished and cannot hatch, is worth a dot the player can see without
@@ -204,33 +153,26 @@ toggle.BackgroundTransparency = 0.25
 local badge = Instance.new("Frame")
 badge.Size = UDim2.fromOffset(12, 12)
 badge.Position = UDim2.new(1, -8, 0, -4)
-badge.BackgroundColor3 = GOLD
+badge.BackgroundColor3 = UiTheme.Lantern
 badge.BorderSizePixel = 0
 badge.Visible = false
 badge.Parent = toggle
-rounded(badge, 6)
+UiTheme.rounded(badge, 6)
 
 -- ============================================================
 -- Panel
 -- ============================================================
 
-local panel = Instance.new("Frame")
-panel.Size = UDim2.fromOffset(PANEL_W, PANEL_H)
-panel.Position = UDim2.new(0.5, -PANEL_W / 2, 0.5, -PANEL_H / 2)
-panel.BackgroundColor3 = PANEL
-panel.BackgroundTransparency = 0.08
-panel.BorderSizePixel = 0
+local panel = UiTheme.panel(gui, UDim2.fromOffset(PANEL_W, PANEL_H), UDim2.new(0.5, -PANEL_W / 2, 0.5, -PANEL_H / 2))
 panel.Visible = false
-panel.Parent = gui
-rounded(panel, 10)
 
-local title = label(panel, UDim2.new(1, -80, 0, 34), UDim2.new(0, 16, 0, 10), Enum.Font.GothamBlack, 22, WHITE)
+local title = UiTheme.label(panel, UDim2.new(1, -80, 0, 34), UDim2.new(0, 16, 0, 10), UiTheme.Display, 22, UiTheme.Text)
 title.TextXAlignment = Enum.TextXAlignment.Left
 title.Text = "Pets"
 
-local closeButton = button(panel, UDim2.fromOffset(30, 30), UDim2.new(1, -42, 0, 12), "X", ROW)
+local closeButton = UiTheme.button(panel, UDim2.fromOffset(30, 30), UDim2.new(1, -42, 0, 12), "X", UiTheme.Stone)
 
-local capLabel = label(panel, UDim2.new(1, -32, 0, 18), UDim2.new(0, 16, 0, 40), Enum.Font.Gotham, 13, DIM)
+local capLabel = UiTheme.label(panel, UDim2.new(1, -32, 0, 18), UDim2.new(0, 16, 0, 40), UiTheme.Body, 13, UiTheme.Dim)
 capLabel.TextXAlignment = Enum.TextXAlignment.Left
 
 local tabRow = Instance.new("Frame")
@@ -243,8 +185,13 @@ local TABS = { "Pets", "Eggs", "Gear", "Daily" }
 local tabButtons = {}
 for i, name in ipairs(TABS) do
 	local width = 1 / #TABS
-	tabButtons[name] =
-		button(tabRow, UDim2.new(width, -6, 1, 0), UDim2.new(width * (i - 1), 3, 0, 0), string.upper(name), ROW)
+	tabButtons[name] = UiTheme.button(
+		tabRow,
+		UDim2.new(width, -6, 1, 0),
+		UDim2.new(width * (i - 1), 3, 0, 0),
+		string.upper(name),
+		UiTheme.Stone
+	)
 end
 
 -- Stops above the rename box rather than under it: the box is parented to the
@@ -271,72 +218,26 @@ bodyLayout.Parent = body
 local nickBox = Instance.new("TextBox")
 nickBox.Size = UDim2.new(1, -24, 0, 34)
 nickBox.Position = UDim2.new(0, 12, 1, -46)
-nickBox.BackgroundColor3 = ROW
+nickBox.BackgroundColor3 = UiTheme.Stone
 nickBox.BorderSizePixel = 0
-nickBox.Font = Enum.Font.Gotham
+nickBox.FontFace = UiTheme.Body
 nickBox.TextSize = 14
-nickBox.TextColor3 = WHITE
+nickBox.TextColor3 = UiTheme.Text
 nickBox.PlaceholderText = "New name, then Enter"
 nickBox.Text = ""
 nickBox.ClearTextOnFocus = false
 nickBox.Visible = false
 nickBox.Parent = panel
-rounded(nickBox, 6)
+UiTheme.rounded(nickBox, 6)
 
 -- ============================================================
 -- Banner and reveal
 -- ============================================================
 
-local banner = Instance.new("Frame")
-banner.Size = UDim2.fromOffset(460, 92)
-banner.Position = UDim2.new(0.5, -230, 0.2, 0)
-banner.BackgroundColor3 = Color3.fromRGB(12, 12, 16)
-banner.BackgroundTransparency = 1
-banner.BorderSizePixel = 0
-banner.Visible = false
-banner.ZIndex = 8
-banner.Parent = gui
-rounded(banner, 10)
-
-local bannerTitle = label(banner, UDim2.new(1, 0, 0, 44), UDim2.new(0, 0, 0, 12), Enum.Font.GothamBlack, 32, WHITE)
-bannerTitle.ZIndex = 8
-local bannerSub = label(banner, UDim2.new(1, 0, 0, 26), UDim2.new(0, 0, 0, 56), Enum.Font.GothamBold, 18, GOLD)
-bannerSub.ZIndex = 8
-
-local bannerToken = 0
-
-local function showBanner(text, subtitle, color, hold)
-	bannerToken = bannerToken + 1
-	local token = bannerToken
-
-	bannerTitle.Text = text
-	bannerTitle.TextColor3 = color
-	bannerSub.Text = subtitle or ""
-
-	banner.Visible = true
-	banner.BackgroundTransparency = 1
-	banner.Position = UDim2.new(0.5, -230, 0.2, 16)
-	bannerTitle.TextTransparency = 1
-	bannerSub.TextTransparency = 1
-
-	tween(banner, 0.2, { BackgroundTransparency = 0.25, Position = UDim2.new(0.5, -230, 0.2, 0) })
-	tween(bannerTitle, 0.2, { TextTransparency = 0 })
-	tween(bannerSub, 0.2, { TextTransparency = 0 })
-
-	task.delay(hold, function()
-		if token ~= bannerToken then
-			return
-		end
-		tween(banner, 0.4, { BackgroundTransparency = 1, Position = UDim2.new(0.5, -230, 0.2, -16) })
-		tween(bannerTitle, 0.4, { TextTransparency = 1 })
-		tween(bannerSub, 0.4, { TextTransparency = 1 })
-		task.delay(0.45, function()
-			if token == bannerToken then
-				banner.Visible = false
-			end
-		end)
-	end)
-end
+-- The shared UiTheme.banner, which is the other end of the TimerGui fork's
+-- funeral: same fade, slide and takeover token, sized and placed where this
+-- file's copy always was, above the panel at ZIndex 8 and below the reveal.
+local banner = UiTheme.banner(gui, { height = 92, y = 0.2, titleSize = 32, subSize = 18, zindex = 8 })
 
 -- The hatch is the moment the whole system is built around, so it gets a full
 -- screen wash in the pet's rarity colour rather than the banner every other
@@ -345,16 +246,20 @@ end
 -- finished fading in.
 local reveal = Instance.new("Frame")
 reveal.Size = UDim2.fromScale(1, 1)
-reveal.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+-- An Ink wash rather than plain black, so even the blackout the rays cut
+-- through is the theme's own night.
+reveal.BackgroundColor3 = UiTheme.Ink
 reveal.BackgroundTransparency = 1
 reveal.BorderSizePixel = 0
 reveal.Visible = false
 reveal.ZIndex = 9
 reveal.Parent = gui
 
-local revealTitle = label(reveal, UDim2.new(1, 0, 0, 60), UDim2.new(0, 0, 0.42, 0), Enum.Font.GothamBlack, 46, WHITE)
+local revealTitle =
+	UiTheme.label(reveal, UDim2.new(1, 0, 0, 60), UDim2.new(0, 0, 0.42, 0), UiTheme.Display, 46, UiTheme.Text)
 revealTitle.ZIndex = 11
-local revealSub = label(reveal, UDim2.new(1, 0, 0, 30), UDim2.new(0, 0, 0.42, 62), Enum.Font.GothamBold, 20, WHITE)
+local revealSub =
+	UiTheme.label(reveal, UDim2.new(1, 0, 0, 30), UDim2.new(0, 0, 0.42, 62), UiTheme.BodyBold, 20, UiTheme.Text)
 revealSub.ZIndex = 11
 
 local REVEAL_PORTRAIT = 240
@@ -414,14 +319,14 @@ local function showReveal(name, rarity, ability, petId, stage)
 		Debris:AddItem(ray, Config.Pets.HatchRevealSeconds + 0.3)
 	end
 
-	tween(revealTitle, 0.35, { TextTransparency = 0 })
-	tween(revealSub, 0.35, { TextTransparency = 0 })
+	UiTheme.tween(revealTitle, 0.35, { TextTransparency = 0 })
+	UiTheme.tween(revealSub, 0.35, { TextTransparency = 0 })
 	if revealPortrait then
-		tween(revealPortrait, 0.35, { ImageTransparency = 0 })
+		UiTheme.tween(revealPortrait, 0.35, { ImageTransparency = 0 })
 	end
 	for _, note in ipairs(Config.Sounds.TowerClearArpeggio) do
 		task.delay(note[1], function()
-			playSound(Config.Sounds.PowerupPickup, Config.Juice.PowerupVolume, note[2])
+			UiTheme.playSound(Config.Sounds.PowerupPickup, Config.Juice.PowerupVolume, note[2])
 		end)
 	end
 
@@ -430,11 +335,11 @@ local function showReveal(name, rarity, ability, petId, stage)
 	-- must not have its picture taken down by its predecessor's timer.
 	local mine = revealPortrait
 	task.delay(Config.Pets.HatchRevealSeconds, function()
-		tween(reveal, 0.5, { BackgroundTransparency = 1 })
-		tween(revealTitle, 0.5, { TextTransparency = 1 })
-		tween(revealSub, 0.5, { TextTransparency = 1 })
+		UiTheme.tween(reveal, 0.5, { BackgroundTransparency = 1 })
+		UiTheme.tween(revealTitle, 0.5, { TextTransparency = 1 })
+		UiTheme.tween(revealSub, 0.5, { TextTransparency = 1 })
 		if mine and revealPortrait == mine then
-			tween(mine, 0.5, { ImageTransparency = 1 })
+			UiTheme.tween(mine, 0.5, { ImageTransparency = 1 })
 		end
 		task.delay(0.55, function()
 			if revealPortrait == mine then
@@ -494,18 +399,18 @@ end
 local function row(order, height)
 	local frame = Instance.new("Frame")
 	frame.Size = UDim2.new(1, -6, 0, height or ROW_H)
-	frame.BackgroundColor3 = ROW
+	frame.BackgroundColor3 = UiTheme.Stone
 	frame.BorderSizePixel = 0
 	frame.LayoutOrder = order
 	frame.Parent = body
-	rounded(frame, 8)
+	UiTheme.rounded(frame, 8)
 	return frame
 end
 
 local function emptyNote(text)
 	local frame = row(1, 46)
 	frame.BackgroundTransparency = 0.4
-	local l = label(frame, UDim2.new(1, -24, 1, 0), UDim2.new(0, 12, 0, 0), Enum.Font.Gotham, 14, DIM)
+	local l = UiTheme.label(frame, UDim2.new(1, -24, 1, 0), UDim2.new(0, 12, 0, 0), UiTheme.Body, 14, UiTheme.Dim)
 	l.TextXAlignment = Enum.TextXAlignment.Left
 	l.Text = text
 	l.TextWrapped = true
@@ -543,9 +448,9 @@ local function wornChips(frame, worn)
 			chip.BackgroundColor3 = Config.rarityColor(item.rarity)
 			chip.BorderSizePixel = 0
 			chip.Parent = frame
-			rounded(chip, 4)
+			UiTheme.rounded(chip, 4)
 
-			local mark = label(chip, UDim2.fromScale(1, 1), UDim2.new(), Enum.Font.GothamBold, 11, PANEL)
+			local mark = UiTheme.label(chip, UDim2.fromScale(1, 1), UDim2.new(), UiTheme.BodyBold, 11, UiTheme.Ink)
 			mark.Text = string.sub(slot, 1, 1)
 			index = index + 1
 		end
@@ -561,7 +466,7 @@ local function petRow(pet, order)
 	swatch.BackgroundColor3 = Config.rarityColor(pet.rarity)
 	swatch.BorderSizePixel = 0
 	swatch.Parent = frame
-	rounded(swatch, 3)
+	UiTheme.rounded(swatch, 3)
 
 	-- The pet itself, beside its rarity rather than instead of it: the swatch,
 	-- the XP bar and the reveal text are Config.rarityColor and the picture is
@@ -575,16 +480,28 @@ local function petRow(pet, order)
 		portrait.Parent = frame
 	end
 
-	local name =
-		label(frame, UDim2.new(0, PET_TEXT_W, 0, 20), UDim2.new(0, PET_TEXT_X, 0, 8), Enum.Font.GothamBold, 15, WHITE)
+	local name = UiTheme.label(
+		frame,
+		UDim2.new(0, PET_TEXT_W, 0, 20),
+		UDim2.new(0, PET_TEXT_X, 0, 8),
+		UiTheme.BodyBold,
+		15,
+		UiTheme.Text
+	)
 	name.TextXAlignment = Enum.TextXAlignment.Left
 	-- A nickname can be twenty characters and the column is now 132 pixels, so
 	-- it elides rather than running under the buttons.
 	name.TextTruncate = Enum.TextTruncate.AtEnd
 	name.Text = (pet.locked and "[L] " or "") .. pet.name
 
-	local sub =
-		label(frame, UDim2.new(0, PET_TEXT_W, 0, 16), UDim2.new(0, PET_TEXT_X, 0, 28), Enum.Font.Gotham, 12, DIM)
+	local sub = UiTheme.label(
+		frame,
+		UDim2.new(0, PET_TEXT_W, 0, 16),
+		UDim2.new(0, PET_TEXT_X, 0, 28),
+		UiTheme.Body,
+		12,
+		UiTheme.Dim
+	)
 	sub.TextXAlignment = Enum.TextXAlignment.Left
 	sub.TextTruncate = Enum.TextTruncate.AtEnd
 	local multiplier = pet.multiplier > 1 and string.format("  x%.1f", pet.multiplier) or ""
@@ -595,7 +512,7 @@ local function petRow(pet, order)
 	local track = Instance.new("Frame")
 	track.Size = UDim2.new(0, PET_TEXT_W, 0, 4)
 	track.Position = UDim2.new(0, PET_TEXT_X, 0, 48)
-	track.BackgroundColor3 = Color3.fromRGB(50, 52, 62)
+	track.BackgroundColor3 = UiTheme.Track
 	track.BorderSizePixel = 0
 	track.Parent = frame
 
@@ -610,32 +527,31 @@ local function petRow(pet, order)
 	-- share the top line, rename spans both underneath. The text on the left is
 	-- 190 wide from x=22, so 218 is where this column can start without ever
 	-- running into a long nickname.
-	local equip = button(
+	local equip = UiTheme.button(
 		frame,
 		UDim2.fromOffset(82, 26),
 		UDim2.new(1, -172, 0, 8),
 		pet.equipped and "UNEQUIP" or "EQUIP",
-		pet.equipped and GREEN or Color3.fromRGB(60, 62, 74)
+		pet.equipped and UiTheme.Rune or UiTheme.Slab
 	)
 	equip.TextSize = 12
 	equip.MouseButton1Click:Connect(function()
 		send({ kind = pet.equipped and "unequip" or "equip", petUid = pet.uid })
 	end)
 
-	local lock = button(
+	local lock = UiTheme.button(
 		frame,
 		UDim2.fromOffset(76, 26),
 		UDim2.new(1, -84, 0, 8),
 		pet.locked and "UNLOCK" or "LOCK",
-		Color3.fromRGB(60, 62, 74)
+		UiTheme.Slab
 	)
 	lock.TextSize = 12
 	lock.MouseButton1Click:Connect(function()
 		send({ kind = "lock", petUid = pet.uid, locked = not pet.locked })
 	end)
 
-	local rename =
-		button(frame, UDim2.fromOffset(164, 22), UDim2.new(1, -172, 0, 38), "RENAME", Color3.fromRGB(60, 62, 74))
+	local rename = UiTheme.button(frame, UDim2.fromOffset(164, 22), UDim2.new(1, -172, 0, 38), "RENAME", UiTheme.Slab)
 	rename.TextSize = 11
 	rename.MouseButton1Click:Connect(function()
 		nickTarget = pet.uid
@@ -662,7 +578,7 @@ local function petShelfRow(petConfig, order, canBuy, offer)
 	swatch.BackgroundColor3 = Config.rarityColor(petConfig.rarity)
 	swatch.BorderSizePixel = 0
 	swatch.Parent = frame
-	rounded(swatch, 3)
+	UiTheme.rounded(swatch, 3)
 
 	local portrait = petPortrait(petConfig.id, 0, false)
 	if portrait then
@@ -671,27 +587,27 @@ local function petShelfRow(petConfig, order, canBuy, offer)
 		portrait.Parent = frame
 	end
 
-	local name = label(
+	local name = UiTheme.label(
 		frame,
 		UDim2.new(0, 180, 0, 18),
 		UDim2.new(0, 70, 0, 10),
-		Enum.Font.GothamBold,
+		UiTheme.BodyBold,
 		14,
 		Config.rarityColor(petConfig.rarity)
 	)
 	name.TextXAlignment = Enum.TextXAlignment.Left
 	name.Text = petConfig.name
 
-	local sub = label(frame, UDim2.new(0, 180, 0, 14), UDim2.new(0, 70, 0, 29), Enum.Font.Gotham, 11, DIM)
+	local sub = UiTheme.label(frame, UDim2.new(0, 180, 0, 14), UDim2.new(0, 70, 0, 29), UiTheme.Body, 11, UiTheme.Dim)
 	sub.TextXAlignment = Enum.TextXAlignment.Left
 	sub.Text = string.format("%s  |  %s", petConfig.rarity, petConfig.ability.type)
 
-	local robux = button(
+	local robux = UiTheme.button(
 		frame,
 		UDim2.fromOffset(96, 26),
 		UDim2.new(1, -108, 0, 16),
 		string.format("R$ %d", offer.robux),
-		canBuy and GREEN or Color3.fromRGB(52, 54, 64)
+		canBuy and UiTheme.Rune or UiTheme.Slab
 	)
 	robux.TextSize = 13
 	robux.MouseButton1Click:Connect(function()
@@ -711,22 +627,23 @@ local function eggRow(egg, order, canPlace, blockedBy)
 	swatch.BackgroundColor3 = egg.color
 	swatch.BorderSizePixel = 0
 	swatch.Parent = frame
-	rounded(swatch, 3)
+	UiTheme.rounded(swatch, 3)
 
-	local name = label(frame, UDim2.new(0, 210, 0, 18), UDim2.new(0, 22, 0, 6), Enum.Font.GothamBold, 14, WHITE)
+	local name =
+		UiTheme.label(frame, UDim2.new(0, 210, 0, 18), UDim2.new(0, 22, 0, 6), UiTheme.BodyBold, 14, UiTheme.Text)
 	name.TextXAlignment = Enum.TextXAlignment.Left
 	name.Text = egg.name
 
-	local sub = label(frame, UDim2.new(0, 210, 0, 14), UDim2.new(0, 22, 0, 24), Enum.Font.Gotham, 11, DIM)
+	local sub = UiTheme.label(frame, UDim2.new(0, 210, 0, 14), UDim2.new(0, 22, 0, 24), UiTheme.Body, 11, UiTheme.Dim)
 	sub.TextXAlignment = Enum.TextXAlignment.Left
 	sub.Text = string.format("%d %s to hatch", egg.required, Config.Pets.HatchUnit == "tower" and "towers" or "floors")
 
-	local place = button(
+	local place = UiTheme.button(
 		frame,
 		UDim2.fromOffset(96, 26),
 		UDim2.new(1, -108, 0, 10),
 		canPlace and "PLACE" or blockedBy,
-		canPlace and GREEN or Color3.fromRGB(52, 54, 64)
+		canPlace and UiTheme.Rune or UiTheme.Slab
 	)
 	place.TextSize = canPlace and 13 or 10
 	place.MouseButton1Click:Connect(function()
@@ -747,38 +664,38 @@ local function shelfRow(eggConfig, order, canBuy)
 	frame.BackgroundTransparency = 0.35
 
 	local name =
-		label(frame, UDim2.new(0, 210, 0, 18), UDim2.new(0, 14, 0, 6), Enum.Font.GothamBold, 14, eggConfig.color)
+		UiTheme.label(frame, UDim2.new(0, 210, 0, 18), UDim2.new(0, 14, 0, 6), UiTheme.BodyBold, 14, eggConfig.color)
 	name.TextXAlignment = Enum.TextXAlignment.Left
 	name.Text = eggConfig.name
 
-	local sub = label(frame, UDim2.new(0, 210, 0, 14), UDim2.new(0, 14, 0, 24), Enum.Font.Gotham, 11, DIM)
+	local sub = UiTheme.label(frame, UDim2.new(0, 210, 0, 14), UDim2.new(0, 14, 0, 24), UiTheme.Body, 11, UiTheme.Dim)
 	sub.TextXAlignment = Enum.TextXAlignment.Left
 	local hatchText =
 		string.format("%d %s", eggConfig.mazesRequired, Config.Pets.HatchUnit == "tower" and "towers" or "floors")
 	sub.Text = eggConfig.coinCost and string.format("%d coins  |  %s", eggConfig.coinCost, hatchText) or hatchText
 
 	if eggConfig.coinCost then
-		local buy = button(
+		local buy = UiTheme.button(
 			frame,
 			UDim2.fromOffset(96, 26),
 			UDim2.new(1, -108, 0, both and 8 or 10),
 			canBuy and "BUY" or "AT A ROOST",
-			canBuy and GOLD or Color3.fromRGB(52, 54, 64)
+			canBuy and UiTheme.Lantern or UiTheme.Slab
 		)
 		buy.TextSize = canBuy and 13 or 10
-		buy.TextColor3 = canBuy and Color3.fromRGB(30, 26, 12) or WHITE
+		buy.TextColor3 = canBuy and UiTheme.Ink or UiTheme.Text
 		buy.MouseButton1Click:Connect(function()
 			send({ kind = "buyEgg", eggId = eggConfig.id })
 		end)
 	end
 
 	if offer then
-		local robux = button(
+		local robux = UiTheme.button(
 			frame,
 			UDim2.fromOffset(96, 26),
 			UDim2.new(1, -108, 0, both and 40 or 10),
 			string.format("R$ %d", offer.robux),
-			canBuy and GREEN or Color3.fromRGB(52, 54, 64)
+			canBuy and UiTheme.Rune or UiTheme.Slab
 		)
 		robux.TextSize = 13
 		robux.MouseButton1Click:Connect(function()
@@ -823,33 +740,34 @@ local function gearRow(item, order, wearerName, canReach)
 	swatch.BackgroundColor3 = Config.rarityColor(item.rarity)
 	swatch.BorderSizePixel = 0
 	swatch.Parent = frame
-	rounded(swatch, 3)
+	UiTheme.rounded(swatch, 3)
 
-	local name = label(frame, UDim2.new(0, 250, 0, 18), UDim2.new(0, 22, 0, 6), Enum.Font.GothamBold, 14, WHITE)
+	local name =
+		UiTheme.label(frame, UDim2.new(0, 250, 0, 18), UDim2.new(0, 22, 0, 6), UiTheme.BodyBold, 14, UiTheme.Text)
 	name.TextXAlignment = Enum.TextXAlignment.Left
 	name.Text = (item.locked and "[L] " or "") .. item.name
 
-	local sub = label(frame, UDim2.new(0, 250, 0, 14), UDim2.new(0, 22, 0, 24), Enum.Font.Gotham, 11, DIM)
+	local sub = UiTheme.label(frame, UDim2.new(0, 250, 0, 14), UDim2.new(0, 22, 0, 24), UiTheme.Body, 11, UiTheme.Dim)
 	sub.TextXAlignment = Enum.TextXAlignment.Left
 	sub.Text = string.format("%s  |  %s", item.slot, effectsLine(item))
 
-	local where = label(frame, UDim2.new(0, 250, 0, 14), UDim2.new(0, 22, 0, 38), Enum.Font.Gotham, 11, DIM)
+	local where = UiTheme.label(frame, UDim2.new(0, 250, 0, 14), UDim2.new(0, 22, 0, 38), UiTheme.Body, 11, UiTheme.Dim)
 	where.TextXAlignment = Enum.TextXAlignment.Left
 	if wearerName then
 		where.Text = "Worn by " .. wearerName
-		where.TextColor3 = GREEN
+		where.TextColor3 = UiTheme.Rune
 	elseif item.sellValue then
 		where.Text = string.format("In the bag  |  sells for %d", item.sellValue)
 	else
 		where.Text = "In the bag  |  not for sale"
 	end
 
-	local wear = button(
+	local wear = UiTheme.button(
 		frame,
 		UDim2.fromOffset(96, 24),
 		UDim2.new(1, -108, 0, 6),
 		item.wornBy and "TAKE OFF" or "WEAR",
-		item.wornBy and Color3.fromRGB(60, 62, 74) or GREEN
+		item.wornBy and UiTheme.Slab or UiTheme.Rune
 	)
 	wear.TextSize = 12
 	wear.MouseButton1Click:Connect(function()
@@ -866,12 +784,12 @@ local function gearRow(item, order, wearerName, canReach)
 	-- otherwise, because the price is on the line to the left of them and these
 	-- two only have to say which verb they are.
 	local sellable = item.sellValue ~= nil and not item.wornBy
-	local lock = button(
+	local lock = UiTheme.button(
 		frame,
 		UDim2.fromOffset(sellable and 46 or 96, 20),
 		UDim2.new(1, -108, 0, 32),
 		item.locked and "UNLOCK" or "LOCK",
-		Color3.fromRGB(60, 62, 74)
+		UiTheme.Slab
 	)
 	lock.TextSize = 11
 	lock.MouseButton1Click:Connect(function()
@@ -885,12 +803,12 @@ local function gearRow(item, order, wearerName, canReach)
 	-- Same bargain the Place button makes: it says why rather than going grey and
 	-- silent, and a locked item keeps its button so the refusal names the lock the
 	-- player set rather than nothing happening.
-	local sell = button(
+	local sell = UiTheme.button(
 		frame,
 		UDim2.fromOffset(46, 20),
 		UDim2.new(1, -58, 0, 32),
 		canReach and "SELL" or "ROOST",
-		canReach and Color3.fromRGB(120, 70, 70) or Color3.fromRGB(52, 54, 64)
+		canReach and UiTheme.Ember or UiTheme.Slab
 	)
 	sell.TextSize = 11
 	sell.MouseButton1Click:Connect(function()
@@ -908,48 +826,49 @@ local function gearShelfRow(config, order, canBuy)
 	local frame = row(order, both and 78 or 52)
 	frame.BackgroundTransparency = 0.35
 
-	local name = label(
+	local name = UiTheme.label(
 		frame,
 		UDim2.new(0, 250, 0, 18),
 		UDim2.new(0, 14, 0, 4),
-		Enum.Font.GothamBold,
+		UiTheme.BodyBold,
 		14,
 		Config.rarityColor(config.rarity)
 	)
 	name.TextXAlignment = Enum.TextXAlignment.Left
 	name.Text = config.name
 
-	local sub = label(frame, UDim2.new(0, 250, 0, 14), UDim2.new(0, 14, 0, 21), Enum.Font.Gotham, 11, DIM)
+	local sub = UiTheme.label(frame, UDim2.new(0, 250, 0, 14), UDim2.new(0, 14, 0, 21), UiTheme.Body, 11, UiTheme.Dim)
 	sub.TextXAlignment = Enum.TextXAlignment.Left
 	sub.TextTruncate = Enum.TextTruncate.AtEnd
 	sub.Text = string.format("%s  |  %s", config.slot, effectsLine(config))
 
-	local price = label(frame, UDim2.new(0, 250, 0, 14), UDim2.new(0, 14, 0, 35), Enum.Font.Gotham, 11, GOLD)
+	local price =
+		UiTheme.label(frame, UDim2.new(0, 250, 0, 14), UDim2.new(0, 14, 0, 35), UiTheme.Body, 11, UiTheme.Lantern)
 	price.TextXAlignment = Enum.TextXAlignment.Left
 	price.Text = config.coinCost and string.format("%d coins", config.coinCost) or "Robux only"
 
 	if config.coinCost then
-		local buy = button(
+		local buy = UiTheme.button(
 			frame,
 			UDim2.fromOffset(96, 26),
 			UDim2.new(1, -108, 0, both and 8 or 13),
 			canBuy and "BUY" or "AT A ROOST",
-			canBuy and GOLD or Color3.fromRGB(52, 54, 64)
+			canBuy and UiTheme.Lantern or UiTheme.Slab
 		)
 		buy.TextSize = canBuy and 13 or 10
-		buy.TextColor3 = canBuy and Color3.fromRGB(30, 26, 12) or WHITE
+		buy.TextColor3 = canBuy and UiTheme.Ink or UiTheme.Text
 		buy.MouseButton1Click:Connect(function()
 			send({ kind = "buyAccessory", accessoryId = config.id })
 		end)
 	end
 
 	if offer then
-		local robux = button(
+		local robux = UiTheme.button(
 			frame,
 			UDim2.fromOffset(96, 26),
 			UDim2.new(1, -108, 0, both and 42 or 13),
 			string.format("R$ %d", offer.robux),
-			canBuy and GREEN or Color3.fromRGB(52, 54, 64)
+			canBuy and UiTheme.Rune or UiTheme.Slab
 		)
 		robux.TextSize = 13
 		robux.MouseButton1Click:Connect(function()
@@ -964,11 +883,12 @@ end
 local function pickRow(pet, item, order)
 	local frame = row(order, 44)
 
-	local name = label(frame, UDim2.new(0, 240, 0, 18), UDim2.new(0, 14, 0, 5), Enum.Font.GothamBold, 14, WHITE)
+	local name =
+		UiTheme.label(frame, UDim2.new(0, 240, 0, 18), UDim2.new(0, 14, 0, 5), UiTheme.BodyBold, 14, UiTheme.Text)
 	name.TextXAlignment = Enum.TextXAlignment.Left
 	name.Text = pet.name .. (pet.equipped and "  (out)" or "")
 
-	local sub = label(frame, UDim2.new(0, 240, 0, 14), UDim2.new(0, 14, 0, 24), Enum.Font.Gotham, 11, DIM)
+	local sub = UiTheme.label(frame, UDim2.new(0, 240, 0, 14), UDim2.new(0, 14, 0, 24), UiTheme.Body, 11, UiTheme.Dim)
 	sub.TextXAlignment = Enum.TextXAlignment.Left
 	local occupied = pet.worn and pet.worn[item.slot]
 	if occupied then
@@ -979,7 +899,7 @@ local function pickRow(pet, item, order)
 		sub.Text = item.slot .. " is empty"
 	end
 
-	local put = button(frame, UDim2.fromOffset(84, 26), UDim2.new(1, -96, 0, 9), "PUT ON", GREEN)
+	local put = UiTheme.button(frame, UDim2.fromOffset(84, 26), UDim2.new(1, -96, 0, 9), "PUT ON", UiTheme.Rune)
 	put.TextSize = 12
 	put.MouseButton1Click:Connect(function()
 		send({ kind = "wear", petUid = pet.uid, accessoryUid = item.uid })
@@ -989,14 +909,15 @@ end
 
 local function incubatorRow(incubator, order)
 	local frame = row(order, 58)
-	frame.BackgroundColor3 = Color3.fromRGB(34, 38, 44)
+	-- The live row, one step up the stone stair from the shelf under it.
+	frame.BackgroundColor3 = UiTheme.Track
 
 	local name =
-		label(frame, UDim2.new(1, -24, 0, 20), UDim2.new(0, 14, 0, 8), Enum.Font.GothamBold, 15, incubator.color)
+		UiTheme.label(frame, UDim2.new(1, -24, 0, 20), UDim2.new(0, 14, 0, 8), UiTheme.BodyBold, 15, incubator.color)
 	name.TextXAlignment = Enum.TextXAlignment.Left
 	name.Text = incubator.name .. " is hatching"
 
-	local sub = label(frame, UDim2.new(1, -24, 0, 16), UDim2.new(0, 14, 0, 28), Enum.Font.Gotham, 12, DIM)
+	local sub = UiTheme.label(frame, UDim2.new(1, -24, 0, 16), UDim2.new(0, 14, 0, 28), UiTheme.Body, 12, UiTheme.Dim)
 	sub.TextXAlignment = Enum.TextXAlignment.Left
 	local unit = Config.Pets.HatchUnit == "tower" and "towers" or "floors"
 	sub.Text = string.format("%d / %d %s", math.min(incubator.done, incubator.required), incubator.required, unit)
@@ -1004,7 +925,7 @@ local function incubatorRow(incubator, order)
 	local track = Instance.new("Frame")
 	track.Size = UDim2.new(1, -28, 0, 5)
 	track.Position = UDim2.new(0, 14, 1, -12)
-	track.BackgroundColor3 = Color3.fromRGB(50, 52, 62)
+	track.BackgroundColor3 = UiTheme.Track
 	track.BorderSizePixel = 0
 	track.Parent = frame
 
@@ -1017,7 +938,7 @@ local function incubatorRow(incubator, order)
 	-- Only ever shown for an egg that is finished and did not hatch, which today
 	-- means the pet shelf was full when it came due.
 	if incubator.done >= incubator.required then
-		local hatch = button(frame, UDim2.fromOffset(84, 24), UDim2.new(1, -96, 0, 8), "HATCH", GREEN)
+		local hatch = UiTheme.button(frame, UDim2.fromOffset(84, 24), UDim2.new(1, -96, 0, 8), "HATCH", UiTheme.Rune)
 		hatch.MouseButton1Click:Connect(function()
 			send({ kind = "hatch" })
 		end)
@@ -1076,7 +997,8 @@ local function drawPets()
 	order = order + 1
 	local header = row(order, 26)
 	header.BackgroundTransparency = 1
-	local heading = label(header, UDim2.new(1, -24, 1, 0), UDim2.new(0, 14, 0, 0), Enum.Font.GothamBold, 12, GOLD)
+	local heading =
+		UiTheme.label(header, UDim2.new(1, -24, 1, 0), UDim2.new(0, 14, 0, 0), UiTheme.BodyBold, 12, UiTheme.Lantern)
 	heading.TextXAlignment = Enum.TextXAlignment.Left
 	heading.Text = canReach and "FOR SALE" or "FOR SALE AT ANY ROOF ROOST"
 
@@ -1156,11 +1078,19 @@ local function drawGear()
 			-- tie with it and draw above the question it answers.
 			local header = row(0, 44)
 			header.BackgroundTransparency = 0.35
-			local ask = label(header, UDim2.new(0, 250, 1, 0), UDim2.new(0, 14, 0, 0), Enum.Font.GothamBold, 14, WHITE)
+			local ask = UiTheme.label(
+				header,
+				UDim2.new(0, 250, 1, 0),
+				UDim2.new(0, 14, 0, 0),
+				UiTheme.BodyBold,
+				14,
+				UiTheme.Text
+			)
 			ask.TextXAlignment = Enum.TextXAlignment.Left
 			ask.Text = string.format("Put %s on which pet?", item.name)
 
-			local cancel = button(header, UDim2.fromOffset(84, 26), UDim2.new(1, -96, 0, 9), "CANCEL", ROW)
+			local cancel =
+				UiTheme.button(header, UDim2.fromOffset(84, 26), UDim2.new(1, -96, 0, 9), "CANCEL", UiTheme.Slab)
 			cancel.TextSize = 12
 			cancel.MouseButton1Click:Connect(function()
 				gearTarget = nil
@@ -1219,7 +1149,8 @@ local function drawGear()
 	order = order + 1
 	local header = row(order, 26)
 	header.BackgroundTransparency = 1
-	local heading = label(header, UDim2.new(1, -24, 1, 0), UDim2.new(0, 14, 0, 0), Enum.Font.GothamBold, 12, GOLD)
+	local heading =
+		UiTheme.label(header, UDim2.new(1, -24, 1, 0), UDim2.new(0, 14, 0, 0), UiTheme.BodyBold, 12, UiTheme.Lantern)
 	heading.TextXAlignment = Enum.TextXAlignment.Left
 	heading.Text = canReach and "FOR SALE" or "FOR SALE AT ANY ROOF ROOST"
 
@@ -1237,11 +1168,12 @@ local function drawDaily()
 	local length = Config.Pets.DailyStreakLength
 
 	local frame = row(1, 96)
-	local head = label(frame, UDim2.new(1, -24, 0, 24), UDim2.new(0, 14, 0, 10), Enum.Font.GothamBold, 17, WHITE)
+	local head =
+		UiTheme.label(frame, UDim2.new(1, -24, 0, 24), UDim2.new(0, 14, 0, 10), UiTheme.BodyBold, 17, UiTheme.Text)
 	head.TextXAlignment = Enum.TextXAlignment.Left
 	head.Text = string.format("Day %d of %d", math.max(1, streak), length)
 
-	local sub = label(frame, UDim2.new(1, -24, 0, 18), UDim2.new(0, 14, 0, 34), Enum.Font.Gotham, 12, DIM)
+	local sub = UiTheme.label(frame, UDim2.new(1, -24, 0, 18), UDim2.new(0, 14, 0, 34), UiTheme.Body, 12, UiTheme.Dim)
 	sub.TextXAlignment = Enum.TextXAlignment.Left
 	sub.Text = string.format(
 		"%d coins and %d XP today. Day %d pays a Streak Egg.",
@@ -1261,29 +1193,30 @@ local function drawDaily()
 		local pip = Instance.new("Frame")
 		pip.Size = UDim2.new(1 / length, -4, 1, 0)
 		pip.Position = UDim2.new((i - 1) / length, 2, 0, 0)
-		pip.BackgroundColor3 = i <= streak and GOLD or Color3.fromRGB(50, 52, 62)
+		pip.BackgroundColor3 = i <= streak and UiTheme.Lantern or UiTheme.Track
 		pip.BorderSizePixel = 0
 		pip.Parent = pips
-		rounded(pip, 4)
+		UiTheme.rounded(pip, 4)
 	end
 
-	local claim = button(
+	local claim = UiTheme.button(
 		body,
 		UDim2.new(1, -6, 0, 40),
 		UDim2.new(),
 		dailyAvailable and "CLAIM TODAY" or "CLAIMED, COME BACK TOMORROW",
-		dailyAvailable and GOLD or Color3.fromRGB(52, 54, 64)
+		dailyAvailable and UiTheme.Lantern or UiTheme.Slab
 	)
 	claim.LayoutOrder = 2
 	claim.TextSize = dailyAvailable and 16 or 12
-	claim.TextColor3 = dailyAvailable and Color3.fromRGB(30, 26, 12) or DIM
+	claim.TextColor3 = dailyAvailable and UiTheme.Ink or UiTheme.Dim
 	claim.MouseButton1Click:Connect(function()
 		send({ kind = "daily" })
 	end)
 
 	local stats = row(3, 68)
 	stats.BackgroundTransparency = 0.4
-	local statLabel = label(stats, UDim2.new(1, -24, 1, -12), UDim2.new(0, 14, 0, 6), Enum.Font.Gotham, 12, DIM)
+	local statLabel =
+		UiTheme.label(stats, UDim2.new(1, -24, 1, -12), UDim2.new(0, 14, 0, 6), UiTheme.Body, 12, UiTheme.Dim)
 	statLabel.TextXAlignment = Enum.TextXAlignment.Left
 	statLabel.TextYAlignment = Enum.TextYAlignment.Top
 	local s = state.stats or {}
@@ -1301,7 +1234,11 @@ function refresh()
 	end
 	clearBody()
 	for name, tabButton in pairs(tabButtons) do
-		tabButton.BackgroundColor3 = name == openTab and Color3.fromRGB(60, 62, 74) or ROW
+		-- The open tab is Rune with Ink lettering, the theme's selection the same
+		-- way the ability row's border is; the rest are stone.
+		local open = name == openTab
+		tabButton.BackgroundColor3 = open and UiTheme.Rune or UiTheme.Stone
+		tabButton.TextColor3 = open and UiTheme.Ink or UiTheme.Text
 	end
 	if openTab == "Pets" then
 		drawPets()
@@ -1489,32 +1426,27 @@ local function playEvent(event)
 		showReveal(event.name, event.rarity, event.ability, event.petId, event.stage)
 	elseif event.kind == "levelup" then
 		local what = event.pet.evolved and "evolved!" or string.format("reached level %d", event.pet.level)
-		showBanner(event.pet.name .. " " .. what, "", Config.rarityColor(event.pet.rarity), 2)
-		playSound(Config.Sounds.PowerupPickup, Config.Juice.PowerupVolume, 1.4)
+		banner.show(event.pet.name .. " " .. what, "", Config.rarityColor(event.pet.rarity), 2)
+		UiTheme.playSound(Config.Sounds.PowerupPickup, Config.Juice.PowerupVolume, 1.4)
 	elseif event.kind == "worn" then
 		-- The subtitle is the whole reason a move is not silent: at one equipped pet
 		-- a player moving a crown has just changed which pet it works on.
-		showBanner(
+		banner.show(
 			string.format("%s on %s", event.name, event.petName or "your pet"),
 			event.takenFrom and ("Taken off " .. event.takenFrom) or "",
-			GREEN,
+			UiTheme.Rune,
 			2
 		)
 	elseif event.kind == "unworn" then
-		showBanner(
-			string.format("%s off %s", event.name or "Gear", event.petName or "your pet"),
-			"",
-			Color3.fromRGB(150, 160, 175),
-			1.6
-		)
+		banner.show(string.format("%s off %s", event.name or "Gear", event.petName or "your pet"), "", UiTheme.Dim, 1.6)
 	elseif event.kind == "placed" then
-		showBanner("Egg placed", remaining(event.done, event.required), GREEN, 2.5)
+		banner.show("Egg placed", remaining(event.done, event.required), UiTheme.Rune, 2.5)
 	elseif event.kind == "bought" then
-		showBanner(event.name, string.format("-%d coins", event.cost), GOLD, 1.8)
+		banner.show(event.name, string.format("-%d coins", event.cost), UiTheme.Lantern, 1.8)
 	elseif event.kind == "sold" then
-		showBanner(string.format("Sold %s", event.name), string.format("+%d coins", event.value), GOLD, 1.8)
+		banner.show(string.format("Sold %s", event.name), string.format("+%d coins", event.value), UiTheme.Lantern, 1.8)
 	elseif event.kind == "starter" then
-		showBanner("A free egg!", "Open PETS to place it at a roof roost", GOLD, 4)
+		banner.show("A free egg!", "Open PETS to place it at a roof roost", UiTheme.Lantern, 4)
 	elseif event.kind == "daily" then
 		local parts = { string.format("+%d coins", event.coins) }
 		if event.xp > 0 then
@@ -1527,14 +1459,14 @@ local function playEvent(event)
 			table.insert(parts, event.gear .. "!")
 		end
 		dailyAvailable = false
-		showBanner(string.format("Day %d streak", event.streak), table.concat(parts, "  |  "), GOLD, 3)
+		banner.show(string.format("Day %d streak", event.streak), table.concat(parts, "  |  "), UiTheme.Lantern, 3)
 	elseif event.kind == "incubated" then
 		-- Fires alongside TimerGui's own tower celebration, so it is deliberately
 		-- short and quiet: the point is the count, not another fanfare.
-		showBanner(
+		banner.show(
 			string.format("Egg  %d / %d", math.min(event.done, event.required), event.required),
 			remaining(event.done, event.required),
-			GREEN,
+			UiTheme.Rune,
 			1.5
 		)
 	end
@@ -1568,14 +1500,14 @@ remote.OnClientEvent:Connect(function(payload)
 			text = string.format("%d more coins for %s", payload.need, payload.label)
 		end
 		if text then
-			showBanner(text, "", RED, 2)
-			playSound(Config.Sounds.CoinPickup, Config.Juice.CoinVolume, Config.Juice.ShopDeniedPitch)
+			banner.show(text, "", UiTheme.Ember, 2)
+			UiTheme.playSound(Config.Sounds.CoinPickup, Config.Juice.CoinVolume, Config.Juice.ShopDeniedPitch)
 		end
 	elseif payload.kind == "broadcast" then
 		-- Two things are worth announcing to a whole server and they are not both
 		-- hatches, so the verb and the noun both ride the payload. The hatch sends
 		-- neither and reads as it always did.
-		showBanner(
+		banner.show(
 			string.format(
 				"%s %s a %s!",
 				payload.playerName,
@@ -1599,12 +1531,12 @@ purchases.OnClientEvent:Connect(function(payload)
 		return
 	end
 	if payload.kind == "granted" then
-		showBanner(payload.label, "Bought with Robux", GOLD, 2.5)
+		banner.show(payload.label, "Bought with Robux", UiTheme.Lantern, 2.5)
 	elseif payload.kind == "coinsInstead" then
-		showBanner(
+		banner.show(
 			string.format("+%d coins", payload.coins),
 			string.format("%s could not be granted, so it paid out as coins", payload.label),
-			GOLD,
+			UiTheme.Lantern,
 			3.5
 		)
 	end

@@ -158,6 +158,25 @@ but they tint by rarity over an `Ink` wash, and the reveal title takes the Displ
 which is the single place the carved lettering gets to be huge. BestiaryGui inherits
 everything by using the same cell helper.
 
+*Done, pending the play test (a hatch reveal and a denied buy), with five decisions
+recorded.* (1) The token table's "both inactive-button grays fold into Stone" was
+written before the survey noticed the buttons sit on Stone rows, where Stone on Stone
+is invisible; they fold into `Slab` instead, one idle colour, so a row's verbs read
+as carved into the stone rather than raised off it. Active verbs are Rune (equip,
+wear, place), Lantern with Ink lettering (buy, claim), and Ember (sell); the two
+Robux buttons went Rune with the rest of the affirmative verbs. (2) The open tab is
+Rune with Ink lettering, the same selection the ability row's border makes, and the
+tab painter now writes text colour beside background so the state cannot half-change.
+(3) The incubating egg's row is `Track`, one step up the stone stair from the shelf
+rows, replacing its bespoke gray; XP and hatch fills keep rarity and egg colours.
+(4) The PETS toggle and BuildingLights' reset button are chips that happen to be
+pressable, so they wear the full chip chrome (slab, gradient, etch stroke).
+BuildingLights postdates this plan's survey and joined the Slate for its one chrome
+surface; its six style colours are semantic fallbacks for the generator's
+`CompletionLightColor` and stay. (5) PetGui's banner fork is dead: `UiTheme.banner`
+took this file's size, position and z-order as options, and both `showBanner` copies
+the survey counted are now gone from the repo.
+
 **Slate 5: the world's plates.**
 The five BillboardGui sites in `MazeGenerator` (plaza name sign, EGG ROOST, UPGRADE
 SHOP, pedestal boards, roof SurfaceGui) share one plate style today by copy-paste;

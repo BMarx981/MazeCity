@@ -19,6 +19,9 @@ end
 
 local EnemyDefinitions = require(ReplicatedStorage:WaitForChild("EnemyDefinitions"))
 local PortraitGenerator = require(ReplicatedStorage:WaitForChild("PortraitGenerator"))
+-- A debug surface, but it wears the same stone as everything else: chrome from
+-- UiTheme and nowhere else (docs/HUD_THEME_PLAN.md, Slate 4).
+local UiTheme = require(ReplicatedStorage:WaitForChild("UiTheme"))
 
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
@@ -35,13 +38,8 @@ gui.ResetOnSpawn = false
 gui.Enabled = false
 gui.Parent = playerGui
 
-local backdrop = Instance.new("Frame")
-backdrop.Size = UDim2.fromScale(0.8, 0.8)
-backdrop.Position = UDim2.fromScale(0.1, 0.1)
-backdrop.BackgroundColor3 = Color3.fromRGB(18, 20, 26)
+local backdrop = UiTheme.panel(gui, UDim2.fromScale(0.8, 0.8), UDim2.fromScale(0.1, 0.1))
 backdrop.BackgroundTransparency = 0.15
-backdrop.BorderSizePixel = 0
-backdrop.Parent = gui
 
 local grid = Instance.new("UIGridLayout")
 grid.CellSize = UDim2.fromScale(0.19, 0.235)
@@ -53,23 +51,18 @@ for index, name in ipairs(names) do
 	local cell = Instance.new("Frame")
 	cell.Name = name
 	cell.LayoutOrder = index
-	cell.BackgroundColor3 = Color3.fromRGB(30, 33, 42)
+	cell.BackgroundColor3 = UiTheme.Stone
 	cell.BorderSizePixel = 0
 	cell.Parent = backdrop
+	UiTheme.rounded(cell)
 
 	local portrait = PortraitGenerator.portrait(name, { spin = true })
 	portrait.Size = UDim2.fromScale(1, 0.85)
 	portrait.Parent = cell
 
-	local label = Instance.new("TextLabel")
-	label.Size = UDim2.fromScale(1, 0.15)
-	label.Position = UDim2.fromScale(0, 0.85)
-	label.BackgroundTransparency = 1
-	label.TextColor3 = Color3.fromRGB(225, 228, 235)
+	local label = UiTheme.label(cell, UDim2.fromScale(1, 0.15), UDim2.fromScale(0, 0.85), UiTheme.BodyBold, 14)
 	label.TextScaled = true
-	label.Font = Enum.Font.GothamBold
 	label.Text = name
-	label.Parent = cell
 end
 
 UserInputService.InputBegan:Connect(function(input, processed)
