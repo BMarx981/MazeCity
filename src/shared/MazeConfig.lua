@@ -119,34 +119,59 @@ Config.World = {
 	-- true of it: it is the sharpest available check that the street draws none
 	-- of its randomness from a stream anything else reads.
 	StreetMazeEnabled = true,
+	-- How wide a street cell aims to be. Not a cell size: gridlines have to fall
+	-- exactly on every plot boundary, so each strip between two of them is cut
+	-- into round(width / target) cells and the real sizes come out near this.
+	--
+	-- It is the knob that decides whether the street reads as a maze at all, and
+	-- it moves in steps rather than smoothly, because what it really sets is how
+	-- many lanes each strip is divided into. The 86-stud canyon between two
+	-- plots is two lanes of 43 at any target above 34 and three lanes of 28.7
+	-- below it; the 112-stud outer margin, which is more than half the walkable
+	-- ground, goes from three cells to four at the same time. It shipped at 44,
+	-- where a 43-stud corridor between 12-stud walls is a plaza with some walls
+	-- standing in it: you can see across the whole district and the maze is
+	-- optional. At 32 a street lane is 28.7, which is the tower's own 25 within
+	-- a few studs, and the same braid produces a street you have to read.
+	StreetCellTarget = 32,
 	-- The fraction of DEAD ENDS the braid removes, not the fraction of walls it
 	-- opens. At 1 there are no dead ends left and it is still a maze; opening
 	-- every candidate edge would be no maze at all. This is the one number that
 	-- decides whether the street is easier than a tower, and it should stay well
 	-- above the towers' zero: a street is connective tissue, and a player who
 	-- has to solve it twice per section is a player who stops climbing.
-	StreetBraidFraction = 0.8,
-	-- Low enough to see over from an overlook deck at 26 and not from the
-	-- ground, and low enough that the slide from the previous section clears it
-	-- where it crosses the west edge of the ground at Y 14.3. That clearance is
-	-- 1.5 studs and it is asserted by tools/street/check.sh, so raising this
-	-- fails there rather than silently in a lazily generated section: a slide is
-	-- a physics ride, and a wall standing in it stops the rider over the void.
-	StreetWallHeight = 12,
+	--
+	-- It shipped at 0.8, which left three dead ends in a district: every choice
+	-- was the right choice and there was nothing to read. At 0.5 half of them
+	-- survive and a wrong turn costs a cell or two, while the walk from the
+	-- slide landing to a tower door is 1206 studs against 1174 before, so the
+	-- street is harder to read without being longer to cross.
+	StreetBraidFraction = 0.5,
+	-- The maze walls, and only them. The perimeter ring is a separate height in
+	-- MazeGenerator.CFG because it is the one the slide from the previous
+	-- section crosses; nothing in the maze stands under that line, the ground it
+	-- descends over being the landing's own reserved room. So this is free to be
+	-- what a maze wall should be: over a third-person camera's shoulder, which
+	-- 12 was not, and ten studs below an overlook deck at 26, which is what
+	-- keeps climbing one worth the stairs.
+	StreetWallHeight = 16,
 	-- Homes and shuttered shopfronts, each filling one cell so the maze is
 	-- carved around it and the house is its own boundary. Every one is placed
 	-- behind a connectivity check, because thirty blocked cells can wall a
-	-- district in half.
-	StreetBlockProps = 30,
+	-- district in half. The count rose with the cell count: at 28-stud cells
+	-- thirty houses cover half the ground thirty covered at 43.
+	StreetBlockProps = 55,
 	-- Lamp posts, planters, crates, benches. These stand in a corner of an open
 	-- cell, so they narrow a street rather than closing one.
-	StreetTrimProps = 50,
+	StreetTrimProps = 70,
 	-- Signposts, and how many towers each one names. Four arms on every post to
 	-- cover the one tower three would miss is three hundred plates a section
 	-- nobody reads, so the count stays at three and StreetPlan gives the sign
 	-- nearest an unnamed tower one extra arm instead. Every tower in a district
-	-- is named by at least one sign, which tools/street asserts.
-	StreetSignposts = 16,
+	-- is named by at least one sign, which tools/street asserts. The post count
+	-- rose with the maze: a street with real dead ends in it is a street worth
+	-- signing, and the junctions to stand them at doubled.
+	StreetSignposts = 24,
 	StreetSignArms = 3,
 	-- Deck height for an overlook. Above the wall top by enough that the maze
 	-- reads as a maze from up there, which is the whole point of climbing one.

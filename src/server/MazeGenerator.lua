@@ -337,23 +337,38 @@ local CFG = {
 	SLIDE_LANDING_Y = 2,
 
 	-- The street maze. Structural, so it lives here; what a playtest moves
-	-- (braid, wall height, how many props and signs) is in Config.World and
-	-- lands on these through refreshFromConfig.
+	-- (cell target, braid, wall height, how many props and signs) is in
+	-- Config.World and lands on these through refreshFromConfig.
 	--
 	-- The target is not a cell size, it is the size the subdivision aims at.
 	-- Gridlines have to fall exactly on every plot boundary or a tower gets a
 	-- walkable ring around it that no wall can close, so each strip between two
 	-- boundaries is cut into round(width / target) cells and the real sizes come
-	-- out between 37.33 and 44.33. One constant produces all of it and it
+	-- out between 28.0 and 33.3 at 32. One constant produces all of it and it
 	-- survives a change to STREET, FACADE_OUTSET or PLOT_COLS.
-	STREET_CELL_TARGET = 44,
+	--
+	-- Because it sets a lane count per strip rather than a width, it moves in
+	-- steps: the 86-stud canyon between two plots is two lanes above a target of
+	-- 34 and three below it, which is the whole difference between a street you
+	-- walk through and one you read. Config.World.StreetCellTarget has the rest.
+	STREET_CELL_TARGET = 32,
 	STREET_ENABLED = true,
-	STREET_BRAID = 0.8,
-	STREET_BLOCK_PROPS = 30,
-	STREET_TRIM_PROPS = 50,
-	STREET_SIGNPOSTS = 16,
+	STREET_BRAID = 0.5,
+	STREET_BLOCK_PROPS = 55,
+	STREET_TRIM_PROPS = 70,
+	STREET_SIGNPOSTS = 24,
 	STREET_SIGN_ARMS = 3,
-	STREET_WALL_HEIGHT = 12,
+	STREET_WALL_HEIGHT = 16,
+	-- The perimeter ring, and the only street height the slide constrains. It
+	-- is its own number rather than the maze's because the two are bounded by
+	-- different things and one of the two bounds is tight: the slide from the
+	-- previous section crosses the west edge of this ground at Y 14.3 and is a
+	-- physics ride, so a ring standing in it stops the rider over the void, and
+	-- tools/street asserts the clearance. Nothing in the MAZE stands under that
+	-- line: the slide is over the ground for its last forty studs and every one
+	-- of them is inside the landing's reserved room, which is why the maze wall
+	-- above is free to be as tall as an overlook deck allows.
+	STREET_EDGE_HEIGHT = 12,
 	STREET_WALL_THICKNESS = 2,
 	-- Growth on the reserved apron around each door, applied along the facade
 	-- and outward but never inward: the inner edge is pinned to the tower's own
@@ -454,6 +469,7 @@ local function refreshFromConfig()
 	CFG.POWERUPS_PER_LEVEL = setting(w.PowerupsPerLevel, CFG.POWERUPS_PER_LEVEL)
 	CFG.ROOF_ARC_COINS = setting(w.RoofArcCoins, CFG.ROOF_ARC_COINS)
 	CFG.STREET_ENABLED = setting(w.StreetMazeEnabled, CFG.STREET_ENABLED)
+	CFG.STREET_CELL_TARGET = setting(w.StreetCellTarget, CFG.STREET_CELL_TARGET)
 	CFG.STREET_BRAID = setting(w.StreetBraidFraction, CFG.STREET_BRAID)
 	CFG.STREET_WALL_HEIGHT = setting(w.StreetWallHeight, CFG.STREET_WALL_HEIGHT)
 	CFG.STREET_BLOCK_PROPS = setting(w.StreetBlockProps, CFG.STREET_BLOCK_PROPS)
@@ -3362,13 +3378,18 @@ end
 -- Default collision group, deliberately, and its own function so that stays a
 -- property of what built it rather than of a flag somebody has to remember.
 -- Four parts rather than one per cell edge: it is a boundary, not a maze.
+--
+-- STREET_EDGE_HEIGHT and not the maze's height, which is the second thing this
+-- function's separateness buys: the ring is what the incoming slide crosses, so
+-- the ring is what the slide's clearance caps, and the maze inside it is not
+-- held to a bound nothing in it stands under.
 local function buildStreetPerimeter(parent, origin, plan, style)
 	for _, w in ipairs(plan.perimeter) do
 		local part = makePart(
 			parent,
 			"StreetEdge",
-			CFrame.new(origin + Vector3.new(w.x, CFG.STREET_WALL_HEIGHT / 2, w.z)),
-			Vector3.new(w.sizeX, CFG.STREET_WALL_HEIGHT, w.sizeZ),
+			CFrame.new(origin + Vector3.new(w.x, CFG.STREET_EDGE_HEIGHT / 2, w.z)),
+			Vector3.new(w.sizeX, CFG.STREET_EDGE_HEIGHT, w.sizeZ),
 			style.skin:Lerp(Color3.fromRGB(20, 20, 24), 0.5),
 			Enum.Material.Slate
 		)

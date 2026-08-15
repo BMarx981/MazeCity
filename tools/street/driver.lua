@@ -22,9 +22,11 @@ local PLOT_ROWS = 2
 local SECTION_GAP = 620
 local ROOF_Y = 195
 
-local CELL_TARGET = 44
+local CELL_TARGET = 32
 local WALL_THICKNESS = 2
-local WALL_HEIGHT = 12
+local WALL_HEIGHT = 16
+local EDGE_HEIGHT = 12 -- the perimeter ring, which is what the slide crosses
+local DOME_DECK_Y = 26
 local APRON_MARGIN = 6
 local ZIP_CLEARANCE = 8
 local ZIP_SAMPLES = 256
@@ -49,11 +51,11 @@ local ZIP_RISE = 0.35
 local SLIDE_LANDING_X = -80
 local SLIDE_LANDING_Y = 2
 
-local BLOCK_PROPS = 30
-local TRIM_PROPS = 50
-local SIGNPOSTS = 16
+local BLOCK_PROPS = 55
+local TRIM_PROPS = 70
+local SIGNPOSTS = 24
 local SIGN_ARMS = 3
-local BRAID = 0.8
+local BRAID = 0.5
 
 local GROUND_MIN_X = -120
 local GROUND_MAX_X = PLOT_COLS * PLOT_SPAN + 120
@@ -259,14 +261,19 @@ local function reachableNodes(plan)
 end
 
 local function verify(label, plan, spec)
-	-- 1. Cell sizes stay in a range a street reads as a street.
+	-- 1. Cell sizes stay near the target. Relative rather than a fixed band, so
+	-- retuning the target retunes this with it: what must hold is that the
+	-- subdivision tracks what it was asked for, and a strip coming out half the
+	-- target wide is a gridline landing somewhere nobody intended. At 32 the
+	-- real sizes are 28.0 to 33.3, which is 0.88 to 1.04 of it.
+	local loBand, hiBand = CELL_TARGET * 0.7, CELL_TARGET * 1.4
 	for cx = 1, plan.cols do
 		local w = plan.xLines[cx + 1] - plan.xLines[cx]
-		check(w >= 30 and w <= 55, label .. ": x cell " .. cx .. " is " .. string.format("%.2f", w) .. " studs")
+		check(w >= loBand and w <= hiBand, label .. ": x cell " .. cx .. " is " .. string.format("%.2f", w) .. " studs")
 	end
 	for cz = 1, plan.rows do
 		local d = plan.zLines[cz + 1] - plan.zLines[cz]
-		check(d >= 30 and d <= 55, label .. ": z cell " .. cz .. " is " .. string.format("%.2f", d) .. " studs")
+		check(d >= loBand and d <= hiBand, label .. ": z cell " .. cz .. " is " .. string.format("%.2f", d) .. " studs")
 	end
 
 	-- 2. Gridlines land exactly on every plot boundary, which is the whole
@@ -419,19 +426,73 @@ end
 -- The slide crosses the west ground boundary on its way into the next section,
 -- and it is a physics ride: a perimeter wall standing in it stops the rider
 -- dead over the void between two grounds. This is the one assertion that is
--- pure arithmetic over the constants, and it is here so that raising the street
--- wall height in a playtest fails loudly rather than in a lazily generated
--- section nobody was watching.
-do
-	local startX = (PLOT_COLS - 1) * PLOT_SPAN + FX + 6
+-- pure arithmetic over the constants, and it is here so that raising a street
+-- height in a playtest fails loudly rather than in a lazily generated section
+-- nobody was watching.
+--
+-- Two heights, because the slide bounds only one of them. The ring is what it
+-- crosses. The maze walls are bounded by the overlook deck instead, and by
+-- nothing else, which is a claim the next block checks rather than asserts from
+-- a plan view: over this ground the slide is inside the landing's own reserved
+-- room for every stud of its run, and no wall is ever drawn in a room.
+--
+-- The crossing is at the ground's west edge, which is SLIDE_LANDING_X studs
+-- further along than the landing plus GROUND_MIN_X. Reading it as the latter
+-- put the sample eighty studs short of the edge and therefore twenty-four studs
+-- high, so this passed for wall heights it should have failed.
+local function slideAt(startZ, x)
+	local startX = (PLOT_COLS - 1) * PLOT_SPAN + FX + 6 - (PLOT_COLS * PLOT_SPAN + SECTION_GAP)
 	local startY = ROOF_Y + 2
-	local endX = PLOT_COLS * PLOT_SPAN + SECTION_GAP + SLIDE_LANDING_X
-	local endY = SLIDE_LANDING_Y
-	local t = (endX + GROUND_MIN_X - startX) / (endX - startX)
-	local crossingY = startY + (endY - startY) * t
+	local endX, endY, endZ = SLIDE_LANDING_X, SLIDE_LANDING_Y, PLOT_SPAN * 0.5
+	local t = (x - startX) / (endX - startX)
+	return startY + (endY - startY) * t, startZ + (endZ - startZ) * t
+end
+
+do
+	-- The exit plot is in the last column of either row, so the slide arrives
+	-- from one of two Z lines. Both are checked: the further one is the one that
+	-- crosses more of this ground on the diagonal.
+	for _, row in ipairs({ 0, 1 }) do
+		local startZ = row * PLOT_SPAN + FX / 2
+		local crossingY = slideAt(startZ, GROUND_MIN_X)
+		check(
+			crossingY > EDGE_HEIGHT + 1,
+			string.format(
+				"slide from row %d crosses the west perimeter at Y %.2f against a ring top of %d",
+				row,
+				crossingY,
+				EDGE_HEIGHT
+			)
+		)
+
+		-- And every stud of its run over this ground is inside the landing's
+		-- reserved room, chute half-width included. That is what lets the maze
+		-- wall be taller than the ring: nothing in the maze can stand under a
+		-- slide that never leaves a room no wall is drawn in.
+		local land = {
+			minX = GROUND_MIN_X,
+			maxX = SLIDE_LANDING_X + 40,
+			minZ = PLOT_SPAN * 0.5 - 40,
+			maxZ = PLOT_SPAN * 0.5 + 40,
+		}
+		for i = 0, 64 do
+			local x = GROUND_MIN_X + (SLIDE_LANDING_X - GROUND_MIN_X) * i / 64
+			local _, z = slideAt(startZ, x)
+			check(
+				x >= land.minX - 1e-6
+					and x <= land.maxX + 1e-6
+					and z - 7 >= land.minZ - 1e-6
+					and z + 7 <= land.maxZ + 1e-6,
+				string.format("slide from row %d is outside the landing room at x %.1f, z %.1f", row, x, z)
+			)
+		end
+	end
+
+	-- A maze wall an overlook cannot see over is an overlook with nothing to
+	-- look at, which is the other end of the same knob.
 	check(
-		crossingY > WALL_HEIGHT + 1,
-		string.format("slide crosses the west perimeter at Y %.2f against a wall top of %d", crossingY, WALL_HEIGHT)
+		WALL_HEIGHT + 6 <= DOME_DECK_Y,
+		string.format("street walls at %d leave no view from a deck at %d", WALL_HEIGHT, DOME_DECK_Y)
 	)
 end
 

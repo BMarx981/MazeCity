@@ -20,10 +20,18 @@
 --
 -- So each strip between two plot boundaries is subdivided into
 -- `math.round(width / cellTarget)` cells, at least one. At the shipped numbers
--- that is 30 x 22 = 660 cells, 216 of them under the six towers, 444 open, and
--- every cell between 37.33 and 44.33 studs across. One constant produces all of
--- it and it survives a change to STREET, FACADE_OUTSET or PLOT_COLS, which is
--- the same bargain MazeGenerator's derived spans strike.
+-- that is 41 x 30 = 1230 cells, 384 of them under the six towers, and every
+-- cell between 28.0 and 33.3 studs across. One constant produces all of it and
+-- it survives a change to STREET, FACADE_OUTSET or PLOT_COLS, which is the same
+-- bargain MazeGenerator's derived spans strike.
+--
+-- The target sets a LANE COUNT per strip rather than a width, so it moves in
+-- steps, and the step that decides whether any of this reads as a maze is the
+-- 86-stud canyon between two plots: two lanes of 43 at a target above 34, three
+-- of 28.7 below it. It shipped at 44, where a 43-stud lane between 12-stud
+-- walls is a plaza with some walls standing in it and you can see across the
+-- whole district. 32 puts a street lane within a few studs of the tower's own
+-- 25 and the same braid produces a street that has to be read.
 --
 -- ============================================================
 -- Three cell states, and one rule about the third
