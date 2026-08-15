@@ -317,6 +317,16 @@ local CFG = {
 
 	SLIDE_WIDTH = 14,
 	SLIDE_SEGMENT_LEN = 40,
+	-- How far past the roof's parapet the chute's head hangs. The east parapet
+	-- stands at FACADE_OUTSET and is two studs thick, so a chute starting at
+	-- FACADE_OUTSET, as this did, began inside that wall: the mouth of the slide
+	-- was a nine-stud parapet with the first segment buried in it, and a rider
+	-- shoved off the pad hit the wall rather than the chute. Six clears the far
+	-- face by five, which is enough for TraversalService to stand the rider on
+	-- the head without any part of them inside the parapet. The parapet stays a
+	-- closed ring: the way onto the slide is the pad, and a roof edge a player
+	-- could walk off is a fall of 195 studs.
+	SLIDE_MOUTH_CLEAR = 6,
 	-- Where the slide ends, relative to the next section's origin. X was -140,
 	-- which put the 70-stud pad's far half over open void: the next section's
 	-- Ground starts at -120. Y was 22, so the pad also floated two storeys up and
@@ -2592,6 +2602,23 @@ local function buildEggRoost(parent, origin, style, ctx)
 	return pedestal
 end
 
+-- The two ends of a slide, and the only place either is worked out. Three
+-- callers need the same line: buildSlide draws the chute along it, the roof
+-- stamps its direction onto the SlideEntrance so TraversalService can point a
+-- rider down it rather than shoving them whichever way they were facing, and
+-- the same attributes tell that service where the chute is when a rider comes
+-- off it. A second derivation is how a mouth ends up aimed somewhere the chute
+-- does not go, which is invisible in a diff and only findable by riding it.
+--
+-- Pure maths, and the section N+1 reference is sectionOrigin, which is the only
+-- thing invariant 4 allows a section to know about its successor.
+local function slideRoute(origin, sectionIndex)
+	local start = origin + Vector3.new(FX + CFG.FACADE_OUTSET + CFG.SLIDE_MOUTH_CLEAR, ROOF_Y + 2, FZ / 2)
+	local landing = MazeGenerator.sectionOrigin(sectionIndex + 1)
+		+ Vector3.new(CFG.SLIDE_LANDING_X, CFG.SLIDE_LANDING_Y, PLOT_SPAN_Z * 0.5)
+	return start, landing
+end
+
 local function buildRoof(parent, origin, hole, style, isExit, ctx)
 	local folder = Instance.new("Folder")
 	folder.Name = "Roof"
@@ -2770,6 +2797,25 @@ local function buildRoof(parent, origin, hole, style, isExit, ctx)
 		ent.CanCollide = false
 		ent:SetAttribute("FromSection", sectionIndex)
 		ent:SetAttribute("ToSection", sectionIndex + 1)
+
+		-- The chute itself, as attributes, which is the same channel the zipline's
+		-- curve crosses on and for the same reason: the pad is on the deck and the
+		-- chute starts past the parapet, so the rider has to be put on it, and a
+		-- service cannot put anybody anywhere it has to guess. Dir is named the way
+		-- SlideBooster names it, being the same vector. Stamped before the tag, so a
+		-- binder listening on GetInstanceAddedSignal never sees a bare pad.
+		local start, landing = slideRoute(origin, sectionIndex)
+		local dir = (landing - start).Unit
+		ent:SetAttribute("DirX", dir.X)
+		ent:SetAttribute("DirY", dir.Y)
+		ent:SetAttribute("DirZ", dir.Z)
+		ent:SetAttribute("StartX", start.X)
+		ent:SetAttribute("StartY", start.Y)
+		ent:SetAttribute("StartZ", start.Z)
+		ent:SetAttribute("LandingX", landing.X)
+		ent:SetAttribute("LandingY", landing.Y)
+		ent:SetAttribute("LandingZ", landing.Z)
+
 		tagWithContext(ent, "SlideEntrance", sectionIndex, ctx.building, CFG.LEVELS)
 	end
 
@@ -3853,9 +3899,7 @@ function MazeGenerator.buildSection(root, sectionIndex, seed)
 			records[#records + 1] = record
 
 			if isExit then
-				local start = origin + Vector3.new(FX + CFG.FACADE_OUTSET, ROOF_Y + 2, FZ / 2)
-				local nextOrigin = MazeGenerator.sectionOrigin(sectionIndex + 1)
-				local landing = nextOrigin + Vector3.new(CFG.SLIDE_LANDING_X, CFG.SLIDE_LANDING_Y, PLOT_SPAN_Z * 0.5)
+				local start, landing = slideRoute(origin, sectionIndex)
 				local slide = buildSlide(folder, start, landing, sectionIndex, index)
 				slide.Name = "Slide_To_Section_" .. (sectionIndex + 1)
 				slide:SetAttribute("FromSection", sectionIndex)

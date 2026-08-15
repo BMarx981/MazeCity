@@ -170,6 +170,11 @@ local title = UiTheme.label(panel, UDim2.new(1, -80, 0, 34), UDim2.new(0, 16, 0,
 title.TextXAlignment = Enum.TextXAlignment.Left
 title.Text = "Pets"
 
+-- The wordmark treatment, and the one place in the game it is permanent: the
+-- rule redraws itself to whichever of the four tabs is open, which is the
+-- underline earning its keep rather than decorating a fixed word.
+UiTheme.wordmark(title)
+
 local closeButton = UiTheme.button(panel, UDim2.fromOffset(30, 30), UDim2.new(1, -42, 0, 12), "X", UiTheme.Stone)
 
 local capLabel = UiTheme.label(panel, UDim2.new(1, -32, 0, 18), UDim2.new(0, 16, 0, 40), UiTheme.Body, 13, UiTheme.Dim)

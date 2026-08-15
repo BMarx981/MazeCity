@@ -1119,7 +1119,17 @@ Config.MovingWallRetrySeconds = 3
 -- fallbacks cover parts built before the change.
 Config.SlideEntrySpeed = 30
 Config.SlideBoostSpeed = 105
-Config.SlideMaxSeconds = 30 -- safety release if someone gets stuck
+Config.SlideMaxSeconds = 30 -- last-resort release; the off-track check below is what normally ends a bad ride
+-- How far from the chute's own line the rider may be before they count as off
+-- it, and for how long. The chute is 14 wide with rails on both sides and the
+-- rider hangs about three studs above its centre line, so sixteen is off it
+-- rather than bouncing along it, and a fifth of a second at boost speed is
+-- twenty studs, which is why the grace is nearly a second: a hop over a seam
+-- must not read as a fall. A rider who is genuinely off is put on the landing
+-- pad, because the alternative is the void between two section ground slabs and
+-- the ride they paid a tower for ending in a respawn at section 1.
+Config.SlideOffTrackStuds = 16
+Config.SlideOffTrackSeconds = 0.8
 -- BouncePadPower is the launch off a standing start: 140 against Roblox gravity
 -- is very close to 50 studs, which is what ARC_TOP_HEIGHT = 40 was sized inside.
 -- MomentumGain is what makes a pad a trampoline rather than a launcher. A pad

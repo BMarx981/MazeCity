@@ -154,6 +154,66 @@ function UiTheme.button(parent, size, position, text, accent)
 	return b
 end
 
+-- The wordmark: the Display face given an etched outline and one rune line under
+-- it, which is the whole of the treatment (HUD_THEME_PLAN Slate 6). The line is
+-- sized to the text and not to the label, so a title that changes its word keeps
+-- its underline, and it is capped to the label so a long tower name cannot run a
+-- rule off the side of a banner. Alignment is read off the label rather than
+-- passed in: a left-aligned panel title underlines from its left edge, a centred
+-- banner title from its middle, and no caller has to say so twice.
+function UiTheme.wordmark(label, opts)
+	opts = opts or {}
+	local align = label.TextXAlignment
+	local anchorX = 0.5
+	if align == Enum.TextXAlignment.Left then
+		anchorX = 0
+	elseif align == Enum.TextXAlignment.Right then
+		anchorX = 1
+	end
+
+	local stroke = UiTheme.stroke(label)
+	stroke.Thickness = 1
+
+	local line = Instance.new("Frame")
+	line.AnchorPoint = Vector2.new(anchorX, 0)
+	line.Position = UDim2.new(anchorX, 0, 1, opts.drop or -6)
+	line.Size = UDim2.fromOffset(0, 2)
+	line.BackgroundColor3 = UiTheme.Rune
+	line.BackgroundTransparency = UiTheme.SeamTransparency
+	line.BorderSizePixel = 0
+	line.ZIndex = label.ZIndex
+	line.Parent = label
+
+	local mark = { stroke = stroke, line = line }
+
+	local function resize()
+		local width = math.floor(label.TextBounds.X) + (opts.pad or 10)
+		local room = label.AbsoluteSize.X
+		if room > 0 then
+			width = math.min(width, room)
+		end
+		line.Size = UDim2.fromOffset(width, 2)
+	end
+	label:GetPropertyChangedSignal("TextBounds"):Connect(resize)
+	label:GetPropertyChangedSignal("AbsoluteSize"):Connect(resize)
+	resize()
+
+	function mark.show(on)
+		stroke.Enabled = on
+		line.Visible = on
+	end
+
+	-- The outline and the rule have their own transparencies, so a label whose
+	-- TextTransparency is being tweened has to bring them along or the treatment
+	-- pops in at full while the word it belongs to is still fading up.
+	function mark.fade(time, hidden)
+		UiTheme.tween(stroke, time, { Transparency = hidden and 1 or UiTheme.StrokeTransparency })
+		UiTheme.tween(line, time, { BackgroundTransparency = hidden and 1 or UiTheme.SeamTransparency })
+	end
+
+	return mark
+end
+
 -- Track and fill, returned separately because every caller drives the fill's
 -- Size, and usually its colour, itself.
 function UiTheme.bar(parent, size, position, color)
@@ -190,6 +250,12 @@ end
 -- is what both showBanner copies were: fade and slide in over Ink, hold, fade
 -- out, with a token guarding the sequence so a second celebration landing
 -- mid-fade takes the banner over rather than racing the first one's fade-out.
+--
+-- `show`'s last argument used to mean only "bigger", and now means hero: the
+-- Display face at the larger size plus the wordmark treatment. Exactly one
+-- banner in the game passes it, the topped-out tower, which is the point. It
+-- also buys the subtitle eight pixels of daylight, because the rule under a
+-- 52 px title lands where a 22 px subtitle otherwise starts.
 function UiTheme.banner(gui, opts)
 	opts = opts or {}
 	local width = opts.width or 460
@@ -215,15 +281,19 @@ function UiTheme.banner(gui, opts)
 	local title =
 		UiTheme.label(frame, UDim2.new(1, 0, 0, titleHeight), UDim2.new(0, 0, 0, 14), UiTheme.Display, titleSize)
 	title.ZIndex = zindex
+	local subY = 14 + titleHeight
 	local sub = UiTheme.label(
 		frame,
 		UDim2.new(1, 0, 0, subSize + 6),
-		UDim2.new(0, 0, 0, 14 + titleHeight),
+		UDim2.new(0, 0, 0, subY),
 		UiTheme.BodyBold,
 		subSize,
 		UiTheme.Lantern
 	)
 	sub.ZIndex = zindex
+
+	local mark = UiTheme.wordmark(title, { drop = 3 })
+	mark.show(false)
 
 	local token = 0
 	local banner = { frame = frame, title = title, sub = sub }
@@ -236,6 +306,14 @@ function UiTheme.banner(gui, opts)
 		title.TextColor3 = titleColor or UiTheme.Text
 		title.TextSize = big and bigSize or titleSize
 		sub.Text = subtitle or ""
+		sub.Position = UDim2.new(0, 0, 0, big and subY + 8 or subY)
+
+		mark.show(big and true or false)
+		if big then
+			mark.stroke.Transparency = 1
+			mark.line.BackgroundTransparency = 1
+			mark.fade(0.22, false)
+		end
 
 		frame.Visible = true
 		frame.BackgroundTransparency = 1
@@ -260,6 +338,9 @@ function UiTheme.banner(gui, opts)
 			})
 			UiTheme.tween(title, 0.45, { TextTransparency = 1 })
 			UiTheme.tween(sub, 0.45, { TextTransparency = 1 })
+			if big then
+				mark.fade(0.45, true)
+			end
 			task.delay(0.5, function()
 				if mine == token then
 					frame.Visible = false

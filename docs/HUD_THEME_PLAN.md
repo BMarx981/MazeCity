@@ -218,7 +218,7 @@ two carved plates are unchanged in shape and so do not appear in the diff at all
 sides double-built byte-identical. The harness needed three fixes to run it, all stub
 gaps rather than generator ones, and they are recorded in the determinism memory.
 
-**Slate 6, open: prompts and wordmark.**
+**Slate 6: prompts and wordmark.**
 Two things to decide after playing Slates 1 to 5, not before. (a) Stock ProximityPrompts
 will now be the only unthemed UI in the game; theming them means
 `ProximityPromptService.PromptShown` with `Style = Custom` and a client renderer, which
@@ -226,11 +226,50 @@ is a real component, worth it only if the clash grates in play. (b) A "The Kept"
 treatment (Display font, etch stroke, rune underline) on the pet panel title and the
 tower topped-out banner, cheap, but taste-check it in game first.
 
+*Done, pending the play test (a walk up to a stall pedestal with both prompts in range,
+a roost prompt, and one topped-out tower), with six decisions recorded.* (1) **`Style =
+Custom` is set on the client, never in the generator.** The server keeps shipping stock
+prompts; `PromptGui.client.lua` switches the ones it finds and draws them itself. So
+there is no generator change and no determinism ritual for what is only a look, and the
+file can be deleted without a single shop closing. (2) **Prompts are found through the
+tags their parts already carry** (`EggPedestal`, `ShopItem`) rather than by sweeping
+workspace for a class, which is the line CLAUDE.md draws for everything else crossing
+from generation to runtime, and is why lazy sections theme themselves with no extra
+wiring. The rule that falls out is that a prompt on an untagged part keeps the stock
+look, which is the right failure: it still reads and still opens what it opens. The
+renderer draws only prompts it adopted itself, so a chip can never be laid over one the
+engine is still drawing. (3) **The chip carries the seam, because a prompt is a door**:
+the same mark Slate 5 hung over the two counters outdoors, now on the near side of the
+same doors. The hold is the keycap filling with Rune rather than the seam growing, which
+is where Slate 1 put a meter: the seam is up the whole time the chip is, and the fill
+belongs on the one thing the player is actually pressing. (4) **Display names the thing,
+Body states the verb**, which is Slate 5's plate rule brought indoors, a prompt being a
+plate you can press. The verb is Rune on every prompt including the Robux one, so the
+renderer holds no per-prompt special case; Slate 4 had already put the Robux buttons in
+with the affirmative verbs. (5) The billboard is deliberately much larger than the chip
+and the chip takes the prompt's `UIOffset` as its own position, a BillboardGui having no
+pixel offset of its own: that is what keeps the stall's stacked pair stacked. Width comes
+off the labels' measured `AbsoluteSize`, so "Eggs" and "Buy with Robux" are the same chip
+and neither is padded out to the other. (6) The wordmark is an etch stroke on the glyphs
+plus a rune rule **sized to the text and not to the label**, capped to the label so a long
+tower name cannot run a rule off the side of a banner, with alignment read off the label
+so no caller states it twice. It is permanent on the pet panel title, where it redraws
+itself to whichever of the four tabs is open, and hero-only on the banner: `show`'s last
+argument already meant the topped-out tower and nothing else, so it became the hero flag
+rather than a sixth argument, and a hero subtitle drops eight pixels because the rule
+under a 52 px title lands exactly where a 22 px subtitle otherwise starts.
+
+The prompt's object line is 15 px Display, the smallest carved lettering in the game and
+the sharpest read on open decision 1 below.
+
 ## Open decisions
 
 1. **How far down does Grenze Gotisch go?** Plan says hero text only. If it reads well
    at 18 px it could take chip captions too; if it reads badly at 38 px, fall back to
-   GothamBlack with a Rune underline and the theme still works.
+   GothamBlack with a Rune underline and the theme still works. Slate 5 answered it for
+   the world (a plate that names a place) and Slate 6 pushed the face to 15 px on the
+   prompt chip's object line, which is the floor: if that one reads muddy in play, the
+   prompt line goes Body and the rest of the answer stands.
 2. **Does green survive anywhere?** Plan says no, Rune absorbs it. If playtest finds
    equip/success needs to differ from progress, add one `Moss` token then, not now.
 3. **Glow intensity.** UIStroke transparency around 0.5 is the starting point; if the

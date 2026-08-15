@@ -126,6 +126,27 @@ local function endRide(player, humanoid, reason)
 	end
 end
 
+-- The chute's own line, off the attributes MazeGenerator stamped on the pad.
+-- Nil for a pad built before those shipped, which still rides: the shove falls
+-- back to the way the player happened to be facing, which is what it always did.
+local function slideLine(part)
+	local sx, sy, sz = part:GetAttribute("StartX"), part:GetAttribute("StartY"), part:GetAttribute("StartZ")
+	local ex, ey, ez = part:GetAttribute("LandingX"), part:GetAttribute("LandingY"), part:GetAttribute("LandingZ")
+	if not (sx and sy and sz and ex and ey and ez) then
+		return nil, nil
+	end
+	return Vector3.new(sx, sy, sz), Vector3.new(ex, ey, ez)
+end
+
+-- How far the rider is from the chute, measured to the nearest point on it.
+-- Clamped at both ends because a rider standing on the landing pad is past the
+-- line's far end and is not off the ride.
+local function distanceFromLine(start, landing, position)
+	local axis = landing - start
+	local t = math.clamp((position - start):Dot(axis) / axis:Dot(axis), 0, 1)
+	return (start + axis * t - position).Magnitude
+end
+
 local function bindEntrance(part)
 	if not part:IsA("BasePart") then
 		return
@@ -139,6 +160,9 @@ local function bindEntrance(part)
 			return
 		end
 
+		local start, landing = slideLine(part)
+		local dir = start and (landing - start).Unit or root.CFrame.LookVector
+
 		local whoosh = Instance.new("Sound")
 		whoosh.SoundId = Config.Sounds.SlideWhoosh
 		whoosh.Volume = Config.Juice.SlideWhooshVolume
@@ -146,13 +170,68 @@ local function bindEntrance(part)
 		whoosh.Parent = root
 		whoosh:Play()
 
-		riding[player] = { startedAt = os.clock(), whoosh = whoosh }
+		local ride = { startedAt = os.clock(), whoosh = whoosh, root = root, humanoid = humanoid }
+		riding[player] = ride
 		humanoid.PlatformStand = true
-		root.AssemblyLinearVelocity = root.CFrame.LookVector * Config.SlideEntrySpeed
+
+		-- Board the chute rather than be shoved at it. The pad is on the deck and
+		-- the chute's head hangs past the parapet, so the old shove sent the rider
+		-- into a nine-stud wall in whatever direction they happened to be facing;
+		-- and on the back row the chute leaves twenty-five degrees off that wall's
+		-- normal, so even a rider facing squarely at it was aimed off the side of
+		-- the chute rather than down it. Standing them on
+		-- the head pointed down the line is the slide's half of what the zipline's
+		-- boarding tween does, and it is the whole of why a ride now starts the
+		-- same way every time.
+		if start then
+			local board = start + Vector3.new(0, 3, 0)
+			root.CFrame = CFrame.lookAt(board, board + dir)
+		end
+		root.AssemblyLinearVelocity = dir * Config.SlideEntrySpeed
+
+		-- A rider under PlatformStand is a passenger: they cannot steer, cannot
+		-- stand up and cannot walk back, so coming off the chute is not a mistake
+		-- they can recover from. It is also a 620-stud gap between two ground slabs
+		-- for most of the way, and the release used to be a flat thirty seconds,
+		-- which is why coming off read as being frozen in mid-air and dropped.
+		if start then
+			local leftAt = nil
+			ride.connection = RunService.Heartbeat:Connect(function()
+				if riding[player] ~= ride or not root.Parent or humanoid.Health <= 0 then
+					endRide(player, humanoid)
+					return
+				end
+
+				if distanceFromLine(start, landing, root.Position) <= Config.SlideOffTrackStuds then
+					leftAt = nil
+					return
+				end
+				leftAt = leftAt or os.clock()
+				if os.clock() - leftAt < Config.SlideOffTrackSeconds then
+					return
+				end
+
+				-- Finished rather than released. The ride is a journey between two
+				-- sections and the player asked for the other end of it; dropping
+				-- them wherever the simulation had got to is the failure they were
+				-- reporting, not the fix for it. Warned because a chute nobody can
+				-- stay on is a geometry bug, and a recovery that says nothing is a
+				-- geometry bug nobody hears about.
+				warn(
+					string.format(
+						"TraversalService: %s came off the slide from %s, put on the landing pad",
+						player.Name,
+						part:GetFullName()
+					)
+				)
+				root.CFrame = CFrame.new(landing + Vector3.new(0, 5, 0))
+				root.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
+				endRide(player, humanoid)
+			end)
+		end
 
 		task.delay(Config.SlideMaxSeconds, function()
-			local ride = riding[player]
-			if ride and os.clock() - ride.startedAt >= Config.SlideMaxSeconds - 0.1 then
+			if riding[player] == ride and os.clock() - ride.startedAt >= Config.SlideMaxSeconds - 0.1 then
 				endRide(player, humanoid)
 			end
 		end)
