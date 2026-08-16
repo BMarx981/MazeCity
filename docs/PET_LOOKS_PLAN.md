@@ -105,7 +105,7 @@ The generator being shared is the whole reason this set is small. The client req
 
 ### Set 1: The generator and the recipes
 
-**Done.** `PetModelGenerator.lua` with `DEFAULT_LOOK`, `lookFor`, `build`, `rigOf`; `look` on all five catalogue entries and six stages; `Inventory.look` beside the not-yet-deleted `Inventory.placeholder`; `PetLookPreview.server.lua`, which is the temporary `RunService:IsStudio()` branch CLAUDE.md already names as the way to eyeball generated geometry, and which is **deleted before this branch merges**.
+**Done.** `PetModelGenerator.lua` with `DEFAULT_LOOK`, `lookFor`, `build`, `rigOf`; `look` on all five catalogue entries and six stages; `Inventory.look` beside the not-yet-deleted `Inventory.placeholder`; `PetLookPreview.server.lua`, the temporary `RunService:IsStudio()` branch CLAUDE.md names as the way to eyeball generated geometry, since replaced by `PreviewService.server.lua` under [PREVIEW_PLAN.md](PREVIEW_PLAN.md) Set 1.
 
 Checked two ways, and the cheap one found the bug. `build` touches no service and yields nothing, so it runs outside Roblox: `tools/petlooks/check.sh` stubs Color3/Vector3/CFrame/Instance under the `luau` CLI already in the toolchain, builds all eleven looks, and reports each one's part count and bounding box. That caught three accents sitting inside the body they were meant to hang off, including the Ward Hound's collar, which is the accent that *is* its ability. The check is now in the harness (an accent's centre inside the body or head ellipsoid is a failure, and the run exits non-zero), so a future recipe cannot reintroduce it silently.
 
@@ -113,9 +113,8 @@ Checked two ways, and the cheap one found the bug. `build` touches no service an
 
 Worth keeping in mind for anything else in this repo that is pure geometry: `MazeGenerator` is the same shape of function and the same trick would run it.
 
-**`PetLookPreview.server.lua` is still in the tree and is still flagged for deletion.** It outlived Set 1 deliberately: it is the only way to see eleven silhouettes side by side, and Set 2 was tuned against it. It goes when [PREVIEW_PLAN.md](PREVIEW_PLAN.md) Set 1 lands, which generalises exactly this file to enemies, gear and building styles and deletes it in the same change. Whoever removes it should also remove this paragraph.
 
-It is now `/petlook` and `/petlook clear` rather than a row that builds itself on first spawn, which is the correction the plan's own command surface was always going to make and which could not wait for it: eleven `AlwaysOnTop` billboards stack into one unreadable pile at the distance the row sits, and they did that to every playtest of anything else. A debug surface that cannot be not-looked-at is worse than no debug surface. The spin connection is held and dropped by `clear` for the same reason, a row now being buildable more than once per session.
+It became `/petlook` and `/petlook clear` rather than a row that builds itself on first spawn (and is `/preview pets` and `/preview clear` now that PREVIEW_PLAN Set 1 has folded the file in), which is the correction the plan's own command surface was always going to make and which could not wait for it: eleven `AlwaysOnTop` billboards stack into one unreadable pile at the distance the row sits, and they did that to every playtest of anything else. A debug surface that cannot be not-looked-at is worse than no debug surface. The spin connection is held and dropped by `clear` for the same reason, a row now being buildable more than once per session.
 
 ### Set 2: The follower wears it
 

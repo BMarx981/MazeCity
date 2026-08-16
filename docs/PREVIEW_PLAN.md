@@ -14,14 +14,14 @@ CLAUDE.md already records the gap this closes and its own suggested workaround: 
 - **Replacing the bestiary or the pet portraits.** `PortraitGenerator` and `BestiaryGui` draw single rigs in ViewportFrames for players. This draws real parts in the real world at real scale, which is the thing a viewport cannot tell you: whether a Lumen Moth is wider than a corridor, whether a crown clears a Ward Hound's ears, whether the Ember facade reads next to the Bone one.
 - **Changing any look.** This plan adds a way to see. Every recipe, style and silhouette is exactly as it was.
 - **A test runner.** The offline harness in `tools/petlooks` asserts things about geometry and stays what it is. A preview is for the judgements a machine cannot make.
-- **Animation.** Rigs turn on the spot because a still row hides half a silhouette. Nothing here drives a joint; that is PET_LOOKS_PLAN Set 4.
+- **Animation, as originally written, and amended by Set 1.** Rigs turn on the spot because a still row hides half a silhouette. What Set 1 found is that a turn over a still rig actively hides one, so a kind whose rigs nothing else poses drives their joints through the animator that already exists (`EnemyRig.animate` for enemies, `PetAnimator` for pets by parenting). No preview writes a new animation, which is what this non-goal was protecting.
 
 ## Where it lives
 
 | File | What |
 |---|---|
 | `src/server/PreviewService.server.lua` | New. Studio-gated. The registry, the row layout, the labels, the spin, and the command surface. One file, the way `EnemyDebug` is one file. |
-| `src/server/PetLookPreview.server.lua` | Deleted by Set 1 of this plan, which is what it has been flagged for since it survived its own set. Already on `/petlook` rather than on first spawn, so the row it draws is opt-in until then. |
+| `src/server/PetLookPreview.server.lua` | Deleted by Set 1, which is what it had been flagged for since it survived its own set. |
 | `src/shared/GearModelGenerator.lua` | New in Set 2. `makeGearPlaceholder` and `gearOrientation` lifted out of `PetService.server.lua`, which is a Script and therefore cannot be required by anything. |
 | `src/server/PetService.server.lua` | Set 2. Requires the module above instead of holding the two functions. |
 | `src/server/MazeGenerator.lua` | Set 3. One exported entry point for a single building, and a `ctx.preview` branch in `tagWithContext`. |
@@ -35,8 +35,13 @@ No `Config` changes in any set. A preview has no tuning: its spacing and its spi
 ```
 {
 	name = "pets",
-	variants = function() -> { { key, label } }
-	build = function(key) -> Model
+	variants = function(args) -> { { key, label } }   -- key is opaque to the service
+	build = function(key) -> Model                     -- with a PrimaryPart
+
+	-- optional, all three added by Set 1 and explained there
+	home = function() -> Folder                        -- default workspace.Preview
+	ready = function(model, entry, index)              -- after placement
+	spins = boolean                                    -- this kind's default
 }
 ```
 
@@ -50,7 +55,7 @@ Rule 3 is doing more work than it looks and Set 3 is where it bites, below.
 
 ## Command surface
 
-Same two doors as `EnemyDebug`, deliberately, because a second convention for the same job is a second thing to remember: chat `/preview <kind> [args]` as any player, or invoke the `PreviewCommand` BindableFunction from the command bar. Everything is drawn into `workspace.Preview`, never into `workspace.MazeCity`, and `/preview clear` destroys the folder.
+Same two doors as `EnemyDebug`, deliberately, because a second convention for the same job is a second thing to remember: chat `/preview <kind> [args]` as any player, or invoke the `PreviewCommand` BindableFunction from the command bar. The deck and the labels are drawn into `workspace.Preview`, never into `workspace.MazeCity`, and `/preview clear` destroys the folder and every model the row placed, wherever the kind parked it.
 
 Rows are built in front of the caller's character rather than at a fixed point, which is what `PetLookPreview` already does and is the whole ergonomics of it: you walk somewhere with room, you type, you look.
 
@@ -95,6 +100,22 @@ It does not generalise to `MazeGenerator`, and this plan deliberately does not t
 
 Done looks like: `/preview pets` puts eleven labelled pets in a row and `/preview enemies` puts twenty labelled rigs in another, both turning, both inert to walk through, neither visible outside Studio, and `rojo build` of a fresh place has nothing in it that a player could reach.
 
+**Done, pending the play test (both rows walked, and one cleared while standing on the deck), with five things decided along the way and one piece deferred.**
+
+**1. The row it replaces for enemies was `/enemy spawn`, and that is what the set is worth.** Twenty live rigs in a ring around you is what a preview looked like before this, and a live rig attacks on sight, so the thing being judged is the thing backing you into a corner. There is no glass and no cage: the rigs are simply not alive. `ModelGenerator.build` makes geometry and a Humanoid, nothing else, and the Humanoid is destroyed on the way into the row, because a preview enemy that keeps one is health and a state machine standing in the workspace and the row is judged on geometry, which a Humanoid contributes none of.
+
+**2. `key` is opaque and that is the whole of how one row lays out four kinds.** The plan's contract has `variants` emitting keys and `build` consuming them; nothing said the service may not look inside one, and it must not. A pet is two coordinates (`{petId, stage}`) and an enemy is one type name, and the layout code never learns the difference.
+
+**3. A kind may name its own `home` folder, which is an amendment to invariant 2.** The invariant said `workspace.Preview` and nowhere else. PetAnimator poses `workspace.LivePets` and only that folder, so a pet row built into the preview's own folder is a row of statues, which is the exact bug `PetLookPreview` shipped with and then fixed. `LivePets` is safe to borrow because PetService only ever destroys followers it is tracking by player and never sweeps the folder. The invariant that actually matters survives intact and is restated below: never `MazeCity`, and never anywhere a runtime service *discovers* from. The service tracks its placed models in a list rather than reading them back off a folder, so clearing works wherever a kind parked them, and `GetChildren` order not being build order stops mattering at the same time.
+
+**4. The enemies idle, which is an amendment to the animation non-goal.** "Nothing here drives a joint" was written when nothing anywhere drove one. Two things changed it. `EnemyRig.animate`'s own reason: bob rate and bob scale are the motion half of a type's identity, a Sentry barely moving at rest where a Swarmer never stops, and that reads further down a corridor than any of the geometry does. And the trap the pet row already fell into: a spin over a still rig reads as motion and hides the fact that nothing in the rig is moving. So each enemy gets a table with `anim`, a clock, a phase, a root and a torso, which is `EnemyRig.animate`'s entire surface, and the row's one Heartbeat connection drives them. Nothing here is an `EnemyController` and nothing pretends to be: an unfrozen table with no target is the idle case, which is the case a row wants. Phase is spread by index rather than by `math.random`, so the row looks the same twice.
+
+Spin therefore defaults per kind rather than globally: off for pets, where PetAnimator is already the motion, on for enemies, where turning is the only way to see the back of a silhouette without walking round twenty of them. `spin` and `still` override it as the last word, which is where a kind that takes its own arguments (Set 2's `/preview gear ward_hound`) cannot collide with them.
+
+**5. Laid out by measured width, not at a fixed pitch.** `PetLookPreview` spaced at a constant five studs, which is right for eleven pets and wrong the moment a Swarmer stands next to a Warden. Each model is measured with `GetExtentsSize` and placed with `GAP` studs of daylight to its neighbour, which also sizes the deck and is what "at true scale" has to mean once the kinds differ in size by a factor of three. Twenty enemies come out around 120 studs, more than one view from the deck, so that row is read by walking it.
+
+**Deferred: `tools/petlooks` is still `tools/petlooks`.** The plan called the generalisation cheap and it is not. The shell script does take the module as an argument cheaply; `driver.lua` does not, and it is the part with the value in it. It enumerates `PetCatalog`, models the body and head as sphere-mesh ellipsoids to test whether an accent is buried inside one, and runs a minute of `PetRigDriver` motion over the result. An enemy rig shares none of that: different part names, boxes and spheres mixed, and no client-side driver to run at all, its motion being `EnemyRig.animate` on the server. So it is a second driver rather than a renamed one, and it wants its own statement of what an enemy silhouette failing looks like before it is worth writing. Left where it is rather than half-done under a name that promises both.
+
 ### Set 2: Gear, worn
 
 `GearModelGenerator.lua` extracted from PetService, PetService requiring it, and a `gear` kind that takes a pet id and builds one wearing rig per catalogue item.
@@ -109,8 +130,8 @@ Done looks like: `/preview buildings` stands the six styles side by side, no tim
 
 ## Invariants this adds
 
-1. **Nothing a preview builds is ever tagged.** Not stripped afterwards, not tagged and ignored: never tagged. The runtime services are tag consumers by design and a preview must be invisible to all of them.
-2. **Nothing a preview builds is ever parented into `workspace.MazeCity`.** Same rule the route hints, coin flights, egg hints and enemy effects already follow. `workspace.Preview` and nowhere else.
+1. **Nothing a preview builds is ever tagged.** Not stripped afterwards, not tagged and ignored: never tagged. The runtime services are tag consumers by design and a preview must be invisible to all of them. Set 1's `sterilise` strips tags as well, which is belt and braces today (neither builder has ever called CollectionService) and is what keeps the invariant true of a builder that starts to.
+2. **Nothing a preview builds is ever parented into `workspace.MazeCity`, or into any folder a runtime service discovers from.** Same rule the route hints, coin flights, egg hints and enemy effects already follow. `workspace.Preview` is the default and a kind may name another folder only where something must *read* the models to do its job: `pets` names `workspace.LivePets` so PetAnimator poses them, which is the one exception and the reason the second clause of this invariant is the load-bearing one. `LiveEnemies` is not available on the same terms, EnemyWard and the enemy scans genuinely sweeping it.
 3. **A registry entry's `build` is pure**: no yields, no ServerStorage, no collision groups, no randomness outside the key. A kind that cannot state that is a kind whose generator is not shareable yet, and the fix is the generator rather than the preview.
 4. **The whole file is behind `RunService:IsStudio()` and returns before it requires anything**, exactly as `EnemyDebug` does.
 5. **A preview reads what generation decided; it never decides anything.** No preview may change a look, a recipe, a style or a stream. If a row shows a problem, the fix goes in the generator and the row shows it again.

@@ -275,6 +275,15 @@ the sharpest read on open decision 1 below.
 3. **Glow intensity.** UIStroke transparency around 0.5 is the starting point; if the
    HUD reads as neon rather than embers, raise it. One token, one knob.
 
+## The deferred MazeConfig cleanup
+
+Done, the Robux Registers having cleared that file.
+`Config.Sprint.Color` went with Slate 1's own decision; `Config.Abilities.EmptyColor` and
+`GraceColor` are deleted, the three-state charge bar reading Rune / Lantern / Ember off
+the theme since Slate 3. A sweep of every `*Color` field in `MazeConfig` found no others
+unread: `Pets.RarityColors` looks unread to a grep and is not, being reached through
+`Config.rarityColor`.
+
 ## What done looks like per Slate
 
 `selene src/` clean; the converted file greps clean of `Color3.fromRGB` except semantic

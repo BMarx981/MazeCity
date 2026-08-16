@@ -521,8 +521,6 @@ Config.Abilities = {
 	-- that module, because the cap is what stops any future ability riding its
 	-- own unsafe state forever.
 	GraceSeconds = 6,
-	EmptyColor = Color3.fromRGB(230, 80, 80),
-	GraceColor = Color3.fromRGB(255, 190, 90),
 	-- Intents are select, use and release, and a player holding a key down sends
 	-- two of them. The budget is a cost ceiling rather than a correctness
 	-- measure, every intent being validated against what they own.
