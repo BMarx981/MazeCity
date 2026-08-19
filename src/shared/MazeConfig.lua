@@ -775,6 +775,27 @@ function Config.rarityColor(rarity)
 end
 
 -- ============================================================
+-- Lore
+-- ============================================================
+-- The Codex's unlock machinery, and nothing it unlocks: the seventeen fragments
+-- and every line of flavour text are content in ReplicatedStorage.Journal and
+-- ReplicatedStorage.Lore, written in docs/LORE.MD first. See PETS_PLAN.md
+-- Clutch 7.
+
+Config.Lore = {
+	Enabled = true,
+	-- Held on screen per fragment. The toast is a corner chip and not a banner,
+	-- per LORE.MD 9.2: a wall writing found mid-climb must never be something a
+	-- player has to wait out.
+	ToastSeconds = 5,
+	-- Between two toasts when a single accomplishment unlocks more than one
+	-- fragment, which is what banking makes possible: a player who tops out for
+	-- the fifth time having already met everything earlier gets a short run of
+	-- them rather than one landing on top of the last.
+	ToastGapSeconds = 0.9,
+}
+
+-- ============================================================
 -- Pet accessories
 -- ============================================================
 -- Tuning only, and a sibling of Config.Pets rather than a block inside it: the
@@ -1254,6 +1275,10 @@ Config.Sounds = {
 	-- ending below the tower's top note, so a floor never sounds like a roof.
 	FloorClearArpeggio = { { 0, 1 }, { 0.1, 1.26 }, { 0.2, 1.5 } },
 	PowerupArpeggio = { { 0, 1.1 }, { 0.08, 1.5 }, { 0.16, 1.9 } },
+	-- A journal fragment unlocking. The water impact pitched right down and played
+	-- quiet, which reads as chalk on stone rather than as anything happening to
+	-- the player: a discovery is not a reward and must not sound like a coin.
+	JournalUnlock = "rbxasset://sounds/impact_water.mp3",
 }
 
 -- ============================================================

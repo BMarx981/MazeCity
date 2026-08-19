@@ -29,6 +29,7 @@ local ModelGenerator = require(ReplicatedStorage:WaitForChild("ModelGenerator"))
 
 local BaseBehavior = require(script.Parent:WaitForChild("BaseBehavior"))
 local EnemyRig = require(script.Parent.Parent:WaitForChild("EnemyRig"))
+local EnemyLore = require(script.Parent.Parent:WaitForChild("EnemyLore"))
 
 -- Both halves of the wardrobe at once: the shade goes away and one prop appears, or
 -- the reverse. Written as one function so the two can never disagree about which of
@@ -91,6 +92,7 @@ local Mimic = BaseBehavior.extend({
 
 		controller.revealed = true
 		wear(controller, nil)
+		EnemyLore.moment(controller, "MimicRevealed", target)
 		controller:flash(controller.behaviorConfig.revealDuration or Config.Juice.EnemyTellSeconds)
 		controller:playSound(Config.Sounds.EnemyAlert, Config.Juice.EnemyAlertVolume, 0.9)
 		return target

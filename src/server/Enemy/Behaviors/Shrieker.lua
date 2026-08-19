@@ -26,6 +26,7 @@ local BaseBehavior = require(script.Parent:WaitForChild("BaseBehavior"))
 local EnemyAlert = require(script.Parent.Parent:WaitForChild("EnemyAlert"))
 local EnemyCombat = require(script.Parent.Parent:WaitForChild("EnemyCombat"))
 local EnemyStatusService = require(script.Parent.Parent:WaitForChild("EnemyStatusService"))
+local EnemyLore = require(script.Parent.Parent:WaitForChild("EnemyLore"))
 
 local State = EnemyTypes.State
 
@@ -51,6 +52,11 @@ local function shriek(controller)
 	if character then
 		EnemyStatusService.apply(character, "Revealed", seconds)
 	end
+	-- The journal's fragment is a scream survived, not a Shrieker survived, so
+	-- the echo has to be part of the encounter rather than inferred from the
+	-- type. No-ops when nothing is open, which is the shriek that went out at a
+	-- remembered position after the target was already lost.
+	EnemyLore.mark(controller, "screamed")
 end
 
 local Shrieker = BaseBehavior.extend({

@@ -48,6 +48,7 @@ local EnemyStateMachine = require(script.Parent:WaitForChild("EnemyStateMachine"
 local EnemyStatusService = require(script.Parent:WaitForChild("EnemyStatusService"))
 local EnemyTargeting = require(script.Parent:WaitForChild("EnemyTargeting"))
 local EnemyWard = require(script.Parent:WaitForChild("EnemyWard"))
+local EnemyLore = require(script.Parent:WaitForChild("EnemyLore"))
 
 local Behaviors = script.Parent:WaitForChild("Behaviors")
 local BaseBehavior = require(Behaviors:WaitForChild("BaseBehavior"))
@@ -242,6 +243,9 @@ end
 
 function EnemyController:stop()
 	self.alive = false
+	-- Walking away is how nearly every enemy in this city ends, so despawn is a
+	-- close like any other and the player it was chasing got away.
+	EnemyLore.closed(self)
 	-- Before the connections go, because a behavior tearing down what it left in the
 	-- world may want to read the rig it left it around.
 	self.behavior.onStopped(self)
@@ -353,12 +357,25 @@ function EnemyController:acquire(target)
 		self:playSound(Config.Sounds.EnemyAlert, Config.Juice.EnemyAlertVolume, 0.8)
 		self.behavior.onTargetAcquired(self, target)
 	end
+	-- Switching from one player to the other is the first one having got away,
+	-- so it closes their encounter rather than quietly re-attributing it. Not
+	-- folded into the hadNone branch above for exactly that reason.
+	if self.encounter and self.encounter.hrp ~= target then
+		EnemyLore.closed(self)
+	end
+	if not self.encounter then
+		EnemyLore.opened(self, target)
+	end
 end
 
 function EnemyController:loseTarget()
 	if not self.target then
 		return
 	end
+	-- Before the target goes, because EnemyTargeting.leashFor widens the leash
+	-- while one is held and the close wants the leash that was actually in
+	-- force, not the narrower one it reverts to a line later.
+	EnemyLore.closed(self)
 	self.target = nil
 	self.searchUntil = os.clock() + SEARCH_SECONDS
 	self.behavior.onTargetLost(self)
@@ -369,6 +386,7 @@ end
 -- session is worse and is what used to happen.
 function EnemyController:goHome()
 	self.model:PivotTo(CFrame.new(self.home))
+	EnemyLore.closed(self)
 	self.target = nil
 	self.lastSeen = nil
 	self.path:reset()

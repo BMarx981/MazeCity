@@ -370,7 +370,7 @@ Notes:
 
 ### 9.3 Config pattern
 
-**Shipped as `src/shared/Journal.lua`**, on the same path convention as `Lore.lua`, and the module is the array itself so `#Journal` is the chapter's size. Its exported types live in `src/shared/Types.lua` beside the profile's `JournalState`, which is where this repo documents shapes. It checks itself at require time the way `Lore.lua` does: unique ids, well formed triggers, no two fragments on one event, and a `Stat` trigger may only name `floorsCleared` or `summitsReached`.
+**Shipped as `src/shared/Journal.lua`**, on the same path convention as `Lore.lua`, and the module is the array itself so `#Journal` is the chapter's size. `src/server/LoreService.server.lua` is what reads it, and it is the only file that knows an event string means a fragment: services publish facts about what happened and the service maps them, so reordering this array reaches nothing else. Its exported types live in `src/shared/Types.lua` beside the profile's `JournalState`, which is where this repo documents shapes. It checks itself at require time the way `Lore.lua` does: unique ids, well formed triggers, no two fragments on one event, and a `Stat` trigger may only name `floorsCleared` or `summitsReached`.
 
 ```luau
 export type JournalTrigger =
@@ -411,7 +411,9 @@ local Journal: { JournalFragment } = {
 return Journal
 ```
 
-Array order is unlock order. `Event` triggers fire from the enemy systems' detection and alert moments, and the audit in PETS_PLAN.md found that claim to be two thirds true: Watcher spotting, Shrieker scream, Mimic reveal, Shadow freeze and Warden encounter all exist as discrete server-side moments and need only a channel to be heard on, but the Gatekeeper leash reset and the Warden survival do not exist in any form. Nothing an enemy notices leaves the enemy system today.
+Array order is unlock order. `Event` triggers fire from the enemy systems' detection and alert moments, and the audit in PETS_PLAN.md found that claim to be two thirds true when it was written: Watcher spotting, Shrieker scream, Mimic reveal, Shadow freeze and Warden encounter all existed as discrete server-side moments and needed only a channel to be heard on, while the Gatekeeper leash reset and the Warden survival existed in no form. All seven are sources now. The last two turned out to be one moment rather than two features: an encounter's close, which is the enemy giving up while the player is alive, and which carries whether it gave up on a leash or on a lost line of sight.
+
+Four of the five pet-side fragments are not fired by anything, because the saved profile already answers them: an egg in the shelf, an incubator with something in it, a hatch counter, a pet past its first stage. Those are predicates rather than events, and the service banks what they say the first time it sees it. The seven-day streak is the one that cannot be a predicate and has to be caught at the claim, for the reason in the third checklist item in Section 11.
 
 `Stat` triggers read the existing `stats` table, and deliberately not the `mazesCompleted` field in it: that one counts whatever `Config.Pets.HatchUnit` currently says a maze is, so a journal gated on it would have its pacing silently rewritten by a config flip meant for eggs. The stat triggers use `floorsCleared` and `summitsReached`, both of which mean one thing forever.
 
@@ -493,7 +495,7 @@ For PETS_PLAN.md, the lore system is its own Clutch, dependent on the enemy work
 - Exit: a fresh save can unlock fragments 1 to 17 by playing, in order, with out-of-order accomplishments banked correctly.
 
 Additions to the integration audit checklist, answered 2026-08-10 in PETS_PLAN.md's "Lore integration audit", which carries the file and line for each:
-- [x] Where each Kept detection/alert event fires server-side: five of seven are discrete server-side moments, the Shadow freeze is discrete but does not record which player caused it, and the Gatekeeper leash reset and Warden survival do not exist. None of the seven leaves the enemy system today, so all of them need a channel first.
+- [x] Where each Kept detection/alert event fires server-side: **answered in full by `Enemy/EnemyLore.lua`, 2026-08-19, and all seven now leave the enemy system on the `LoreEvent` channel.** As found, five of seven were discrete server-side moments, the Shadow freeze was discrete but did not record which player caused it, and the Gatekeeper leash reset and Warden survival did not exist. The Shadow's `watchedBy` returns the watcher instead of a boolean, which is the same loop at the same cost. The other two turned out to be the same moment as each other: an encounter's close, which the controller already reaches from `loseTarget`, `goHome` and `stop`, carrying a reason that distinguishes a leash from a lost line of sight because the leash is directly answerable at that instant.
 - [x] What counts as "surviving" an encounter: **decided 2026-08-11. The enemy gives up while you are alive.** An encounter opens at a start moment the enemy system already holds and closes when that same rig loses you or walks away and despawns; a death between the two cancels it. Not a timer and not a maze completed afterward, both of which are equally true of a climber who was never in danger. Fragment 14 is the one this does not rescue, because it names *why* the enemy gave up and nothing distinguishes a leash from a lost line of sight.
 - [x] Login streak tracking: exists as `data.daily.streak`, but it counts daily *claims* rather than logins, and it wraps back to 1 past seven, so fragment 13 must be caught at the claim and can never be a poll.
 

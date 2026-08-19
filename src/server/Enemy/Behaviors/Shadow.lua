@@ -28,12 +28,18 @@ local Players = game:GetService("Players")
 
 local BaseBehavior = require(script.Parent:WaitForChild("BaseBehavior"))
 local EnemyTargeting = require(script.Parent.Parent:WaitForChild("EnemyTargeting"))
+local EnemyLore = require(script.Parent.Parent:WaitForChild("EnemyLore"))
 
 local State = EnemyTypes.State
 
 -- Only players close enough to make one out count. Beyond the leash it is a shape
 -- at the end of a corridor and being looked at in that direction is not the same as
 -- being watched.
+--
+-- Returns the watcher's root part rather than a boolean, which the freeze itself
+-- has no use for: the journal wants to know who caught it, and the audit in
+-- docs/PETS_PLAN.md recorded this as the one Kept moment that was discrete but
+-- did not record its player. It is the same loop and the same cost.
 local function watchedBy(controller, threshold)
 	for _, player in ipairs(Players:GetPlayers()) do
 		local character = player.Character
@@ -43,12 +49,12 @@ local function watchedBy(controller, threshold)
 			local toEnemy = controller.root.Position - hrp.Position
 			if toEnemy.Magnitude <= controller.stats.leash and toEnemy.Magnitude > 0.5 then
 				if hrp.CFrame.LookVector:Dot(toEnemy.Unit) > threshold then
-					return true
+					return hrp
 				end
 			end
 		end
 	end
-	return false
+	return nil
 end
 
 -- Cached against the flag rather than written every tick: it is a property write per
@@ -84,8 +90,14 @@ local Shadow = BaseBehavior.extend({
 		local from = controller.unseenFrom
 		local covered = from and (controller.root.Position - from).Magnitude or math.huge
 
-		if covered >= minimum and watchedBy(controller, config.lookDotThreshold or 0.75) then
+		local watcher = covered >= minimum and watchedBy(controller, config.lookDotThreshold or 0.75) or nil
+		if watcher then
 			controller.unseenFrom = nil
+			-- Only on the edge into the statue, not every tick it stays one: setStatue
+			-- already caches against the flag and this is the same moment.
+			if not controller.statue then
+				EnemyLore.moment(controller, "ShadowFrozen", watcher)
+			end
 			setStatue(controller, true)
 			controller.machine:transition(State.Idle)
 			controller:halt()

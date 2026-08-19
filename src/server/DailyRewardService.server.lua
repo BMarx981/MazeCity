@@ -35,6 +35,7 @@ end
 local remote = findOrCreate(ReplicatedStorage, "RemoteEvent", "PetUpdate")
 local intents = findOrCreate(ReplicatedStorage, "RemoteEvent", "PetIntent")
 local changed = findOrCreate(ServerScriptService, "BindableEvent", "PetsChanged")
+local lore = findOrCreate(ServerScriptService, "BindableEvent", "LoreEvent")
 
 local function today()
 	return math.floor(os.time() / SECONDS_PER_DAY)
@@ -92,6 +93,14 @@ local function claim(player)
 		if ok then
 			xpPaid = xpReward
 		end
+	end
+
+	-- Caught here and never polled, which is the one thing about this the journal
+	-- cannot work out for itself: the streak wraps back to 1 past DailyStreakLength,
+	-- so a saved profile has no way of saying a seventh day was ever reached. The
+	-- claim is the only instant the fact exists.
+	if streak >= pets.DailyStreakLength then
+		lore:Fire({ kind = "SevenDayStreak", player = player })
 	end
 
 	local eggName = nil
