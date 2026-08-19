@@ -431,6 +431,18 @@ channel.Event:Connect(function(payload)
 			local stage = payload.phase == "survived" and KEPT_SURVIVED or KEPT_MET
 			if recordKept(data, payload.enemyType, stage) then
 				push(payload.player, data, journal)
+				-- The name card (LORE.MD 6.4), announced from inside the raise
+				-- rather than left for the client to notice in the projection.
+				-- That is what keeps LoreGui drawing moments and CodexGui state,
+				-- and it is also why a stage recorded in an earlier session is
+				-- never announced again: there is no raise to announce.
+				if Config.Lore.NameCardsEnabled then
+					remote:FireClient(payload.player, {
+						kind = "met",
+						enemyType = payload.enemyType,
+						stage = stage,
+					})
+				end
 			end
 		end
 

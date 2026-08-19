@@ -265,6 +265,16 @@ The wall writings are a serialized journal, unlocked in order by player accompli
 ### 6.4 First-encounter name cards
 One-time name card per Kept type: name plus silhouette, no lore line yet (that's earned by surviving). No cutscenes, no movement lock.
 
+**Shipped in `LoreGui.client.lua`**, on the left edge beside the wall-writing toast, and four things about it are decisions rather than details.
+
+**A card is a moment, and it is fired as one rather than noticed as one.** `LoreService` already raises `codex.kept` at the instant an encounter opens or is survived, so the card is announced from inside that raise. The client never diffs the Codex projection, which is what keeps LoreGui's own split intact: this file draws moments and CodexGui draws state, off one remote. It also settles the case a diff gets wrong: a stage recorded in an earlier session is never re-announced, because there is no raise to announce, which is the quiet-join rule (9.1) arriving for free instead of as a special case.
+
+**It shares the wall writing's queue and its edge.** Two discoveries on the same edge that do not share a queue land on top of each other, and a floor can hold two Kept nobody has met. So there is one queue and two shapes in it: the writing's chip and a taller card with a picture in it. The card holds for the same `ToastSeconds` as everything else on that edge.
+
+**The second card is the survival, and this section's "no lore line *yet*" is what asks for it.** A Kept unlocks twice (6.2), and the second unlock lands at the moment the enemy gives up, which is both the best moment a line about that enemy could be read and the only one the player has any reason to remember. A page turned with no way of knowing is a page nobody reads, and the Codex is where it is kept rather than where it is found. So the same card is drawn again with the line on it, and it is the only difference between the two.
+
+**No text and no picture crosses the wire**, which is 6.1's bargain and 6.2's: the payload names the type, the name comes from the enemy config, the line from `Lore.kept` and the silhouette is built locally from the same recipe the rig in the corridor was built from. The Warden's `survivalLine` is deliberately not drawn here. It is the journal's reveal and it belongs to the Codex page, where somebody is reading rather than escaping.
+
 ### 6.5 Seasonal lore drops
 Each seasonal egg ships with one new chapter: a new Kept, a new relic set, a new journal (Section 9.4). Lore becomes the framing for content updates instead of separate work.
 

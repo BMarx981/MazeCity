@@ -19,15 +19,25 @@
 -- carrying its own index and total so a toast says where in the seventeen it
 -- landed without this file holding a count it would have to keep in step.
 --
--- Three payload kinds reach the queue and the fourth, the Codex projection, is
+-- Four payload kinds reach the queue and the fifth, the Codex projection, is
 -- not one: this file draws moments and CodexGui draws state, off the same
--- remote for the reason PetService's is one remote.
+-- remote for the reason PetService's is one remote. The fourth is the name card
+-- (LORE.MD 6.4), which is a moment for exactly that reason: the server fires it
+-- from inside the raise that records the Kept, so nothing here has to notice a
+-- stage changing in a projection it deliberately does not read.
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Config = require(ReplicatedStorage:WaitForChild("MazeConfig"))
 local UiTheme = require(ReplicatedStorage:WaitForChild("UiTheme"))
+-- The name card's three sources (LORE.MD 6.4), and none of them is the wire:
+-- the payload names the type, the name comes from the enemy config, the line
+-- from Lore.kept and the picture is built here from the same recipe the rig in
+-- the corridor was built from.
+local Lore = require(ReplicatedStorage:WaitForChild("Lore"))
+local EnemyDefinitions = require(ReplicatedStorage:WaitForChild("EnemyDefinitions"))
+local PortraitGenerator = require(ReplicatedStorage:WaitForChild("PortraitGenerator"))
 
 local remote = ReplicatedStorage:WaitForChild("LoreUpdate")
 local player = Players.LocalPlayer
@@ -61,10 +71,83 @@ body.TextXAlignment = Enum.TextXAlignment.Left
 body.TextYAlignment = Enum.TextYAlignment.Top
 body.TextWrapped = true
 
+-- ============================================================
+-- The name card
+-- ============================================================
+-- LORE.MD 6.4, and it is the same edge and the same queue as the writing above
+-- deliberately: a floor can hold two Kept nobody has met, and two discoveries
+-- that do not share a queue land on top of each other. What differs is the
+-- shape, this one having a picture in it, and the height, the survival card
+-- carrying a sentence the first-encounter card has not earned yet.
+
+local CARD_W = 320
+local CARD_MET_H = 126
+local CARD_LINE_H = 84
+local PORTRAIT = 84
+
+local card = UiTheme.chip(gui, UDim2.fromOffset(CARD_W, CARD_MET_H), UDim2.new(0, -CARD_W, Y, 0), { seam = true })
+card.Visible = false
+
+local cardKicker =
+	UiTheme.label(card, UDim2.new(1, -28, 0, 16), UDim2.new(0, 14, 0, 10), UiTheme.Body, 12, UiTheme.Rune)
+cardKicker.TextXAlignment = Enum.TextXAlignment.Left
+
+local cardName =
+	UiTheme.label(card, UDim2.new(1, -(PORTRAIT + 42), 0, 30), UDim2.new(0, PORTRAIT + 28, 0, 58), UiTheme.Display, 22)
+cardName.TextXAlignment = Enum.TextXAlignment.Left
+
+local cardLine = UiTheme.label(
+	card,
+	UDim2.new(1, -28, 0, CARD_LINE_H - 12),
+	UDim2.new(0, 14, 0, CARD_MET_H - 4),
+	UiTheme.Body,
+	13,
+	UiTheme.Lantern
+)
+cardLine.TextXAlignment = Enum.TextXAlignment.Left
+cardLine.TextYAlignment = Enum.TextYAlignment.Top
+cardLine.TextWrapped = true
+
+-- Held rather than looked up, for the reason PetGui holds its reveal portrait:
+-- a viewport left parented to a hidden chip is a picture nobody is looking at
+-- and a rig nobody is going to destroy.
+local cardPortrait = nil
+
+local function drawCard(payload)
+	local config = EnemyDefinitions.types[payload.enemyType]
+	if not config then
+		return nil
+	end
+	local survived = (tonumber(payload.stage) or 1) >= 2
+	local lore = Lore.kept[payload.enemyType]
+	-- The Warden's `survivalLine` is the journal's reveal and stays on the Codex
+	-- page: this is read by somebody who has just stopped running.
+	local line = survived and lore and lore.loreLine or nil
+
+	if cardPortrait then
+		cardPortrait:Destroy()
+		cardPortrait = nil
+	end
+	cardPortrait = PortraitGenerator.portrait(payload.enemyType)
+	cardPortrait.Size = UDim2.fromOffset(PORTRAIT, PORTRAIT)
+	cardPortrait.Position = UDim2.fromOffset(14, 30)
+	cardPortrait.Parent = card
+
+	card.Size = UDim2.fromOffset(CARD_W, CARD_MET_H + (line and CARD_LINE_H or 0))
+	cardKicker.Text = survived and "Survived   The Kept" or "First encounter   The Kept"
+	cardName.Text = config.name
+	cardLine.Text = line or ""
+	return card
+end
+
 local queue = {}
 local showing = false
 
 local function present(payload)
+	if payload.kind == "met" then
+		return drawCard(payload)
+	end
+
 	if payload.kind == "completed" then
 		-- The end of the trail, and it is still a chip: the last fragment landed
 		-- as one a moment before this and answering it with a banner would be the
@@ -85,12 +168,14 @@ local function present(payload)
 		body.Text = payload.text
 	end
 
-	chip.Visible = true
-	chip.Position = UDim2.new(0, -WIDTH, Y, 0)
-	UiTheme.tween(chip, 0.28, { Position = UDim2.new(0, EDGE, Y, 0) })
-	UiTheme.playSound(Config.Sounds.JournalUnlock, 0.35, 0.45)
+	return chip
 end
 
+-- The slide is the queue's rather than the shape's, so a card and a writing
+-- arrive and leave the same way and only one of them can be on the edge at a
+-- time. `present` draws and returns what it drew; a payload it cannot draw,
+-- which is a name card for a type this client has no definition of, gives back
+-- nothing and the queue moves on rather than holding the edge empty.
 local function pump()
 	if showing then
 		return
@@ -99,13 +184,28 @@ local function pump()
 	if not payload then
 		return
 	end
+
+	local frame = present(payload)
+	if not frame then
+		pump()
+		return
+	end
 	showing = true
-	present(payload)
+
+	local width = frame.Size.X.Offset
+	frame.Visible = true
+	frame.Position = UDim2.new(0, -width, Y, 0)
+	UiTheme.tween(frame, 0.28, { Position = UDim2.new(0, EDGE, Y, 0) })
+	UiTheme.playSound(Config.Sounds.JournalUnlock, 0.35, payload.kind == "met" and 0.35 or 0.45)
 
 	task.delay(Config.Lore.ToastSeconds, function()
-		UiTheme.tween(chip, 0.35, { Position = UDim2.new(0, -WIDTH, Y, 0) })
+		UiTheme.tween(frame, 0.35, { Position = UDim2.new(0, -width, Y, 0) })
 		task.delay(0.35 + Config.Lore.ToastGapSeconds, function()
-			chip.Visible = false
+			frame.Visible = false
+			if frame == card and cardPortrait then
+				cardPortrait:Destroy()
+				cardPortrait = nil
+			end
 			showing = false
 			pump()
 		end)
@@ -116,7 +216,12 @@ remote.OnClientEvent:Connect(function(payload)
 	if type(payload) ~= "table" then
 		return
 	end
-	if payload.kind ~= "unlocked" and payload.kind ~= "caughtUp" and payload.kind ~= "completed" then
+	if
+		payload.kind ~= "unlocked"
+		and payload.kind ~= "caughtUp"
+		and payload.kind ~= "completed"
+		and payload.kind ~= "met"
+	then
 		return
 	end
 	table.insert(queue, payload)

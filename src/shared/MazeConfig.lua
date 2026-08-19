@@ -798,6 +798,11 @@ Config.Lore = {
 	-- is content the client already has, so what is tunable about it is a size,
 	-- a keybind and the one reward that is written down.
 	CodexEnabled = true,
+	-- The first-encounter name card (LORE.MD 6.4), which is the Kept chapter's
+	-- two unlocks shown at the moment they happen rather than on the page they
+	-- are kept on. Off is a Codex that fills silently, not a chapter that stops
+	-- recording: the stage is raised either way.
+	NameCardsEnabled = true,
 	-- Panel geometry. Wider than the pet panel because a Codex row carries a
 	-- sentence of somebody's handwriting where a pet row carries a number.
 	CodexPanelWidth = 470,

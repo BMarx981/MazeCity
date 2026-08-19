@@ -396,6 +396,64 @@ do
 	check(name ~= nil, "the harness lost its player")
 end
 
+do
+	local name = reset("15. a name card is fired at the raise, and only there")
+	local p = profileOf(name)
+	fireReady(name)
+	drain()
+
+	FIRED = {}
+	fact(name, { kind = "Encounter", phase = "opened", enemyType = "Drifter" })
+	local cards = ofKind("met")
+	check(#cards == 1, "meeting a Drifter fired " .. #cards .. " name cards, expected 1")
+	check(cards[1] and cards[1].enemyType == "Drifter", "the card does not name the type")
+	check(cards[1] and cards[1].stage == 1, "a first encounter did not card at stage 1")
+	-- No line and no picture: what the card is drawn from is already on the
+	-- client, which is the same bargain the projection strikes.
+	check(cards[1] and cards[1].loreLine == nil, "the card carried lore text over the wire")
+
+	FIRED = {}
+	for _ = 1, 3 do
+		fact(name, { kind = "Encounter", phase = "opened", enemyType = "Drifter" })
+	end
+	check(#ofKind("met") == 0, "meeting the same type again carded " .. #ofKind("met") .. " times")
+
+	FIRED = {}
+	fact(name, { kind = "Encounter", phase = "survived", enemyType = "Drifter", reason = "lost" })
+	cards = ofKind("met")
+	check(#cards == 1, "surviving a Drifter fired " .. #cards .. " name cards, expected 1")
+	check(cards[1] and cards[1].stage == 2, "a survival did not card at stage 2")
+
+	FIRED = {}
+	fact(name, { kind = "Encounter", phase = "survived", enemyType = "Drifter", reason = "lost" })
+	check(#ofKind("met") == 0, "surviving one twice carded a page already read")
+	check(p.codex.kept.Drifter == 2, "the chapter disagrees with the cards")
+end
+
+do
+	local name = reset("16. a save that already met things cards nothing on the join")
+	local p = profileOf(name)
+	p.codex.kept = { Drifter = 2, Watcher = 1 }
+	p.stats.floorsCleared = 40
+	p.stats.summitsReached = 30
+	fireReady(name)
+	drain()
+	-- The quiet-join rule arriving for free: a card is fired from inside the
+	-- raise, and a load raises nothing, so there is no case to special-case.
+	check(#ofKind("met") == 0, "a returning save carded " .. #ofKind("met") .. " types it met last session")
+
+	-- And the stages it arrived with are still the ones it can be carded past.
+	FIRED = {}
+	fact(name, { kind = "Encounter", phase = "opened", enemyType = "Watcher" })
+	check(#ofKind("met") == 0, "meeting a type this save had already met carded again")
+	FIRED = {}
+	fact(name, { kind = "Encounter", phase = "survived", enemyType = "Watcher", reason = "lost" })
+	local cards = ofKind("met")
+	check(#cards == 1, "the first survival of a met type did not card")
+	check(cards[1] and cards[1].stage == 2, "it did not card at the stage it reached")
+	check(p.codex.kept.Watcher == 2, "the chapter did not follow the card")
+end
+
 print("")
 if failures > 0 then
 	-- Level 0 so the message is the message rather than a stack trace, and so the
