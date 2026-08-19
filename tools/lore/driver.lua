@@ -495,6 +495,42 @@ do
 	check(#missing == 0, table.concat(missing, ", ") .. " have no inscription")
 end
 
+do
+	local name = reset("18. every fragment says where it is found, in a band that exists")
+	-- The draw itself needs a world and is the Studio pass. What is checkable
+	-- here is the content half of it: a `spawnHint` LoreGui can never classify a
+	-- wall into is a placement rule that reads as working and weights nothing,
+	-- which is exactly the failure the field spent a clutch not having values.
+	local Journal = MODULES.Journal
+	local claimed = {}
+	local unbanded = {}
+	for _, fragment in ipairs(Journal) do
+		if fragment.nestOnly then
+			-- Out of the wall pool entirely, so a band on it would read as working.
+			check(fragment.spawnHint == nil, fragment.id .. " is nestOnly and names a band")
+		elseif fragment.spawnHint == nil then
+			table.insert(unbanded, fragment.id)
+		else
+			check(Journal.Bands[fragment.spawnHint] == true, fragment.id .. " is found in no band that exists")
+			claimed[fragment.spawnHint] = (claimed[fragment.spawnHint] or 0) + 1
+		end
+	end
+	check(#unbanded == 0, "no band on: " .. table.concat(unbanded, ", "))
+
+	-- A band the client can classify a wall into that no line ever claims is a
+	-- band whose pool is the flat one, which is a third of the city weighted by
+	-- nothing and no way of noticing.
+	for band in pairs(Journal.Bands) do
+		check((claimed[band] or 0) > 0, "no fragment is ever found in the " .. band)
+	end
+
+	-- The whole of what keeps a hint a weight rather than a filter. Below one it
+	-- would drop matching fragments out of the band they belong to, which is the
+	-- feature inverted rather than turned down.
+	check(MODULES.MazeConfig.Lore.WritingHintWeight >= 1, "the hint weight is a filter, not a weight")
+	check(name ~= nil, "the harness lost its player")
+end
+
 print("")
 if failures > 0 then
 	-- Level 0 so the message is the message rather than a stack trace, and so the

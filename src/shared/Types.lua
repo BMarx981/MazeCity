@@ -357,6 +357,11 @@ export type JournalTrigger = {
 	event: string,
 }
 
+--- Where a fragment is *found*, as opposed to what unlocks it. The street maze
+--- between the towers, then the thirds of a tower's climb. LoreGui weights its
+--- wall pool by it and Journal.Bands is the same four strings at runtime.
+export type JournalBand = "street" | "low" | "mid" | "high"
+
 export type JournalFragment = {
 	id: string,
 	day: number,
@@ -365,7 +370,7 @@ export type JournalFragment = {
 	-- fragment: a locked row with nothing under it reads as broken.
 	hint: string,
 	trigger: JournalTrigger,
-	spawnHint: string?,
+	spawnHint: JournalBand?,
 	nestOnly: boolean?,
 }
 

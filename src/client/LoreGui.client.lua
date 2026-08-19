@@ -256,6 +256,15 @@ end)
 -- their first frame with nothing requested. The remote is still the toast's, a
 -- moment being a different thing from a state.
 --
+-- **Which fragment it is, is weighted by where the wall stands**, which is
+-- LORE.MD 9.2's "weighted toward thematically matching areas" and the fragment's
+-- own `spawnHint`. A weight and never a filter: a fragment matching the band
+-- gets Config.Lore.WritingHintWeight entries in that band's pool against one for
+-- everything else, so the Cartographer's climb reads roughly in order as the
+-- player climbs it and nothing is ever unfindable. Filtering would leave a
+-- player whose unlocked pool happened to be all one band walking blank floors,
+-- which is the same thing as having no writings at all.
+--
 -- The one host that is not a maze wall is the roost, for the one fragment marked
 -- `nestOnly`: the story ends where every run of the player's own ends, which is
 -- the only reason that flag is in the content at all.
@@ -275,6 +284,7 @@ local WALL_GROUP = "MazeWall"
 local writings = nil
 local drawn = {}
 local pool = {}
+local bandPools = {}
 local nestFragment = nil
 local pooledFor = -1
 
@@ -290,9 +300,42 @@ local function clearWritings()
 	end
 end
 
+-- The band a wall stands in, which is the fragment weighting's whole input.
+-- Read off the folder the wall is parented into rather than off the wall, which
+-- has no attributes and does not need any: generation parents a maze wall into
+-- its storey, which carries invariant 5's `Level`, and the street's walls into
+-- the section's Street folder, which carries none. So an absent level is the
+-- street by construction rather than by a name check, and the same holds for
+-- anything built into the group outside a storey later.
+--
+-- Thirds of Config.World.Levels rather than floor numbers, so the vocabulary in
+-- Journal.Bands rescales with the tower instead of naming a height the content
+-- would have to be re-read after every change to it.
+local function bandOf(part)
+	local storey = part.Parent
+	local level = storey and storey:GetAttribute("Level")
+	if type(level) ~= "number" then
+		return "street"
+	end
+	local third = math.floor(level * 3 / math.max(Config.World.Levels, 1))
+	if third <= 0 then
+		return "low"
+	elseif third == 1 then
+		return "mid"
+	end
+	return "high"
+end
+
 -- Rebuilt only when the count moves, and clearing on that is not tidiness: a
 -- wall's fragment is its hash taken against the pool, so a pool that grew is a
 -- corridor whose writings all say something else now.
+--
+-- One pool per band, each holding every unlocked fragment and holding the ones
+-- that named this band Config.Lore.WritingHintWeight times over. That is what
+-- makes the hint a weight rather than a filter, and it is precomputed here for
+-- the same reason the flat pool was: the draw is a hash into a list, so a tick
+-- pays an index and never a scan. `pool` stays the flat one and is what answers
+-- whether anything is unlocked at all.
 local function rebuildPool()
 	local unlocked = math.floor(player:GetAttribute("JournalUnlocked") or 0)
 	if unlocked == pooledFor then
@@ -300,13 +343,23 @@ local function rebuildPool()
 	end
 	pooledFor = unlocked
 	pool = {}
+	bandPools = {}
 	nestFragment = nil
+	for band in pairs(Journal.Bands) do
+		bandPools[band] = {}
+	end
 	for i = 1, math.min(unlocked, #Journal) do
 		local fragment = Journal[i]
 		if fragment.nestOnly then
 			nestFragment = fragment
 		else
 			table.insert(pool, fragment)
+			for band, entries in pairs(bandPools) do
+				local weight = (fragment.spawnHint == band) and Config.Lore.WritingHintWeight or 1
+				for _ = 1, weight do
+					table.insert(entries, fragment)
+				end
+			end
 		end
 	end
 	clearWritings()
@@ -477,7 +530,11 @@ local function updateWritings()
 				if hash % Config.Lore.WritingSpacing == 0 then
 					cframe = faceFor(part, hash, writeY)
 					if cframe then
-						fragment = pool[bit32.rshift(hash, 8) % #pool + 1]
+						-- The band is asked for only here, after the wall is known to
+						-- be carrying one, so it costs an attribute read per writing
+						-- drawn rather than one per wall swept.
+						local entries = bandPools[bandOf(part)] or pool
+						fragment = entries[bit32.rshift(hash, 8) % #entries + 1]
 					end
 				end
 			end

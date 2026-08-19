@@ -835,6 +835,13 @@ Config.Lore = {
 	-- and large enough that a corridor holds at most one: a wall writing is a
 	-- find, and a maze papered in them is a maze nobody reads.
 	WritingSpacing = 29,
+	-- How many entries a fragment gets in the pool of the band its `spawnHint`
+	-- names, against one everywhere else (LORE.MD 9.1's Found column, 9.2). A
+	-- weight and never a filter: at a full journal it makes a matching fragment
+	-- roughly four times as likely on the floors it belongs to, and leaves every
+	-- other one still findable there. One is the whole feature turned off,
+	-- writings falling back to an even draw over what the player has unlocked.
+	WritingHintWeight = 4,
 	-- Studs above the character's root, which is what puts the writing at
 	-- reading height and is also the whole of the floor filter: a wall only
 	-- carries one if its own vertical extent contains the band, so a wall a

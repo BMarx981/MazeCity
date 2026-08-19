@@ -427,25 +427,25 @@ Fragments unlock sequentially: a trigger only counts once all earlier fragments 
 
 **Fragment order is tunable.** Reorder the array to match the director's real encounter pacing per floor: the Shrieker fragment should land near where Shriekers actually first appear. The current order is a best guess.
 
-| # | Trigger (server event / stat) | Locked hint | Fragment text |
-|---|---|---|---|
-| 1 | First floor cleared | Finish a floor. | *Day 1. I came here to map it. How hard can a maze be?* |
-| 2 | floorsCleared >= 5 | Finish five. | *Day 3. Finished mapping the third floor. Woke up. There is a different third floor now.* |
-| 3 | First summit reached | Reach a roof. | *Day 9. The walls moved again. I have stopped drawing in ink.* |
-| 4 | First spotted by a Watcher | Be seen. | *Day 11. The Maze grew an eye at the end of the corridor. It saw me first. Everything came.* |
-| 5 | First egg acquired | Find something warm. | *Day 14. Found something warm inside a wall the Maze hadn't finished. It is not a stone.* |
-| 6 | First egg placed at the Nest | Carry it to the top. | *Day 15. Carried it to the top. The summit is the only place my maps still work.* |
-| 7 | First hatch | Wait for it to open. | *Day 16. It hatched where the Maze can't reach, and it came out free. It glows. It already knows the way down.* |
-| 8 | Any pet reaches first evolution | Let one grow. | *Day 22. It grows faster than the Maze does. I think that frightens the walls.* |
-| 9 | First Shrieker scream survived | Survive the bell. | *Day 25. It didn't want to hurt me. It wanted everything else to. I ran before the echo finished.* |
-| 10 | First Mimic revealed | Catch something pretending. | *Day 30. The lamp was not a lamp. I trust the coins and nothing else now.* |
-| 11 | First Shadow frozen by watching it | Watch what follows you. | *Day 33. Something follows me that only moves when I look away. I have started walking backward.* |
-| 12 | summitsReached >= 5 | Top out five towers. | *Day 40. I was wrong about everything. The Maze is not a wall.* |
-| 13 | 7-day login streak | Come back seven nights. | *Day 41. It builds every night. Shells grow before the thing inside them does.* |
-| 14 | First Gatekeeper leash reset survived | Outlast a door. | *Day 44. Even the doors hunt now. But they always go home. Remember that. They always go home.* |
-| 15 | summitsReached >= 10 | Top out ten towers. | *Day 47. Lost my satchel today. Floor 47 wants me to forget what I mapped. I won't.* |
-| 16 | First Warden encounter | Meet what the high floors keep. | *Day 50. Something on the high floors wears a climber's boots. It walked like it remembered walking.* |
-| 17 | First Warden escape/survival | Walk away from it. | *Day 53. If you are reading this, the Maze finished my map for me. Leave the eggs at the Nest. Keep climbing. Do not look for me in the walls.* |
+| # | Trigger (server event / stat) | Locked hint | Found | Fragment text |
+|---|---|---|---|---|
+| 1 | First floor cleared | Finish a floor. | Street | *Day 1. I came here to map it. How hard can a maze be?* |
+| 2 | floorsCleared >= 5 | Finish five. | Low | *Day 3. Finished mapping the third floor. Woke up. There is a different third floor now.* |
+| 3 | First summit reached | Reach a roof. | Mid | *Day 9. The walls moved again. I have stopped drawing in ink.* |
+| 4 | First spotted by a Watcher | Be seen. | Mid | *Day 11. The Maze grew an eye at the end of the corridor. It saw me first. Everything came.* |
+| 5 | First egg acquired | Find something warm. | Mid | *Day 14. Found something warm inside a wall the Maze hadn't finished. It is not a stone.* |
+| 6 | First egg placed at the Nest | Carry it to the top. | High | *Day 15. Carried it to the top. The summit is the only place my maps still work.* |
+| 7 | First hatch | Wait for it to open. | High | *Day 16. It hatched where the Maze can't reach, and it came out free. It glows. It already knows the way down.* |
+| 8 | Any pet reaches first evolution | Let one grow. | Mid | *Day 22. It grows faster than the Maze does. I think that frightens the walls.* |
+| 9 | First Shrieker scream survived | Survive the bell. | Mid | *Day 25. It didn't want to hurt me. It wanted everything else to. I ran before the echo finished.* |
+| 10 | First Mimic revealed | Catch something pretending. | Mid | *Day 30. The lamp was not a lamp. I trust the coins and nothing else now.* |
+| 11 | First Shadow frozen by watching it | Watch what follows you. | High | *Day 33. Something follows me that only moves when I look away. I have started walking backward.* |
+| 12 | summitsReached >= 5 | Top out five towers. | High | *Day 40. I was wrong about everything. The Maze is not a wall.* |
+| 13 | 7-day login streak | Come back seven nights. | Street | *Day 41. It builds every night. Shells grow before the thing inside them does.* |
+| 14 | First Gatekeeper leash reset survived | Outlast a door. | Low | *Day 44. Even the doors hunt now. But they always go home. Remember that. They always go home.* |
+| 15 | summitsReached >= 10 | Top out ten towers. | High | *Day 47. Lost my satchel today. Floor 47 wants me to forget what I mapped. I won't.* |
+| 16 | First Warden encounter | Meet what the high floors keep. | High | *Day 50. Something on the high floors wears a climber's boots. It walked like it remembered walking.* |
+| 17 | First Warden escape/survival | Walk away from it. | Nest | *Day 53. If you are reading this, the Maze finished my map for me. Leave the eggs at the Nest. Keep climbing. Do not look for me in the walls.* |
 
 Notes:
 - Fragments 4 and 15 pay off the Cracked Lantern ("Floor 12") and Cartographer's Satchel relic inscriptions. Players who connect them get the "I figured it out" moment; players who don't lose nothing.
@@ -454,6 +454,9 @@ Notes:
 - Fragment 14 teaches the Gatekeeper leash as advice from a survivor.
 - Fragment 12 is deliberately incomplete; fragment 13 finishes the thought behind a 7-day streak. The story itself enforces the daily loop. This is the highest-leverage pair in the system.
 - Fragment 17 spawns only at the Nest. The story ends where the player's every run ends.
+- The **Found** column is the fragment's `spawnHint`, and it is the placement rule 9.2 asks for. Four bands, and they are the only four a client can answer from geometry the generator already built: **Street** is the ground maze between the towers, and **Low**, **Mid** and **High** are the thirds of a tower's climb. It is a *weight and never a filter*: a fragment is likelier where it belongs and can still be found anywhere, because a player whose whole unlocked pool says High would otherwise walk an unwritten ground floor.
+- **A band is where the line reads best, not where the trigger fired.** For the fragments that name an enemy that is where the enemy is met, and the column was written against the director's `RoleMinLevel` gates as they stand: Watcher and Shrieker at Support, Mimic at Ambush, Shadow at Unusual, Gatekeeper at Heavy, Warden at Elite. It is checked against those gates and **not derived from them**, so retuning the director is a reason to re-read this column rather than an obligation to rewrite it, and nothing breaks if nobody does. Day 9 is the same call made against `MovingWallMinLevel`.
+- Day 44 is the one worth defending. The Gatekeeper is a Heavy and is met low, so a fragment about outlasting one is written on the floors where a player first needs the advice rather than on the floors where the story has got dramatic. Day 1 and day 41 are the two that belong outdoors: one was written before the climber went in, and the other is about the city rebuilding itself, which is a thing you read standing in the streets it rebuilds.
 - The **locked hint** is what the Codex prints under a `???` (6.2, 9.2). It is deliberately shorter and blunter than the fragment: a hint is a thing to go and do, so it never names a mechanic the player has not met and never explains why. "Survive the bell" is the shape of all seventeen.
 - Rule 3 holds: "shell" is never explained. Shell around what, or under what, is the update hook forever.
 
@@ -466,18 +469,26 @@ Notes:
 
   A wall is eligible if it is in the `MazeWall` collision group (generation invariant 7, which is what makes "is this a maze wall" answerable by construction rather than by a name check), is not a moving wall (it would leave its writing behind) or a phantom (that wall is something the player is meant to be reading for itself), and it fits: its own vertical extent has to contain the writing's band, which is the floor filter and needs no storey height, and its run has to be at least the writing's width, which keeps a sentence off the short panels flanking a doorway. The face is the hash's choice of the panel's two sides, falling back to the other when the first has no open air in front of it, which is what keeps a writing off the outward side of a boundary wall without the client knowing what a boundary wall is.
 
-  Two things in the config are **not** implemented and are worth knowing about rather than finding: `spawnHint` on a fragment has no values written and nothing reads it, so "weighted toward thematically matching areas" is a placement rule the content does not yet exist for, and it is a doc edit before it is a code one. `nestOnly` is implemented and is the exception: fragment 17 is out of the wall pool entirely and stands beside the Egg Roost instead, lettered on both faces because a roof is walked around and a wall is not.
+  **Which fragment is weighted by `spawnHint`**, which is the Found column of 9.1 and the whole of "weighted toward thematically matching areas". A wall is classified into one of four bands from what generation already recorded about it, and the client reads it off the folder the wall is parented into rather than off the wall itself: a maze wall's parent is its storey and carries a `Level`, a street wall's parent is the section's Street folder and carries none, so an absent level *is* the street by construction. Levels are then split into thirds of `Config.World.Levels`, so the vocabulary rescales with the tower rather than naming a floor number.
+
+  The bias is a **weighted pool per band and not a filter**: a fragment matching the band is entered `Config.Lore.WritingHintWeight` times against one for everything else, so the Cartographer's climb reads roughly in order as a player climbs it, and every fragment is still findable anywhere. Filtering instead would leave a player whose unlocked pool happens to be all one band walking blank floors, which is the same thing as having no writings at all. The lists are rebuilt only when the unlocked count moves, which is the rebuild the pool already did, so a band costs one folder attribute read per writing actually drawn and nothing per tick.
+
+  `nestOnly` is the exception that is not a band: fragment 17 is out of the wall pool entirely and stands beside the Egg Roost instead, lettered on both faces because a roof is walked around and a wall is not.
 - **In the Codex**: Journal chapter lists fragments in order, locked ones as `???` with a subtle trigger hint ("Survive the bell"). The hints are the third column of the 9.1 table, one per fragment and required of every fragment: a locked row with nothing under it is a row that reads as broken.
 - **Completion**: Journal 17/17 grants the Compass Crow plus the Cartographer title. The pet is granted through the same `PetInventory.grantPet` every hatch goes through, so a full shelf refuses it, and the refusal is why the grant is retried on every later re-check rather than recorded as paid: a reward that arrives once and can be dropped is a reward somebody loses to a shelf they can empty. The title is a replicated player attribute and not a chat tag, there being no chat surface in this game to hang one on; the Codex draws it in its own header, which is where somebody who earned it goes to look.
 
 ### 9.3 Config pattern
 
-**Shipped as `src/shared/Journal.lua`**, on the same path convention as `Lore.lua`, and the module is the array itself so `#Journal` is the chapter's size. `src/server/LoreService.server.lua` is what reads it, and it is the only file that knows an event string means a fragment: services publish facts about what happened and the service maps them, so reordering this array reaches nothing else. Its exported types live in `src/shared/Types.lua` beside the profile's `JournalState`, which is where this repo documents shapes. It checks itself at require time the way `Lore.lua` does: unique ids, well formed triggers, no two fragments on one event, and a `Stat` trigger may only name `floorsCleared` or `summitsReached`.
+**Shipped as `src/shared/Journal.lua`**, on the same path convention as `Lore.lua`, and the module is the array itself so `#Journal` is the chapter's size. `src/server/LoreService.server.lua` is what reads it, and it is the only file that knows an event string means a fragment: services publish facts about what happened and the service maps them, so reordering this array reaches nothing else. Its exported types live in `src/shared/Types.lua` beside the profile's `JournalState`, which is where this repo documents shapes. It checks itself at require time the way `Lore.lua` does: unique ids, well formed triggers, no two fragments on one event, a `Stat` trigger may only name `floorsCleared` or `summitsReached`, and a `spawnHint` may only name a band in `Journal.Bands`.
+
+`Journal.Bands` is the band vocabulary, exported beside the array because it is content rather than tuning and because two files have to agree on the four strings: the content names one and `LoreGui` classifies a wall into one, and a band spelled differently in the two is a weighting that silently never happens rather than an error anybody sees. It is a string key on the array, which leaves `#Journal` and `ipairs` exactly as they were.
 
 ```luau
 export type JournalTrigger =
 	{ type: "Stat", stat: string, value: number }
 	| { type: "Event", event: string }
+
+export type JournalBand = "street" | "low" | "mid" | "high"
 
 export type JournalFragment = {
 	id: string,
@@ -485,7 +496,7 @@ export type JournalFragment = {
 	text: string,
 	hint: string,
 	trigger: JournalTrigger,
-	spawnHint: string?,
+	spawnHint: JournalBand?,
 	nestOnly: boolean?,
 }
 
@@ -502,6 +513,7 @@ local Journal: { JournalFragment } = {
 		day = 11,
 		text = "The Maze grew an eye at the end of the corridor. It saw me first. Everything came.",
 		trigger = { type = "Event", event = "FirstWatcherSpotted" },
+		spawnHint = "mid",
 	},
 	{
 		id = "day_53",
