@@ -793,6 +793,42 @@ Config.Lore = {
 	-- the fifth time having already met everything earlier gets a short run of
 	-- them rather than one landing on top of the last.
 	ToastGapSeconds = 0.9,
+
+	-- The wall writings themselves (LORE.MD 9.2, PETS_PLAN.md Clutch 7 unit 4).
+	-- Client draw numbers rather than tuning for a service, and they are here
+	-- rather than in Config.Juice for the same reason the two timings above are:
+	-- outside the journal none of them means anything, and the toast and the
+	-- writing are two drawings of one fragment.
+	WallWritings = true,
+	-- How far from the player a wall is looked at. One broadphase query per tick
+	-- at this radius, the bargain PickupService's magnet and TimerGui's phantom
+	-- sense both already struck, rather than a sweep over a city of walls.
+	WritingRange = 46,
+	WritingTickSeconds = 0.35,
+	-- One eligible wall in this many carries a writing, chosen by hashing the
+	-- wall's own position so the same wall always carries the same one. Prime,
+	-- and large enough that a corridor holds at most one: a wall writing is a
+	-- find, and a maze papered in them is a maze nobody reads.
+	WritingSpacing = 29,
+	-- Studs above the character's root, which is what puts the writing at
+	-- reading height and is also the whole of the floor filter: a wall only
+	-- carries one if its own vertical extent contains the band, so a wall a
+	-- storey up or down is rejected without this file knowing LEVEL_HEIGHT.
+	WritingRise = 1.2,
+	WritingWidth = 19,
+	WritingHeight = 7.5,
+	-- Open air a face must have in front of it before anything is written on it.
+	-- This is what keeps a writing off the outward side of a boundary wall,
+	-- which is buried in the apron and the facade, without the client having to
+	-- know that a boundary wall is a thing.
+	WritingClearance = 3,
+	-- Off the wall face, and off the roof deck for the one that stands at the
+	-- Nest. Small enough to read as chalk on the stone rather than as a sign
+	-- hung in front of it.
+	WritingLift = 0.06,
+	-- The Nest writing stands beside the roost rather than on it: a fragment on
+	-- a five stud pedestal is a fragment nobody can read.
+	NestWritingOffset = 4.6,
 }
 
 -- ============================================================

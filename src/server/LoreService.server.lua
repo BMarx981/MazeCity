@@ -36,6 +36,14 @@
 -- what happened (a Watcher spotted somebody, an encounter was survived), and the
 -- two tables below are the only place those facts and the fragment ids meet, so
 -- reordering the array or renaming a fragment reaches no other file.
+--
+-- How far the trail has got leaves as a **replicated player attribute** and not
+-- only on the remote, which is the rule AbilityService's tiers already follow
+-- and for the same reason: the wall writings are drawn from it, and a returning
+-- player with nine fragments unlocks nothing on join, so a client waiting to be
+-- told would stand in a maze with nothing written on it until it earned the
+-- tenth. The remote still carries the events, because a toast is a moment and an
+-- attribute is a state.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local ServerScriptService = game:GetService("ServerScriptService")
@@ -139,6 +147,14 @@ local function journalOf(data)
 	return codex.journal
 end
 
+-- The one attribute this service writes, and it is the whole of what the client
+-- needs to draw a writing: the fragments themselves are content in
+-- ReplicatedStorage.Journal, which every client already has, so a count is all
+-- that crosses the wire and nothing about a line has to be sent twice.
+local function publish(player, journal)
+	player:SetAttribute("JournalUnlocked", journal.unlocked)
+end
+
 local function satisfied(data, journal, fragment)
 	local trigger = fragment.trigger
 	if trigger.type == "Stat" then
@@ -201,6 +217,11 @@ local function recheck(player, quiet)
 			announce(player, journal.unlocked)
 		end
 	end
+
+	-- Stamped on every re-check and not only on a gain, because the first
+	-- re-check a player gets is their profile landing: a rejoining player whose
+	-- count has not moved still needs it published once or their maze is blank.
+	publish(player, journal)
 
 	if quiet and gained > 0 then
 		remote:FireClient(player, {

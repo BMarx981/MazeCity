@@ -15,7 +15,20 @@ MODULES.PlayerProfiles = {
 	end,
 }
 
-function newProfile(player)
+-- A player is an object rather than a name, because LoreService publishes how far
+-- the trail has got as a replicated attribute as well as into the profile, and
+-- the harness has to be able to read what it wrote: the count in the saved data
+-- and the number a client would see are two different things, and the whole
+-- point of the attribute is that they never disagree.
+function newPlayer(name)
+	local player = { Name = name, attributes = {} }
+	function player:SetAttribute(key, value)
+		self.attributes[key] = value
+	end
+	function player:GetAttribute(key)
+		return self.attributes[key]
+	end
+
 	store[player] = {
 		pets = {},
 		eggs = {},
@@ -24,7 +37,7 @@ function newProfile(player)
 		daily = { lastClaimDayUtc = 0, streak = 0 },
 		codex = { pets = {}, kept = {}, relics = {}, journal = { unlocked = 0, banked = {} } },
 	}
-	return store[player]
+	return player
 end
 
 function profileOf(player)

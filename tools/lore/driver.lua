@@ -22,11 +22,18 @@ local function toasts()
 	return out
 end
 
-local function reset(name)
-	print(name)
+local function reset(label)
+	print(label)
 	FIRED = {}
 	DEFERRED = {}
-	return newProfile(name)
+	return newPlayer(label)
+end
+
+-- The count the client would read. Asserted beside the profile's own count
+-- everywhere it moves, because the two are written in different places and the
+-- wall writings are drawn from the one the profile does not hold.
+local function published(player)
+	return player:GetAttribute("JournalUnlocked")
 end
 
 local function clearFloor(player, n)
@@ -60,17 +67,21 @@ end
 -- ============================================================
 
 do
-	local p = reset("1. a fresh save unlocks nothing")
-	fireReady("1. a fresh save unlocks nothing")
+	local name = reset("1. a fresh save unlocks nothing")
+	local p = profileOf(name)
+	fireReady(name)
 	drain()
-	check(unlocked("1. a fresh save unlocks nothing") == 0, "fresh profile unlocked " .. unlocked("1. a fresh save unlocks nothing"))
+	check(unlocked(name) == 0, "fresh profile unlocked " .. unlocked(name))
 	check(#toasts() == 0, "fresh profile toasted")
 	check(p.codex.journal.banked.FirstHatch == nil, "fresh profile banked a hatch")
+	-- Stamped on a join that gained nothing, which is the case the attribute
+	-- exists for: a client is told where the trail stands before it is told
+	-- anything moved.
+	check(published(name) == 0, "a fresh join published " .. tostring(published(name)))
 end
 
 do
-	local name = "2. stat triggers land in order"
-	reset(name)
+	local name = reset("2. stat triggers land in order")
 	clearFloor(name, 1)
 	check(unlocked(name) == 1, "one floor should unlock exactly 1, got " .. unlocked(name))
 	clearFloor(name, 3)
@@ -79,6 +90,7 @@ do
 	check(unlocked(name) == 2, "five floors should unlock 2, got " .. unlocked(name))
 	topOut(name, 1)
 	check(unlocked(name) == 3, "first summit should unlock 3, got " .. unlocked(name))
+	check(published(name) == 3, "the attribute says " .. tostring(published(name)) .. " and the profile says 3")
 	local t = toasts()
 	check(#t == 3, "three toasts expected, got " .. #t)
 	check(t[1].index == 1 and t[2].index == 2 and t[3].index == 3, "toasts out of order")
@@ -86,8 +98,8 @@ do
 end
 
 do
-	local name = "3. an out-of-order accomplishment banks and waits"
-	local p = reset(name)
+	local name = reset("3. an out-of-order accomplishment banks and waits")
+	local p = profileOf(name)
 	fact(name, { kind = "Encounter", phase = "opened", enemyType = "Warden" })
 	check(unlocked(name) == 0, "a Warden met on floor one unlocked " .. unlocked(name))
 	check(p.codex.journal.banked.FirstWardenEncounter == true, "the encounter was not banked")
@@ -95,8 +107,7 @@ do
 end
 
 do
-	local name = "4. a missing source blocks its successors and nothing else"
-	reset(name)
+	local name = reset("4. a missing source blocks its successors and nothing else")
 	clearFloor(name, 5)
 	topOut(name, 1)
 	check(unlocked(name) == 3, "expected 3, got " .. unlocked(name))
@@ -110,8 +121,8 @@ do
 end
 
 do
-	local name = "5. witnesses bank from saved data with nothing fired"
-	local p = reset(name)
+	local name = reset("5. witnesses bank from saved data with nothing fired")
+	local p = profileOf(name)
 	p.stats.eggsHatched = 1
 	fireReady(name)
 	drain()
@@ -128,8 +139,8 @@ do
 end
 
 do
-	local name = "6. an encounter qualifier is required, not decorative"
-	local p = reset(name)
+	local name = reset("6. an encounter qualifier is required, not decorative")
+	local p = profileOf(name)
 	fact(name, { kind = "Encounter", phase = "survived", enemyType = "Shrieker", marks = {} })
 	check(p.codex.journal.banked.FirstShriekerSurvived == nil, "a Shrieker that never screamed banked a scream")
 	fact(name, { kind = "Encounter", phase = "survived", enemyType = "Shrieker", marks = { screamed = true } })
@@ -142,8 +153,8 @@ do
 end
 
 do
-	local name = "7. the whole trail, every fragment reachable"
-	local p = reset(name)
+	local name = reset("7. the whole trail, every fragment reachable")
+	local p = profileOf(name)
 	local Journal = MODULES.Journal
 
 	-- Everything an Event fragment needs, banked up front and out of order, then
@@ -166,6 +177,7 @@ do
 	clearFloor(name, 5)
 	topOut(name, 10)
 	check(unlocked(name) == #Journal, "expected all " .. #Journal .. ", got " .. unlocked(name))
+	check(published(name) == #Journal, "the attribute says " .. tostring(published(name)) .. " at the end of the trail")
 
 	local t = toasts()
 	check(#t == #Journal, "expected " .. #Journal .. " toasts, got " .. #t)
@@ -183,8 +195,8 @@ do
 end
 
 do
-	local name = "8. an existing save catches up in one line, not seventeen"
-	local p = reset(name)
+	local name = reset("8. an existing save catches up in one line, not seventeen")
+	local p = profileOf(name)
 	p.stats.floorsCleared = 40
 	p.stats.summitsReached = 30
 	p.stats.eggsHatched = 4
@@ -196,6 +208,10 @@ do
 	check(t[1] and t[1].kind == "caughtUp", "the catch-up was not summarised")
 	check(t[1] and t[1].count == unlocked(name), "the summary count disagrees with the unlock count")
 	check(unlocked(name) == 3, "expected 3 from stats alone, got " .. unlocked(name))
+	-- The quiet path publishes too. It is the one that matters most: a returning
+	-- player is exactly the client that would otherwise stand in an unwritten
+	-- maze until it earned something.
+	check(published(name) == 3, "a quiet catch-up published " .. tostring(published(name)))
 
 	-- And live play after it is loud again.
 	-- And live play after it is loud again. Four of the five it releases were
@@ -210,8 +226,7 @@ do
 end
 
 do
-	local name = "9. nothing unlocks twice"
-	reset(name)
+	local name = reset("9. nothing unlocks twice")
 	clearFloor(name, 5)
 	topOut(name, 1)
 	local before = #toasts()
