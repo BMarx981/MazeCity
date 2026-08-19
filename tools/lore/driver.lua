@@ -454,6 +454,47 @@ do
 	check(p.codex.kept.Watcher == 2, "the chapter did not follow the card")
 end
 
+do
+	local name = reset("17. the Relics chapter is witnessed off the gear bag")
+	local p = profileOf(name)
+	fireReady(name)
+	drain()
+	check(next(p.codex.relics) == nil, "a fresh profile has recovered something")
+
+	p.accessories = { a1 = { uid = "a1", accessoryId = "lantern_hat" } }
+	petsChanged:Fire({ player = name })
+	drain()
+	check(p.codex.relics.lantern_hat == true, "a bought Lantern Hat did not write its page")
+
+	-- Banked, and this is the chapter where that is not hypothetical: gear can be
+	-- sold at the roost today, and a page read cannot be sold back.
+	p.accessories = {}
+	petsChanged:Fire({ player = name })
+	drain()
+	check(p.codex.relics.lantern_hat == true, "selling a relic unwrote its page")
+
+	-- Both witnesses run on every re-check: the second must not be skipped
+	-- because the first already moved, nor the first because the second did.
+	p.pets = { u1 = { petId = "firefly", stage = 0 } }
+	p.accessories = { a2 = { uid = "a2", accessoryId = "coin_chain" } }
+	petsChanged:Fire({ player = name })
+	drain()
+	check(p.codex.pets.firefly == true, "the pets witness was skipped")
+	check(p.codex.relics.coin_chain == true, "the relics witness was skipped")
+
+	-- Every inscription resolves, which is the one-way key check read from the
+	-- other end: a row the game can sell with nothing written for it is a Codex
+	-- entry that draws blank.
+	local missing = {}
+	for id in pairs(MODULES.AccessoryCatalog) do
+		local lore = MODULES.Lore.relics[id]
+		if not lore or type(lore.inscription) ~= "string" or type(lore.recovered) ~= "string" then
+			table.insert(missing, id)
+		end
+	end
+	check(#missing == 0, table.concat(missing, ", ") .. " have no inscription")
+end
+
 print("")
 if failures > 0 then
 	-- Level 0 so the message is the message rather than a stack trace, and so the

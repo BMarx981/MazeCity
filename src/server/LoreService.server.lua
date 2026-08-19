@@ -47,8 +47,9 @@
 -- journal is a decision, what it is worth to the Codex is a fact. `codex.pets`
 -- is a witness in exactly the sense above, the profile's own pet list read on
 -- every re-check, so a hatch banks a page without IncubatorService learning
--- that a Codex exists. `codex.relics` has no writer and will not until
--- Lore.relics has a row in it (LORE.MD Section 5).
+-- that a Codex exists. `codex.relics` is the same witness over the gear bag,
+-- which is why buying, claiming and being given a piece all write a page and
+-- none of those files fires anything.
 --
 -- What the client is sent is **unlock state and nothing else**: a count, a stage
 -- per Kept, a set of pet ids. Every line of text and every picture the Codex
@@ -238,6 +239,25 @@ local function witnessPets(data)
 	return gained
 end
 
+-- The third chapter and the second witness, over the gear bag the profile
+-- already keeps (LORE.MD Section 5). Owning one is the record that it was
+-- recovered, so nothing in the incubator's gear shop or the daily reward has to
+-- fire anything, and a worn item is still in this map so a relic on a pet is a
+-- relic found. It banks for the reason the pets chapter does and this is the
+-- one where it is not hypothetical: gear is sellable today, and a page read
+-- cannot be sold back.
+local function witnessRelics(data)
+	local relics = data.codex.relics
+	local gained = false
+	for _, item in pairs(data.accessories or {}) do
+		if item.accessoryId and not relics[item.accessoryId] then
+			relics[item.accessoryId] = true
+			gained = true
+		end
+	end
+	return gained
+end
+
 -- Unlock state and nothing else. The tables go over the wire as copies, which
 -- is the engine's doing rather than a precaution, but it is also why this can
 -- hand over the profile's own chapters without a client holding a reference to
@@ -332,7 +352,9 @@ local function recheck(player, quiet)
 		end
 	end
 
-	local moved = witnessPets(data)
+	local petsMoved = witnessPets(data)
+	local relicsMoved = witnessRelics(data)
+	local moved = petsMoved or relicsMoved
 	local gained = 0
 	while journal.unlocked < #Journal do
 		local fragment = Journal[journal.unlocked + 1]

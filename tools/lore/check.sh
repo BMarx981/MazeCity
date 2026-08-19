@@ -51,6 +51,16 @@ run=$(mktemp -t lorecheck)
 	echo '	assert(m, "no stub module for " .. tostring(name))'
 	echo '	return m'
 	echo 'end'
+	# The four catalogues and Lore itself, loaded through the shim above because
+	# they require each other. Lore validates its own keys at require time, so
+	# standing them up here is what makes that check run every time this does:
+	# an inscription for gear that does not exist stops the harness rather than
+	# drawing a blank row in a chapter nobody opened yet.
+	for name in EnemyTypes EnemyDefinitions PetCatalog EggCatalog AccessoryCatalog Lore; do
+		echo "MODULES.$name = (function()"
+		cat "$shared/$name.lua"
+		echo 'end)();'
+	done
 	echo '(function()'
 	cat "$server/LoreService.server.lua"
 	echo 'end)()'

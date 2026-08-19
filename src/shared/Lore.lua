@@ -180,14 +180,110 @@ Lore.kept = {
 -- ============================================================
 -- Relics
 -- ============================================================
--- Empty on purpose, and the Codex's Relics chapter is deferred with it. Every
--- relic LORE.MD Section 5 names is written against gear that does not exist:
--- no id matches an AccessoryCatalog row, there is no `set` field for the named
--- sets, and nothing in the game drops anything, so the Hollow Set has no
--- source. The chapter arrives with the gear economy, PET_ACCESSORIES_PLAN
--- Set 5, and the three inscriptions wait in the doc until then.
+-- Every accessory is a relic of a previous climber (LORE.MD Section 5), and the
+-- design rule is Sections 2 and 3's read over gear: the inscription explains the
+-- effect. `recovered` is the second half of the format and not decoration. It is
+-- a floor number for everything the counter sells, that being the only address
+-- this world has, and the two items no coin can reach say where they came from
+-- instead. Floor 12 and Floor 47 are not free choices: the journal answers both
+-- (Journal.lua, days 11 and 47), which is why renaming either item is a doc
+-- change across two files rather than a config edit here.
+--
+-- `set` stays unwritten. The Cartographer's kit is already three items of this
+-- table read in order, and a set with no set bonus is a grouping: a chapter that
+-- groups by something nobody can complete is the meter that cannot fill, which
+-- is the rule that keeps the Splitter Child out of the Kept denominator.
 
-Lore.relics = {}
+Lore.relics = {
+	explorers_cap = {
+		inscription = "Its owner marked the next three turns inside the brim, so they could be read without stopping.",
+		recovered = "Recovered from Floor 3.",
+	},
+	lantern_hat = {
+		inscription = "Still lit. Nobody has worked out what it is burning.",
+		recovered = "Recovered from Floor 12.",
+	},
+	tin_crown = {
+		inscription = "Beaten out of a ration tin by somebody who had decided they were going to be remembered.",
+		recovered = "Recovered from Floor 8.",
+	},
+	cartographers_circlet = {
+		inscription = "The Cartographer wore it to keep both hands free for the map. It reads a wall the hands would have had to touch.",
+		recovered = "Recovered from Floor 40.",
+	},
+	gilded_crown = {
+		inscription = "Worn by a climber who came down rich exactly once and went back up anyway.",
+		recovered = "Recovered from Floor 22.",
+	},
+	beacon_crown = {
+		inscription = "Lit every night for seven nights, so the floors below would know somebody was still up there.",
+		recovered = "Recovered from seven days of returning.",
+	},
+	coin_chain = {
+		inscription = "Every link is a coin somebody drilled through rather than spend. It has been pulling them in ever since.",
+		recovered = "Recovered from Floor 5.",
+	},
+	bell_collar = {
+		inscription = "A bell for a companion that kept getting lost. It learned the sound faster than it learned the corridor.",
+		recovered = "Recovered from Floor 6.",
+	},
+	guard_collar = {
+		inscription = "Cut from the padding of a climber's own coat, which is the whole of what a guard collar has ever been.",
+		recovered = "Recovered from Floor 9.",
+	},
+	compass_pendant = {
+		inscription = "It does not point north. It points at the wall that is lying about being a wall.",
+		recovered = "Recovered from Floor 19.",
+	},
+	warm_amulet = {
+		inscription = "Kept against the skin for a whole climb, because the thing it was warming could not be put down.",
+		recovered = "Recovered from Floor 15.",
+	},
+	heartstone_locket = {
+		inscription = "It is heavier than it looks and it has been hit harder than that. Whoever it was for did not need it in the end.",
+		recovered = "Recovered from Floor 33.",
+	},
+	scrap_cape = {
+		inscription = "Sewn from four other capes, none of whose owners are named on it.",
+		recovered = "Recovered from Floor 2.",
+	},
+	runners_cloak = {
+		inscription = "Cut short at the knee on purpose. Its owner had learned exactly what a long hem costs on a stair.",
+		recovered = "Recovered from Floor 13.",
+	},
+	coin_satchel = {
+		inscription = "The Cartographer lost one like it here and wrote the day down. This is not that one, and it is the same make.",
+		recovered = "Recovered from Floor 47.",
+	},
+	phase_pack = {
+		inscription = "It hums against a wall the way a held breath does. Two more seconds of being somewhere you are not.",
+		recovered = "Recovered from Floor 28.",
+	},
+	moth_wings = {
+		inscription = "Taken off nothing that ever flew. The Maze built them onto something and it learned anyway.",
+		recovered = "Recovered from Floor 36.",
+	},
+	dust_motes = {
+		inscription = "The air of the lower floors, kept in a jar and then let out again. It does nothing, and everybody wants it.",
+		recovered = "Recovered from Floor 1.",
+	},
+	coin_glimmer = {
+		inscription = "Struck off a hoard that was never carried down. What is left of it still leans towards money.",
+		recovered = "Recovered from Floor 17.",
+	},
+	warding_sparks = {
+		inscription = "It burns nothing and it stops nothing dead. It has still spent more time between a climber and the Kept than most gear ever will.",
+		recovered = "Recovered from Floor 25.",
+	},
+	wayfinder_halo = {
+		inscription = "The Cartographer's, near the end, when the map had stopped being on paper.",
+		recovered = "Recovered from Floor 44.",
+	},
+	ember_trail = {
+		inscription = "It has been alight since the Sanctum caught, which is longer than the district has had a name.",
+		recovered = "Recovered from the Cinder Sanctum, still burning.",
+	},
+}
 
 -- ============================================================
 -- The city

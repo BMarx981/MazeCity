@@ -1,7 +1,7 @@
 -- CodexGui (LocalScript) -> StarterPlayer.StarterPlayerScripts
--- The Codex, per docs/LORE.MD 6.2 and PETS_PLAN.md Clutch 7 unit 5. Three
--- chapters of what a player has met, hatched and read, each one a meter over
--- content that is already on this machine.
+-- The Codex, per docs/LORE.MD 6.2 and PETS_PLAN.md Clutch 7 unit 5. Four
+-- chapters of what a player has met, hatched, recovered and read, each one a
+-- meter over content that is already on this machine.
 --
 -- **It draws unlock state and owns none of it.** LoreService pushes a
 -- projection (a count for the journal, a stage per Kept, a set of pet ids) and
@@ -28,11 +28,17 @@
 -- draws as a row anyway for whoever meets one. Pets counts the catalogue, all
 -- of which every egg can roll.
 --
--- **There is no Relics chapter and it is not an omission.** `Lore.relics` is
--- empty and nothing writes `codex.relics`, so a fourth tab today would be a
--- meter that reads 0 of 0 forever. It arrives with the gear economy's relic
--- content (LORE.MD Section 5), and arriving is a chapter in this file plus a
--- writer beside the other two, not a rewrite of either.
+-- Relics counts what the game can actually hand over, which is every piece of
+-- gear with a coin price plus the streak Legendary: the Ember Trail is event
+-- gear with no price and no product, so it is this chapter's Splitter Child and
+-- draws as a row for whoever has one without being in the denominator.
+--
+-- **Relics is also the one chapter whose picture is not a portrait.** Gear has
+-- no client-side rig builder: the placeholder shapes are built in PetService and
+-- an artist's model in ServerStorage is invisible from here. So it draws the
+-- recipe rather than the thing, the placeholder's own colour cornered to its own
+-- shape, which is what this machine actually holds. A generated gear rig is
+-- PET_LOOKS_PLAN work and this chapter is not the place to invent one.
 --
 -- The one request in here is the first one. Everything after it is pushed, so a
 -- client is correct without polling and without asking again; the sync exists
@@ -53,6 +59,7 @@ local Journal = require(ReplicatedStorage:WaitForChild("Journal"))
 local Lore = require(ReplicatedStorage:WaitForChild("Lore"))
 local PetCatalog = require(ReplicatedStorage:WaitForChild("PetCatalog"))
 local EnemyDefinitions = require(ReplicatedStorage:WaitForChild("EnemyDefinitions"))
+local AccessoryCatalog = require(ReplicatedStorage:WaitForChild("AccessoryCatalog"))
 local PetModelGenerator = require(ReplicatedStorage:WaitForChild("PetModelGenerator"))
 local PortraitGenerator = require(ReplicatedStorage:WaitForChild("PortraitGenerator"))
 
@@ -105,6 +112,38 @@ table.sort(keptIds, function(a, b)
 	return EnemyDefinitions.types[a].name < EnemyDefinitions.types[b].name
 end)
 
+-- The denominator is what the game can hand over, read off the catalogue's own
+-- one-field rules rather than a list kept in step with them: a coin price, a
+-- Robux product, or being the piece day seven of a streak pays. Everything else
+-- is event gear, which is drawn when owned and never counted.
+local function reachable(config)
+	return config.coinCost ~= nil or config.robuxProductId ~= nil or config.id == Config.Accessories.StreakGearId
+end
+
+local relicIds = {}
+for id, config in pairs(AccessoryCatalog) do
+	if reachable(config) then
+		table.insert(relicIds, id)
+	end
+end
+local SLOT_ORDER = {}
+for i, slot in ipairs(Config.Accessories.Slots) do
+	SLOT_ORDER[slot] = i
+end
+-- By slot and then by rarity, which is the order the bag and both shops already
+-- read in, so a player looking for the crown they own looks where crowns are.
+table.sort(relicIds, function(a, b)
+	local ca, cb = AccessoryCatalog[a], AccessoryCatalog[b]
+	if ca.slot ~= cb.slot then
+		return (SLOT_ORDER[ca.slot] or 99) < (SLOT_ORDER[cb.slot] or 99)
+	end
+	local ra, rb = Config.rarityIndex(ca.rarity), Config.rarityIndex(cb.rarity)
+	if ra ~= rb then
+		return ra < rb
+	end
+	return ca.name < cb.name
+end)
+
 -- ============================================================
 -- Widgets
 -- ============================================================
@@ -150,13 +189,15 @@ tabRow.Position = UDim2.new(0, 16, 0, 66)
 tabRow.BackgroundTransparency = 1
 tabRow.Parent = panel
 
-local TABS = { "Journal", "Kept", "Pets" }
+local TABS = { "Journal", "Kept", "Pets", "Relics" }
 local tabButtons = {}
 for i, name in ipairs(TABS) do
 	local width = 1 / #TABS
 	tabButtons[name] =
 		UiTheme.button(tabRow, UDim2.new(width, -6, 1, 0), UDim2.new(width * (i - 1), 3, 0, 0), name, UiTheme.Stone)
-	tabButtons[name].TextSize = 13
+	-- A point smaller than the rest of the chrome, because a fourth tab took the
+	-- width a three-tab row could spare and every label carries a fraction.
+	tabButtons[name].TextSize = 12
 end
 
 -- The open chapter's meter. The tab labels carry every chapter's fraction, so
@@ -359,6 +400,73 @@ local function petRow(order, petId, known)
 	return frame
 end
 
+-- The recipe rather than the thing, for the reason the header gives: this is
+-- the placeholder colour every client already holds, cornered round for the
+-- shapes that are round. It is deliberately not a darkened version of itself
+-- when locked, that being the lockedPlate's job and the same rule the Kept's
+-- silhouette follows.
+local function relicPlate(frame, config)
+	local look = config.placeholder
+	local plate = Instance.new("Frame")
+	plate.Size = UDim2.fromOffset(PORTRAIT, PORTRAIT)
+	plate.Position = UDim2.new(0, 12, 0, 12)
+	plate.BackgroundColor3 = look.color
+	plate.BackgroundTransparency = 0.15
+	plate.BorderSizePixel = 0
+	plate.Parent = frame
+	local round = look.shape == "Ball" or look.shape == "Cylinder" or look.shape == "Particle"
+	UiTheme.rounded(plate, round and PORTRAIT / 2 or 8)
+	UiTheme.stroke(plate)
+end
+
+local function relicRow(order, accessoryId, known)
+	local config = AccessoryCatalog[accessoryId]
+	local frame = row(order, ENTRY_ROW_H)
+
+	if not known then
+		dim(frame)
+		mount(frame, nil)
+		local name = UiTheme.label(
+			frame,
+			UDim2.new(1, -TEXT_X - 14, 0, 20),
+			UDim2.new(0, TEXT_X, 0, 14),
+			UiTheme.BodyBold,
+			15,
+			UiTheme.Etch
+		)
+		name.TextXAlignment = Enum.TextXAlignment.Left
+		name.Text = "???"
+		wrapped(frame, TEXT_X, 38, 40, 12, UiTheme.Dim).Text =
+			"Not recovered. It is still on the floor somebody left it on."
+		return frame
+	end
+
+	relicPlate(frame, config)
+
+	local name =
+		UiTheme.label(frame, UDim2.new(1, -TEXT_X - 70, 0, 20), UDim2.new(0, TEXT_X, 0, 12), UiTheme.BodyBold, 15)
+	name.TextXAlignment = Enum.TextXAlignment.Left
+	name.Text = config.name
+
+	local rarity = UiTheme.label(
+		frame,
+		UDim2.new(0, 62, 0, 18),
+		UDim2.new(1, -76, 0, 13),
+		UiTheme.BodyBold,
+		12,
+		Config.rarityColor(config.rarity)
+	)
+	rarity.TextXAlignment = Enum.TextXAlignment.Right
+	rarity.Text = config.rarity
+
+	local lore = Lore.relics[accessoryId]
+	wrapped(frame, TEXT_X, 34, 46, 12, UiTheme.Text).Text = lore and lore.inscription or ""
+	-- The second half of the format, and it is a provenance rather than a second
+	-- sentence of the same voice: Etch, the way a plate in the world is lettered.
+	wrapped(frame, TEXT_X, 82, 16, 11, UiTheme.Etch).Text = lore and lore.recovered or ""
+	return frame
+end
+
 -- ============================================================
 -- Meters
 -- ============================================================
@@ -398,7 +506,23 @@ local function petCounts()
 	return known, #petIds, string.format("Pets: %d of %d hatched.", known, #petIds)
 end
 
-local COUNTS = { Journal = journalCounts, Kept = keptCounts, Pets = petCounts }
+local function relicCounts()
+	local known = 0
+	local relics = state and state.relics or {}
+	for _, id in ipairs(relicIds) do
+		if relics[id] then
+			known = known + 1
+		end
+	end
+	return known, #relicIds, string.format("Relics: %d of %d recovered.", known, #relicIds)
+end
+
+local COUNTS = {
+	Journal = journalCounts,
+	Kept = keptCounts,
+	Pets = petCounts,
+	Relics = relicCounts,
+}
 
 -- ============================================================
 -- Drawing
@@ -437,6 +561,24 @@ local function drawPets()
 	end
 end
 
+local function drawRelics()
+	local relics = state and state.relics or {}
+	local order = 0
+	for _, id in ipairs(relicIds) do
+		order = order + 1
+		relicRow(order, id, relics[id] == true)
+	end
+	-- Event gear, held by whoever was there. Out of the denominator above for the
+	-- reason the Splitter Child is, and drawn here for the same one.
+	for id in pairs(relics) do
+		local config = AccessoryCatalog[id]
+		if config and not reachable(config) then
+			order = order + 1
+			relicRow(order, id, true)
+		end
+	end
+end
+
 function refresh()
 	if not panel.Visible then
 		return
@@ -463,6 +605,8 @@ function refresh()
 		drawJournal()
 	elseif openTab == "Kept" then
 		drawKept()
+	elseif openTab == "Relics" then
+		drawRelics()
 	else
 		drawPets()
 	end

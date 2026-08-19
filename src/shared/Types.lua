@@ -388,6 +388,7 @@ export type KeptLore = {
 
 export type RelicLore = {
 	inscription: string,
+	recovered: string,
 	set: string?,
 }
 

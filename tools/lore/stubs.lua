@@ -22,8 +22,15 @@ local function container(name)
 	return c
 end
 
+-- A shared ModuleScript reaches its siblings as script.Parent:WaitForChild(...)
+-- rather than through a service, so the catalogues need one of these to be
+-- loadable here at all. Parented to ReplicatedStorage's own container, which is
+-- where Rojo puts them, so both spellings of a sibling resolve to one marker.
+local replicated = container("ReplicatedStorage")
+script = { Name = "harness", Parent = replicated }
+
 local SERVICES = {
-	ReplicatedStorage = container("ReplicatedStorage"),
+	ReplicatedStorage = replicated,
 	ServerScriptService = container("ServerScriptService"),
 	Players = container("Players"),
 	SoundService = container("SoundService"),

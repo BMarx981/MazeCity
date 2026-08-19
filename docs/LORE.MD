@@ -207,21 +207,81 @@ Design consequences:
 
 ## 5. Accessory Lore: Relics
 
-Every accessory is a **relic of a previous climber**. Format per item, shown in an inspect panel: one inscription line plus where it was recovered (floor number or drop source).
+Every accessory is a **relic of a previous climber**. Format per item, and it is two things rather than one: an inscription, and where it was recovered. Design rule carried through every entry, the same one Sections 2 and 3 carry: **the inscription explains the effect.** A player who reads one sentence should understand what the thing does.
 
-- **Cracked Lantern**: *"Recovered from Floor 12. Still lit."*
-- **Cartographer's Satchel**: *"Its owner mapped forty floors. The Maze built a forty-first."*
-- **Hollow Mask**: *"Dropped by a Warden. Do not wear it near the walls."* (Warden drop, rare)
+Provenance is a floor number wherever the item can be bought, because the counter trades in what climbers left behind and a floor is the only address this world has. The two items no coin can reach say where they came from instead, which is the only place the format bends.
 
-**Named sets** create collection targets and future set-bonus monetization:
+Two floor numbers are not free choices. **Floor 12** is the Lantern Hat and **Floor 47** is the Coin Satchel, and both are answered inside the journal (Section 9.1, days 11 and 47). A player who connects them gets the moment; a player who does not loses nothing, which is the bargain those two fragments were written under long before there was a relic to pay off.
 
-- The Cartographer's Set (satchel, compass, ink-stained gloves)
-- The Lamplighter's Set (lantern, oil flask, singed cloak)
-- The Hollow Set (mask, gauntlets, tattered banner), Warden drops only
+**Explorer's Cap** (Head, Common, +3 route hops). Recovered from Floor 3.
+> Its owner marked the next three turns inside the brim, so they could be read without stopping.
 
-Floor numbers in inscriptions double as soft worldbuilding, and two of them (12 and 47) pay off inside the journal.
+**Lantern Hat** (Head, Uncommon, +10 glow). Recovered from Floor 12.
+> Still lit. Nobody has worked out what it is burning.
 
-**None of this exists in the game yet, and the Codex's Relics chapter is deferred because of it.** `AccessoryCatalog` ships twenty-two items and not one of the ids above is among them; the near misses are `lantern_hat`, `cartographers_circlet` and `coin_satchel`. There is no `set` field on an accessory row for the named sets to live in, and nothing in the game drops anything, so the Hollow Set has no source. `Lore.relics` ships empty and the chapter arrives when the gear economy does (PET_ACCESSORIES_PLAN Set 5). The three inscriptions above stay here as the writing target for that day.
+**Tin Crown** (Head, Uncommon, +5% score, +2 route hops). Recovered from Floor 8.
+> Beaten out of a ration tin by somebody who had decided they were going to be remembered.
+
+**Cartographer's Circlet** (Head, Rare, +8 route hops, +24 phantom sense). Recovered from Floor 40.
+> The Cartographer wore it to keep both hands free for the map. It reads a wall the hands would have had to touch.
+
+**Gilded Crown** (Head, Epic, +25% coins, +10% score). Recovered from Floor 22.
+> Worn by a climber who came down rich exactly once and went back up anyway.
+
+**Beacon Crown** (Head, Legendary, +14 route hops, +20 glow). Recovered from seven days of returning.
+> Lit every night for seven nights, so the floors below would know somebody was still up there.
+
+**Coin Chain** (Neck, Common, +2 studs of pull). Recovered from Floor 5.
+> Every link is a coin somebody drilled through rather than spend. It has been pulling them in ever since.
+
+**Bell Collar** (Neck, Common, +10% pet XP). Recovered from Floor 6.
+> A bell for a companion that kept getting lost. It learned the sound faster than it learned the corridor.
+
+**Guard Collar** (Neck, Uncommon, 15% armor). Recovered from Floor 9.
+> Cut from the padding of a climber's own coat, which is the whole of what a guard collar has ever been.
+
+**Compass Pendant** (Neck, Rare, +30 phantom sense, +2 route hops). Recovered from Floor 19.
+> It does not point north. It points at the wall that is lying about being a wall.
+
+**Warm Amulet** (Neck, Rare, +50% hatch progress). Recovered from Floor 15.
+> Kept against the skin for a whole climb, because the thing it was warming could not be put down.
+
+**Heartstone Locket** (Neck, Epic, 30% armor, +0.5 speed). Recovered from Floor 33.
+> It is heavier than it looks and it has been hit harder than that. Whoever it was for did not need it in the end.
+
+**Scrap Cape** (Back, Common, +0.5 speed). Recovered from Floor 2.
+> Sewn from four other capes, none of whose owners are named on it.
+
+**Runner's Cloak** (Back, Uncommon, +1 speed). Recovered from Floor 13.
+> Cut short at the knee on purpose. Its owner had learned exactly what a long hem costs on a stair.
+
+**Coin Satchel** (Back, Rare, +20% coins). Recovered from Floor 47.
+> The Cartographer lost one like it here and wrote the day down. This is not that one, and it is the same make.
+
+**Phase Pack** (Back, Rare, +2s of Wall Walker). Recovered from Floor 28.
+> It hums against a wall the way a held breath does. Two more seconds of being somewhere you are not.
+
+**Moth Wings** (Back, Epic, +1.5 speed, +15% pet XP). Recovered from Floor 36.
+> Taken off nothing that ever flew. The Maze built them onto something and it learned anyway.
+
+**Dust Motes** (Aura, Common, no effect at all). Recovered from Floor 1.
+> The air of the lower floors, kept in a jar and then let out again. It does nothing, and everybody wants it.
+
+**Coin Glimmer** (Aura, Uncommon, +2.5 studs of pull). Recovered from Floor 17.
+> Struck off a hoard that was never carried down. What is left of it still leans towards money.
+
+**Warding Sparks** (Aura, Rare, 20% armor). Recovered from Floor 25.
+> It burns nothing and it stops nothing dead. It has still spent more time between a climber and the Kept than most gear ever will.
+
+**Wayfinder Halo** (Aura, Epic, +10 route hops, +8% score). Recovered from Floor 44.
+> The Cartographer's, near the end, when the map had stopped being on paper.
+
+**Ember Trail** (Aura, Legendary, +14 glow, +1 speed). Recovered from the Cinder Sanctum, still burning.
+> It has been alight since the Sanctum caught, which is longer than the district has had a name.
+
+**The three items this section used to name are gone, and two of them were kept.** It named a Cracked Lantern, a Cartographer's Satchel and a Hollow Mask, none of which is an id in `AccessoryCatalog`. The lantern's inscription ("Still lit") and its Floor 12 moved onto the **Lantern Hat**, and the satchel's Floor 47 onto the **Coin Satchel**, so both journal payoffs survived the rename. The Hollow Mask did not, because it was a Warden drop and **nothing in this game drops anything**: adding it would mean writing a source as well as a line.
+
+**Named sets are still the target and there is still no `set` field with anything in it.** The Cartographer's Set is already three quarters written into the catalogue by accident of naming, the Circlet, the Satchel and the Halo being one climber's kit read in order up the floors. What is missing is not text, it is the bonus: a set with no set bonus is a grouping, and a Codex that groups by a set nobody can complete is a meter that cannot fill, which is the rule that keeps the Splitter Child out of the Kept denominator (6.2). `Types.RelicLore` keeps the optional field so the day it means something costs one catalogue pass.
 
 ---
 
@@ -244,7 +304,7 @@ The pet's lore line appears in the hatch moment. For Epic+ hatches, the summit b
 Entries unlock on:
 - First hatch of each pet
 - First encounter of each of the Kept (silhouette + name); surviving/escaping unlocks the lore line
-- First recovery of each relic
+- First recovery of each relic, which is owning it: the witness is the gear bag, so buying one, claiming one on a streak and being given one all write the page and none of those files fires anything
 - Journal fragments via accomplishment triggers (Section 9): locked fragments render as `???` plus the locked hint in the Section 9.1 table
 
 Completion rewards per chapter (Pets / The Kept / Relics / Journal) and a 100% reward. The Codex converts lore into a visible collection meter, which is the actual retention mechanic; the lore is the paint on it.
@@ -255,7 +315,7 @@ Completion rewards per chapter (Pets / The Kept / Relics / Journal) and a 100% r
 
 **Every row is drawn from content the client already has.** The four chapters are `Lore` and `Journal` in ReplicatedStorage, the pictures are `PortraitGenerator` over the same two rig recipes the game spawns from, and what crosses the wire is unlock state only: a count for the journal, a stage per Kept, a set of pet ids. No line of text and no image is ever sent, which is what makes the whole chapter cost the same whether a player has one entry or all of them.
 
-**A chapter's size is what a player can actually reach**, because a meter that cannot fill is a meter nobody trusts. The Kept counts the roster the spawn director may roll, which is nineteen: the Splitter Child is `spawnable = false` and can only arrive from a Splitter breaking, which needs damage the game does not have yet, so it is not in the denominator and draws as a row anyway for whoever meets one. Pets counts the catalogue, all five of which every egg can roll. Relics has no chapter at all: `Lore.relics` is empty and nothing writes `codex.relics`, so a fourth tab today would be a meter that reads 0 of 0 forever. It arrives with the gear economy's relic content (Section 5), as one chapter in the client plus one writer beside the two that exist.
+**A chapter's size is what a player can actually reach**, because a meter that cannot fill is a meter nobody trusts. The Kept counts the roster the spawn director may roll, which is nineteen: the Splitter Child is `spawnable = false` and can only arrive from a Splitter breaking, which needs damage the game does not have yet, so it is not in the denominator and draws as a row anyway for whoever meets one. Pets counts the catalogue, all five of which every egg can roll. **Relics shipped as the fourth chapter** and counts what the game can actually hand over, read off the catalogue's own one-field rules rather than a list kept in step with them: a coin price, a Robux product, or being the piece day seven of a streak pays. That is twenty-one of the twenty-two, the Ember Trail being event gear with neither price nor product, so it is this chapter's Splitter Child and draws as a row for whoever has one without being in the denominator.
 
 **One reward is written and it is the one that ships.** Journal 17/17 grants the Compass Crow and the Cartographer title, which is this section's 100% reward for the only chapter that can be completed by playing rather than by collecting. Per-chapter rewards are named here and nowhere else: no line says what finishing the Pets chapter gives, and inventing one at a keyboard is what Section 8 exists to stop. They are unwritten content, not missing code.
 
