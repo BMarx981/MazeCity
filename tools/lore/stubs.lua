@@ -35,6 +35,15 @@ local SERVICES = {
 	ServerStorage = container("ServerStorage"),
 }
 
+-- LoreService drops a player's sync floor when they leave, so the Players stub
+-- carries the one signal it connects to. Nothing in the harness fires it; what
+-- matters is that connecting does not error.
+SERVICES.Players.PlayerRemoving = {
+	Connect = function()
+		return { Disconnect = function() end }
+	end,
+}
+
 game = {}
 function game:GetService(name)
 	if not SERVICES[name] then
@@ -98,6 +107,7 @@ function Instance.new(className)
 	function inst:Fire(...)
 		ev.emit(...)
 	end
+	inst.OnServerEvent = signal()
 	function inst:FireClient(player, payload)
 		table.insert(FIRED, { player = player, payload = payload })
 	end

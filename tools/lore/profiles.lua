@@ -15,6 +15,24 @@ MODULES.PlayerProfiles = {
 	end,
 }
 
+-- The one PetInventory function LoreService calls, and the reason it calls it:
+-- the 17/17 reward goes through the same grant every hatch does, so a full
+-- shelf refuses it. SHELF_FULL is how the harness makes it refuse.
+SHELF_FULL = false
+local granted = 0
+
+MODULES.PetInventory = {
+	grantPet = function(data, petId)
+		if SHELF_FULL then
+			return false, "full"
+		end
+		granted = granted + 1
+		local uid = "granted_" .. tostring(granted)
+		data.pets[uid] = { uid = uid, petId = petId, stage = 0 }
+		return true, data.pets[uid]
+	end,
+}
+
 -- A player is an object rather than a name, because LoreService publishes how far
 -- the trail has got as a replicated attribute as well as into the profile, and
 -- the harness has to be able to read what it wrote: the count in the saved data
@@ -35,7 +53,7 @@ function newPlayer(name)
 		incubator = nil,
 		stats = { mazesCompleted = 0, floorsCleared = 0, summitsReached = 0, eggsHatched = 0 },
 		daily = { lastClaimDayUtc = 0, streak = 0 },
-		codex = { pets = {}, kept = {}, relics = {}, journal = { unlocked = 0, banked = {} } },
+		codex = { pets = {}, kept = {}, relics = {}, journal = { unlocked = 0, banked = {}, rewarded = false } },
 	}
 	return player
 end

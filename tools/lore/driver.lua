@@ -14,18 +14,39 @@ local function check(cond, message)
 	end
 end
 
+-- The remote carries three things now: the toasts, the completion, and the Codex
+-- projection. They are separated here rather than counted together, because a
+-- projection is state and the counts below are all about moments.
 local function toasts()
 	local out = {}
 	for _, entry in ipairs(FIRED) do
-		table.insert(out, entry.payload)
+		local kind = entry.payload.kind
+		if kind == "unlocked" or kind == "caughtUp" then
+			table.insert(out, entry.payload)
+		end
 	end
 	return out
+end
+
+local function ofKind(wanted)
+	local out = {}
+	for _, entry in ipairs(FIRED) do
+		if entry.payload.kind == wanted then
+			table.insert(out, entry.payload)
+		end
+	end
+	return out
+end
+
+local function projections()
+	return ofKind("codex")
 end
 
 local function reset(label)
 	print(label)
 	FIRED = {}
 	DEFERRED = {}
+	SHELF_FULL = false
 	return newPlayer(label)
 end
 
@@ -237,6 +258,142 @@ do
 	end
 	drain()
 	check(#toasts() == before, "re-checking re-toasted " .. (#toasts() - before) .. " fragments")
+end
+
+do
+	local name = reset("10. the Kept chapter records every type, and only ever upward")
+	local p = profileOf(name)
+	fireReady(name)
+	drain()
+
+	-- A type the journal has no fragment for. The Codex still keeps it: what an
+	-- encounter is worth to the trail is a decision, what it is worth to the
+	-- chapter is a fact.
+	fact(name, { kind = "Encounter", phase = "opened", enemyType = "Trapper" })
+	check(p.codex.kept.Trapper == 1, "a Trapper met was not recorded, got " .. tostring(p.codex.kept.Trapper))
+	fact(name, { kind = "Encounter", phase = "survived", enemyType = "Trapper", reason = "lost" })
+	check(p.codex.kept.Trapper == 2, "a Trapper survived did not raise the stage")
+	fact(name, { kind = "Encounter", phase = "opened", enemyType = "Trapper" })
+	check(p.codex.kept.Trapper == 2, "meeting one again lowered a page already read")
+
+	-- A qualifier the journal requires and the chapter does not: a Shrieker that
+	-- never screamed is still a Shrieker somebody got away from.
+	fact(name, { kind = "Encounter", phase = "survived", enemyType = "Shrieker", marks = {} })
+	check(p.codex.kept.Shrieker == 2, "an unqualified survival did not reach the Codex")
+	check(p.codex.journal.banked.FirstShriekerSurvived == nil, "an unqualified survival reached the journal")
+end
+
+do
+	local name = reset("11. the Pets chapter is witnessed off the profile")
+	local p = profileOf(name)
+	fireReady(name)
+	drain()
+	check(next(p.codex.pets) == nil, "a fresh profile knows a pet")
+
+	p.pets = { u1 = { petId = "firefly", stage = 0 } }
+	petsChanged:Fire({ player = name })
+	drain()
+	check(p.codex.pets.firefly == true, "a hatched Firefly did not write its page")
+
+	-- Banked, so losing the pet cannot take the page back. That is the same rule
+	-- the journal's witnesses follow and it is the day pet release ships.
+	p.pets = {}
+	petsChanged:Fire({ player = name })
+	drain()
+	check(p.codex.pets.firefly == true, "releasing a pet unwrote its page")
+end
+
+do
+	local name = reset("12. the projection is pushed on a join and on a change, not on a repeat")
+	local p = profileOf(name)
+	fireReady(name)
+	drain()
+	local first = projections()
+	check(#first == 1, "a join pushed " .. #first .. " projections, expected 1")
+	check(first[1] and first[1].unlocked == 0, "the join projection is not empty")
+	check(first[1] and first[1].total == #MODULES.Journal, "the projection does not carry the chapter size")
+
+	FIRED = {}
+	fact(name, { kind = "Encounter", phase = "opened", enemyType = "Drifter" })
+	check(#projections() == 1, "meeting a new type did not push")
+	check(projections()[1].kept.Drifter == 1, "the pushed projection does not carry the stage")
+
+	FIRED = {}
+	for _ = 1, 4 do
+		fact(name, { kind = "Encounter", phase = "opened", enemyType = "Drifter" })
+	end
+	check(#projections() == 0, "an enemy noticing somebody again pushed " .. #projections() .. " projections")
+
+	-- The other half of the same rule, on the channel that fires most often: a
+	-- floor that unlocks nothing and hatches nothing changes nothing to send.
+	clearFloor(name, 1)
+	check(#projections() == 1, "the floor that unlocked fragment 1 pushed " .. #projections() .. " projections")
+	FIRED = {}
+	clearFloor(name, 3)
+	check(#projections() == 0, "three floors that unlocked nothing pushed " .. #projections() .. " projections")
+
+	-- The sync is the one request, and it is answered with the same projection.
+	FIRED = {}
+	local intents = game:GetService("ReplicatedStorage"):FindFirstChild("LoreIntent")
+	intents.OnServerEvent.emit(name, { kind = "sync" })
+	check(#projections() == 1, "a sync was not answered")
+	check(projections()[1].kept.Drifter == 1, "the answered sync lost the chapter")
+	check(p.codex.kept.Drifter == 1, "the sync wrote to the profile")
+end
+
+do
+	local name = reset("13. finishing the trail pays once, and only when it can")
+	local p = profileOf(name)
+	SHELF_FULL = true
+
+	local function finish(who)
+		local data = profileOf(who)
+		fact(who, { kind = "Encounter", phase = "survived", enemyType = "Warden" })
+		fact(who, { kind = "Encounter", phase = "survived", enemyType = "Gatekeeper", reason = "leash" })
+		fact(who, { kind = "Encounter", phase = "opened", enemyType = "Warden" })
+		fact(who, { kind = "ShadowFrozen" })
+		fact(who, { kind = "MimicRevealed" })
+		fact(who, { kind = "Encounter", phase = "survived", enemyType = "Shrieker", marks = { screamed = true } })
+		fact(who, { kind = "SevenDayStreak" })
+		fact(who, { kind = "Encounter", phase = "opened", enemyType = "Watcher" })
+		data.stats.eggsHatched = 1
+		data.pets = { u1 = { petId = "firefly", stage = 1 } }
+		clearFloor(who, 5)
+		topOut(who, 10)
+	end
+
+	finish(name)
+	check(unlocked(name) == #MODULES.Journal, "the trail did not finish, at " .. unlocked(name))
+	check(p.codex.journal.rewarded == false, "a refused grant was recorded as paid")
+	check(#ofKind("completed") == 0, "a refused grant announced itself")
+	-- The title is the trail's, not the grant's: it is earned by finishing.
+	check(name:GetAttribute("CodexTitle") == "Cartographer", "the title was not published")
+
+	SHELF_FULL = false
+	clearFloor(name, 1)
+	check(p.codex.journal.rewarded == true, "the retry did not pay")
+	local paid = ofKind("completed")
+	check(#paid == 1, "the completion announced " .. #paid .. " times")
+	check(paid[1] and paid[1].title == "Cartographer", "the completion carries no title")
+	check(p.codex.pets.compass_crow == true, "the granted pet did not write its own page")
+
+	clearFloor(name, 3)
+	check(#ofKind("completed") == 1, "the reward was paid twice")
+end
+
+do
+	local name = reset("14. every fragment can be drawn locked")
+	-- The Codex prints a hint under every `???`, so a fragment without one is a
+	-- row that reads as broken. Journal.lua refuses to load without them; this is
+	-- the assertion that says why they are there.
+	local missing = 0
+	for _, fragment in ipairs(MODULES.Journal) do
+		if type(fragment.hint) ~= "string" or fragment.hint == "" then
+			missing = missing + 1
+		end
+	end
+	check(missing == 0, missing .. " fragments have no locked hint")
+	check(name ~= nil, "the harness lost its player")
 end
 
 print("")

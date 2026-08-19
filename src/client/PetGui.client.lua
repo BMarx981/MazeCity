@@ -102,11 +102,13 @@ local refresh
 -- Widgets
 -- ============================================================
 
+local playerGui = player:WaitForChild("PlayerGui")
+
 local gui = Instance.new("ScreenGui")
 gui.Name = "PetHud"
 gui.ResetOnSpawn = false
 gui.IgnoreGuiInset = true
-gui.Parent = player:WaitForChild("PlayerGui")
+gui.Parent = playerGui
 
 -- A ViewportFrame of the pet at that stage, or nil for a petId this client's
 -- catalogue does not have. Nil rather than a fallback square: a row missing its
@@ -1283,9 +1285,22 @@ local function updateBadge()
 	badge.Visible = dailyAvailable or stuck == true
 end
 
+-- Two centred panels in one game is two panels that would sit on top of each
+-- other, so each says when it opened and the other closes. The channel is a
+-- BindableEvent in the PlayerGui, found-or-created on both ends for exactly the
+-- reason every server-side one is: these are separate LocalScripts and neither
+-- can know which of them ran first.
+local panels = playerGui:FindFirstChild("UiPanelOpened")
+if not panels then
+	panels = Instance.new("BindableEvent")
+	panels.Name = "UiPanelOpened"
+	panels.Parent = playerGui
+end
+
 local function openPanel(tab)
 	openTab = tab or openTab
 	panel.Visible = true
+	panels:Fire("Pets")
 	nickBox.Visible = false
 	nickTarget = nil
 	gearTarget = nil
@@ -1301,6 +1316,12 @@ local function closePanel()
 	nickTarget = nil
 	gearTarget = nil
 end
+
+panels.Event:Connect(function(name)
+	if name ~= "Pets" then
+		closePanel()
+	end
+end)
 
 toggle.MouseButton1Click:Connect(function()
 	if panel.Visible then

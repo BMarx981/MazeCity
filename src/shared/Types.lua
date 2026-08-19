@@ -313,8 +313,8 @@ export type PlayerStats = {
 --
 -- Three of them are sets keyed by the id of the thing unlocked, and `kept` is a
 -- stage rather than a flag because a Kept entry unlocks twice: the silhouette
--- and name on first encounter, the lore line on surviving one. What the stage
--- numbers mean is the unlock service's to name; this is only room for them.
+-- and name on first encounter, the lore line on surviving one. LoreService
+-- names the stages: 1 is met, 2 is survived, and it only ever raises one.
 --
 -- The journal chapter is the one with a shape of its own. Its fragments unlock
 -- strictly in order, so the whole of "which are known" is how far the count has
@@ -326,6 +326,11 @@ export type PlayerStats = {
 export type JournalState = {
 	unlocked: number,
 	banked: { [string]: boolean },
+	-- Whether the 17/17 reward has actually been handed over, which is not the
+	-- same question as whether the trail is finished: the pet goes through the
+	-- same grant every hatch does and a full shelf refuses it, so this stays
+	-- false and the grant is retried on the next re-check.
+	rewarded: boolean,
 }
 
 export type CodexState = {
@@ -356,6 +361,9 @@ export type JournalFragment = {
 	id: string,
 	day: number,
 	text: string,
+	-- What the Codex prints under a locked row's `???`. Required of every
+	-- fragment: a locked row with nothing under it reads as broken.
+	hint: string,
 	trigger: JournalTrigger,
 	spawnHint: string?,
 	nestOnly: boolean?,

@@ -226,13 +226,23 @@ Ordered roughly by retention value per unit of effort.
 The pet's lore line appears in the hatch moment. For Epic+ hatches, the summit broadcast includes it: *"[Player] hatched Compass Crow. It remembers every dead end."* Piggybacks on the rarity broadcast stubbed in Clutch 2.
 
 ### 6.2 The Codex (the big one)
-A book/monument at the Nest. Entries unlock on:
+Entries unlock on:
 - First hatch of each pet
 - First encounter of each of the Kept (silhouette + name); surviving/escaping unlocks the lore line
 - First recovery of each relic
-- Journal fragments via accomplishment triggers (Section 9): locked fragments render as `???`
+- Journal fragments via accomplishment triggers (Section 9): locked fragments render as `???` plus the locked hint in the Section 9.1 table
 
 Completion rewards per chapter (Pets / The Kept / Relics / Journal) and a 100% reward. The Codex converts lore into a visible collection meter, which is the actual retention mechanic; the lore is the paint on it.
+
+**Shipped as `src/client/CodexGui.client.lua`**, and four things about it are decisions rather than details.
+
+**It is a HUD panel and not the monument at the Nest this bullet asked for.** A monument is a part, a part is generation, and generation is deterministic and per section where a Codex is per player: the same wall the writings could never be baked into (9.2). More than that, it would be a reading room at the top of a ten floor climb, so a fragment unlocked on floor three could not be read until the roof, and the Kept page could not be read at all by the player who most wants it, which is the one being chased. The Nest keeps the ending: fragment 17 stands there and nowhere else.
+
+**Every row is drawn from content the client already has.** The four chapters are `Lore` and `Journal` in ReplicatedStorage, the pictures are `PortraitGenerator` over the same two rig recipes the game spawns from, and what crosses the wire is unlock state only: a count for the journal, a stage per Kept, a set of pet ids. No line of text and no image is ever sent, which is what makes the whole chapter cost the same whether a player has one entry or all of them.
+
+**A chapter's size is what a player can actually reach**, because a meter that cannot fill is a meter nobody trusts. The Kept counts the roster the spawn director may roll, which is nineteen: the Splitter Child is `spawnable = false` and can only arrive from a Splitter breaking, which needs damage the game does not have yet, so it is not in the denominator and draws as a row anyway for whoever meets one. Pets counts the catalogue, all five of which every egg can roll. Relics has no chapter at all: `Lore.relics` is empty and nothing writes `codex.relics`, so a fourth tab today would be a meter that reads 0 of 0 forever. It arrives with the gear economy's relic content (Section 5), as one chapter in the client plus one writer beside the two that exist.
+
+**One reward is written and it is the one that ships.** Journal 17/17 grants the Compass Crow and the Cartographer title, which is this section's 100% reward for the only chapter that can be completed by playing rather than by collecting. Per-chapter rewards are named here and nowhere else: no line says what finishing the Pets chapter gives, and inventing one at a keyboard is what Section 8 exists to stop. They are unwritten content, not missing code.
 
 ### 6.3 Wall writings: The Cartographer's Trail
 The wall writings are a serialized journal, unlocked in order by player accomplishments. Full story and trigger table in Section 9.
@@ -332,25 +342,25 @@ Fragments unlock sequentially: a trigger only counts once all earlier fragments 
 
 **Fragment order is tunable.** Reorder the array to match the director's real encounter pacing per floor: the Shrieker fragment should land near where Shriekers actually first appear. The current order is a best guess.
 
-| # | Trigger (server event / stat) | Fragment text |
-|---|---|---|
-| 1 | First floor cleared | *Day 1. I came here to map it. How hard can a maze be?* |
-| 2 | floorsCleared >= 5 | *Day 3. Finished mapping the third floor. Woke up. There is a different third floor now.* |
-| 3 | First summit reached | *Day 9. The walls moved again. I have stopped drawing in ink.* |
-| 4 | First spotted by a Watcher | *Day 11. The Maze grew an eye at the end of the corridor. It saw me first. Everything came.* |
-| 5 | First egg acquired | *Day 14. Found something warm inside a wall the Maze hadn't finished. It is not a stone.* |
-| 6 | First egg placed at the Nest | *Day 15. Carried it to the top. The summit is the only place my maps still work.* |
-| 7 | First hatch | *Day 16. It hatched where the Maze can't reach, and it came out free. It glows. It already knows the way down.* |
-| 8 | Any pet reaches first evolution | *Day 22. It grows faster than the Maze does. I think that frightens the walls.* |
-| 9 | First Shrieker scream survived | *Day 25. It didn't want to hurt me. It wanted everything else to. I ran before the echo finished.* |
-| 10 | First Mimic revealed | *Day 30. The lamp was not a lamp. I trust the coins and nothing else now.* |
-| 11 | First Shadow frozen by watching it | *Day 33. Something follows me that only moves when I look away. I have started walking backward.* |
-| 12 | summitsReached >= 5 | *Day 40. I was wrong about everything. The Maze is not a wall.* |
-| 13 | 7-day login streak | *Day 41. It builds every night. Shells grow before the thing inside them does.* |
-| 14 | First Gatekeeper leash reset survived | *Day 44. Even the doors hunt now. But they always go home. Remember that. They always go home.* |
-| 15 | summitsReached >= 10 | *Day 47. Lost my satchel today. Floor 47 wants me to forget what I mapped. I won't.* |
-| 16 | First Warden encounter | *Day 50. Something on the high floors wears a climber's boots. It walked like it remembered walking.* |
-| 17 | First Warden escape/survival | *Day 53. If you are reading this, the Maze finished my map for me. Leave the eggs at the Nest. Keep climbing. Do not look for me in the walls.* |
+| # | Trigger (server event / stat) | Locked hint | Fragment text |
+|---|---|---|---|
+| 1 | First floor cleared | Finish a floor. | *Day 1. I came here to map it. How hard can a maze be?* |
+| 2 | floorsCleared >= 5 | Finish five. | *Day 3. Finished mapping the third floor. Woke up. There is a different third floor now.* |
+| 3 | First summit reached | Reach a roof. | *Day 9. The walls moved again. I have stopped drawing in ink.* |
+| 4 | First spotted by a Watcher | Be seen. | *Day 11. The Maze grew an eye at the end of the corridor. It saw me first. Everything came.* |
+| 5 | First egg acquired | Find something warm. | *Day 14. Found something warm inside a wall the Maze hadn't finished. It is not a stone.* |
+| 6 | First egg placed at the Nest | Carry it to the top. | *Day 15. Carried it to the top. The summit is the only place my maps still work.* |
+| 7 | First hatch | Wait for it to open. | *Day 16. It hatched where the Maze can't reach, and it came out free. It glows. It already knows the way down.* |
+| 8 | Any pet reaches first evolution | Let one grow. | *Day 22. It grows faster than the Maze does. I think that frightens the walls.* |
+| 9 | First Shrieker scream survived | Survive the bell. | *Day 25. It didn't want to hurt me. It wanted everything else to. I ran before the echo finished.* |
+| 10 | First Mimic revealed | Catch something pretending. | *Day 30. The lamp was not a lamp. I trust the coins and nothing else now.* |
+| 11 | First Shadow frozen by watching it | Watch what follows you. | *Day 33. Something follows me that only moves when I look away. I have started walking backward.* |
+| 12 | summitsReached >= 5 | Top out five towers. | *Day 40. I was wrong about everything. The Maze is not a wall.* |
+| 13 | 7-day login streak | Come back seven nights. | *Day 41. It builds every night. Shells grow before the thing inside them does.* |
+| 14 | First Gatekeeper leash reset survived | Outlast a door. | *Day 44. Even the doors hunt now. But they always go home. Remember that. They always go home.* |
+| 15 | summitsReached >= 10 | Top out ten towers. | *Day 47. Lost my satchel today. Floor 47 wants me to forget what I mapped. I won't.* |
+| 16 | First Warden encounter | Meet what the high floors keep. | *Day 50. Something on the high floors wears a climber's boots. It walked like it remembered walking.* |
+| 17 | First Warden escape/survival | Walk away from it. | *Day 53. If you are reading this, the Maze finished my map for me. Leave the eggs at the Nest. Keep climbing. Do not look for me in the walls.* |
 
 Notes:
 - Fragments 4 and 15 pay off the Cracked Lantern ("Floor 12") and Cartographer's Satchel relic inscriptions. Players who connect them get the "I figured it out" moment; players who don't lose nothing.
@@ -359,6 +369,7 @@ Notes:
 - Fragment 14 teaches the Gatekeeper leash as advice from a survivor.
 - Fragment 12 is deliberately incomplete; fragment 13 finishes the thought behind a 7-day streak. The story itself enforces the daily loop. This is the highest-leverage pair in the system.
 - Fragment 17 spawns only at the Nest. The story ends where the player's every run ends.
+- The **locked hint** is what the Codex prints under a `???` (6.2, 9.2). It is deliberately shorter and blunter than the fragment: a hint is a thing to go and do, so it never names a mechanic the player has not met and never explains why. "Survive the bell" is the shape of all seventeen.
 - Rule 3 holds: "shell" is never explained. Shell around what, or under what, is the update hook forever.
 
 ### 9.2 Presentation
@@ -371,8 +382,8 @@ Notes:
   A wall is eligible if it is in the `MazeWall` collision group (generation invariant 7, which is what makes "is this a maze wall" answerable by construction rather than by a name check), is not a moving wall (it would leave its writing behind) or a phantom (that wall is something the player is meant to be reading for itself), and it fits: its own vertical extent has to contain the writing's band, which is the floor filter and needs no storey height, and its run has to be at least the writing's width, which keeps a sentence off the short panels flanking a doorway. The face is the hash's choice of the panel's two sides, falling back to the other when the first has no open air in front of it, which is what keeps a writing off the outward side of a boundary wall without the client knowing what a boundary wall is.
 
   Two things in the config are **not** implemented and are worth knowing about rather than finding: `spawnHint` on a fragment has no values written and nothing reads it, so "weighted toward thematically matching areas" is a placement rule the content does not yet exist for, and it is a doc edit before it is a code one. `nestOnly` is implemented and is the exception: fragment 17 is out of the wall pool entirely and stands beside the Egg Roost instead, lettered on both faces because a roof is walked around and a wall is not.
-- **In the Codex**: Journal chapter lists fragments in order, locked ones as `???` with a subtle trigger hint ("Survive the bell").
-- **Completion**: Journal 17/17 grants the Compass Crow reward plus a "Cartographer" chat tag or title.
+- **In the Codex**: Journal chapter lists fragments in order, locked ones as `???` with a subtle trigger hint ("Survive the bell"). The hints are the third column of the 9.1 table, one per fragment and required of every fragment: a locked row with nothing under it is a row that reads as broken.
+- **Completion**: Journal 17/17 grants the Compass Crow plus the Cartographer title. The pet is granted through the same `PetInventory.grantPet` every hatch goes through, so a full shelf refuses it, and the refusal is why the grant is retried on every later re-check rather than recorded as paid: a reward that arrives once and can be dropped is a reward somebody loses to a shelf they can empty. The title is a replicated player attribute and not a chat tag, there being no chat surface in this game to hang one on; the Codex draws it in its own header, which is where somebody who earned it goes to look.
 
 ### 9.3 Config pattern
 
@@ -387,6 +398,7 @@ export type JournalFragment = {
 	id: string,
 	day: number,
 	text: string,
+	hint: string,
 	trigger: JournalTrigger,
 	spawnHint: string?,
 	nestOnly: boolean?,
@@ -397,6 +409,7 @@ local Journal: { JournalFragment } = {
 		id = "day_1",
 		day = 1,
 		text = "I came here to map it. How hard can a maze be?",
+		hint = "Finish a floor.",
 		trigger = { type = "Event", event = "FirstMazeComplete" },
 	},
 	{

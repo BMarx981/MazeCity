@@ -18,6 +18,10 @@
 -- than two drawn on top of each other. Hence the queue, and hence the payload
 -- carrying its own index and total so a toast says where in the seventeen it
 -- landed without this file holding a count it would have to keep in step.
+--
+-- Three payload kinds reach the queue and the fourth, the Codex projection, is
+-- not one: this file draws moments and CodexGui draws state, off the same
+-- remote for the reason PetService's is one remote.
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -61,7 +65,14 @@ local queue = {}
 local showing = false
 
 local function present(payload)
-	if payload.kind == "caughtUp" then
+	if payload.kind == "completed" then
+		-- The end of the trail, and it is still a chip: the last fragment landed
+		-- as one a moment before this and answering it with a banner would be the
+		-- game shouting over the sentence the player is reading.
+		kicker.Text = string.format("Journal %d/%d   The trail ends", payload.total, payload.total)
+		day.Text = payload.title
+		body.Text = "The Cartographer's own companion is at the Nest. The Codex has the whole of it."
+	elseif payload.kind == "caughtUp" then
 		-- The join summary. One line for a whole backlog, because everything in it
 		-- was earned in an earlier session and a run of toasts for old news is a
 		-- run of toasts for old news.
@@ -105,7 +116,7 @@ remote.OnClientEvent:Connect(function(payload)
 	if type(payload) ~= "table" then
 		return
 	end
-	if payload.kind ~= "unlocked" and payload.kind ~= "caughtUp" then
+	if payload.kind ~= "unlocked" and payload.kind ~= "caughtUp" and payload.kind ~= "completed" then
 		return
 	end
 	table.insert(queue, payload)

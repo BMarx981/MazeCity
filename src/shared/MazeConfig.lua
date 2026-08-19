@@ -794,6 +794,26 @@ Config.Lore = {
 	-- them rather than one landing on top of the last.
 	ToastGapSeconds = 0.9,
 
+	-- The Codex (LORE.MD 6.2, PETS_PLAN.md Clutch 7 unit 5). Every line it draws
+	-- is content the client already has, so what is tunable about it is a size,
+	-- a keybind and the one reward that is written down.
+	CodexEnabled = true,
+	-- Panel geometry. Wider than the pet panel because a Codex row carries a
+	-- sentence of somebody's handwriting where a pet row carries a number.
+	CodexPanelWidth = 470,
+	CodexPanelHeight = 480,
+	-- What finishing the Cartographer's Trail pays, per LORE.MD 9.2. The pet
+	-- goes through PetInventory.grantPet like every hatch, so a full shelf
+	-- refuses it and the grant is retried rather than recorded as paid; the
+	-- title is a replicated player attribute the Codex draws in its header,
+	-- there being no chat surface in this game to hang a tag on.
+	CompletionPet = "compass_crow",
+	CompletionTitle = "Cartographer",
+	-- The floor between two answered syncs. The Codex asks once, at join, so
+	-- this is the ceiling on a client that has been edited rather than a rate a
+	-- real one comes anywhere near.
+	SyncSeconds = 2,
+
 	-- The wall writings themselves (LORE.MD 9.2, PETS_PLAN.md Clutch 7 unit 4).
 	-- Client draw numbers rather than tuning for a service, and they are here
 	-- rather than in Config.Juice for the same reason the two timings above are:

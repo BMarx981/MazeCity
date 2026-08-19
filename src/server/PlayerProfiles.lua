@@ -80,7 +80,7 @@ local function defaults()
 		-- shape is explained. The journal chapter is a count rather than a set
 		-- because its fragments unlock strictly in order, plus the bank of the
 		-- accomplishments that happened before the fragment owed them came up.
-		codex = { pets = {}, kept = {}, relics = {}, journal = { unlocked = 0, banked = {} } },
+		codex = { pets = {}, kept = {}, relics = {}, journal = { unlocked = 0, banked = {}, rewarded = false } },
 		gamepasses = {},
 		-- Robux purchase ids already granted, PurchaseId -> os.time() of the
 		-- grant. The idempotency half of PurchaseService's receipt spine: a
@@ -201,7 +201,11 @@ local function adopt(data, result)
 		pets = codex.pets or {},
 		kept = codex.kept or {},
 		relics = codex.relics or {},
-		journal = { unlocked = journal.unlocked or 0, banked = journal.banked or {} },
+		journal = {
+			unlocked = journal.unlocked or 0,
+			banked = journal.banked or {},
+			rewarded = journal.rewarded == true,
+		},
 	}
 	data.gamepasses = result.gamepasses or {}
 	-- Pruned on the way in rather than on a timer: a receipt's whole job is
