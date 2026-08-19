@@ -155,10 +155,14 @@ local function resolveHatch(player, quiet)
 	})
 
 	if broadcastable(petConfig.rarity) then
+		-- The id and not the line (LORE.MD 6.1): every client already holds
+		-- `Lore.pets`, so quoting the pet on a server-wide banner costs the
+		-- wire nothing and a rewritten line ships without touching this file.
 		remote:FireAllClients({
 			kind = "broadcast",
 			playerName = player.DisplayName,
 			petName = petConfig.name,
+			petId = result.petId,
 			rarity = petConfig.rarity,
 		})
 	end

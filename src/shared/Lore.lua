@@ -36,33 +36,45 @@ local Lore = {}
 -- refused below. Firefly's second evolution "Solar" is written in LORE.MD and
 -- is deliberately not here: PetCatalog ships one stage per pet, and text no
 -- stage can ever show is text nobody reads.
+--
+-- `broadcastLine` is the same story at the length a server-wide banner holds,
+-- and it is a second register rather than a duplicate (LORE.MD 2 and 6.1):
+-- `hatchLine` is read by the one player standing at the roost, the short one by
+-- everybody else mid-maze for two seconds. Absent means the broadcast quotes
+-- nothing and names the rarity instead, which is the one-field rule `coinCost`
+-- and `robuxProductId` already follow, so a new pet costs no line here.
 
 Lore.pets = {
 	firefly = {
+		broadcastLine = "Nothing down there was lit, so it lit itself.",
 		hatchLine = "Hatched in the lightless lower floors, where the only way to survive was to become the light.",
 		evolutionLines = {
 			"The dark floors fear it now.",
 		},
 	},
 	lumen_moth = {
+		broadcastLine = "It is the light, stretched thin as a corridor.",
 		hatchLine = "It does not carry the light. It is the light, stretched thin enough to cross a whole corridor as one shape.",
 		evolutionLines = {
 			"It has been burning far longer than it has been alive. Whatever colour it started as is gone.",
 		},
 	},
 	ward_hound = {
+		broadcastLine = "The Maze never said what it was keeping out.",
 		hatchLine = "The Maze built it to keep things out and never said out of where, so it decided that part for itself. It cannot hold forever, and it will not spend itself on an empty corridor.",
 		evolutionLines = {
 			"It stopped flinching a long time ago.",
 		},
 	},
 	coin_bat = {
+		broadcastLine = "It has never once put its first coin down.",
 		hatchLine = "It found one coin a very long time ago and has never once put it down. Everything else it finds, it brings to you.",
 		evolutionLines = {
 			"Two coins now. It has not explained where the second one came from.",
 		},
 	},
 	compass_crow = {
+		broadcastLine = "It remembers every dead end.",
 		hatchLine = "It has flown every corridor the Maze has ever built. It remembers all of them, especially the ones that go nowhere.",
 		evolutionLines = {
 			"It no longer follows the Maze. The Maze follows it.",

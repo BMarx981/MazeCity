@@ -371,6 +371,7 @@ export type JournalFragment = {
 
 export type PetLore = {
 	hatchLine: string,
+	broadcastLine: string?,
 	evolutionLines: { string }?,
 }
 

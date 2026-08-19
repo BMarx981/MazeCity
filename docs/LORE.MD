@@ -33,33 +33,40 @@ Earlier drafts of this doc said fourteen. Fourteen is the number of behavior mod
 
 Rule: **a pet's story explains its ability.** Lore and utility are the same sentence. Every pet ability belongs to one of the five families in Section 4, so every pet counters a category of the Kept.
 
+A configured pet carries the line twice, in two registers, and they are not duplicates of each other. The blockquote is what the player who hatched it reads on their own screen with the reveal held open. The **Broadcast** bullet is the same idea at the length a server-wide banner can hold, one line and no clause: Compass Crow's was written in Section 6.1 long before either half shipped, and the other four are cut to its measure. A pet with no broadcast line is simply not quoted in the announcement, which keeps the second register a one-field rule rather than a thing every new pet must be given.
+
 ### Existing configured pets
 
 **Firefly** (Common, Glow, Watch family)
 > Hatched in the lightless lower floors, where the only way to survive was to become the light.
 
+- Broadcast: *"Nothing down there was lit, so it lit itself."*
 - Evolution "Radiant": *The dark floors fear it now.*
 - Evolution "Solar": *Some say a piece of the sky got lost down there.* Written ahead of the game: `PetCatalog` ships one evolution per pet, so this line waits here and is deliberately absent from `Lore.lua`, which refuses an evolution line with no stage under it.
 
 **Compass Crow** (Epic, DeadEndPing, Wayfinding family)
 > It has flown every corridor the Maze has ever built. It remembers all of them, especially the ones that go nowhere.
 
+- Broadcast: *"It remembers every dead end."*
 - Evolution "Wayfinder": *It no longer follows the Maze. The Maze follows it.*
 - Story role: the Cartographer's companion (Section 9). Journal completion rewards a guaranteed Compass Crow egg or exclusive "Wayworn" variant.
 
 **Lumen Moth** (Uncommon, Glow, Watch family)
 > It does not carry the light. It is the light, stretched thin enough to cross a whole corridor as one shape.
 
+- Broadcast: *"It is the light, stretched thin as a corridor."*
 - Evolution "Pale": *It has been burning far longer than it has been alive. Whatever colour it started as is gone.*
 
 **Ward Hound** (Rare, Ward, family open, see Section 4)
 > The Maze built it to keep things out and never said out of where, so it decided that part for itself. It cannot hold forever, and it will not spend itself on an empty corridor.
 
+- Broadcast: *"The Maze never said what it was keeping out."*
 - Evolution "Bulwark": *It stopped flinching a long time ago.*
 
 **Coin Bat** (Rare, CoinMagnet, Wayfinding family)
 > It found one coin a very long time ago and has never once put it down. Everything else it finds, it brings to you.
 
+- Broadcast: *"It has never once put its first coin down."*
 - Evolution "Gilded": *Two coins now. It has not explained where the second one came from.*
 
 ### Planned pets (one seed per family, expand freely)
@@ -224,6 +231,14 @@ Ordered roughly by retention value per unit of effort.
 
 ### 6.1 Hatch flavor lines (near-zero effort)
 The pet's lore line appears in the hatch moment. For Epic+ hatches, the summit broadcast includes it: *"[Player] hatched Compass Crow. It remembers every dead end."* Piggybacks on the rarity broadcast stubbed in Clutch 2.
+
+**Shipped in `PetGui.client.lua`**, and three things about it are decisions rather than details.
+
+**No line of lore crosses the wire.** The hatch payload already carried `petId`, because the reveal builds the pet's picture from the same recipe the follower is built from, and the broadcast now carries it too. Both ends read `Lore.pets` out of ReplicatedStorage, which every client already has. That is the Codex's bargain (6.2) applied to a moment rather than to a chapter: the server ships an id and the text is free.
+
+**The two registers are the two audiences.** The hatcher gets the full line under the portrait, held for the length of the reveal, because they are standing still at a roost and looking at it. Everybody else gets the short one on a banner, because they are somewhere in a maze and it is on screen for two seconds. That is why Section 2 writes both and why the broadcast is not the long line truncated: a sentence cut at the comma is not the short form of itself, and "It does not carry the light." is the exact case that proves it.
+
+**The broadcast quotes the pet instead of naming its rarity.** The rarity word left the subtitle to make room, which costs nothing: the banner is already drawn in the rarity's colour, the same way the reveal reads rarity, and the example this section has always carried names no rarity either. A broadcast with no line to quote, which is every gear broadcast and any pet that has not been given one, keeps the rarity word.
 
 ### 6.2 The Codex (the big one)
 Entries unlock on:

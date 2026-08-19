@@ -46,6 +46,10 @@ local PortraitGenerator = require(ReplicatedStorage:WaitForChild("PortraitGenera
 -- the same function the server validates the prompt with, and a row with no
 -- product id on the dashboard simply draws one price.
 local Storefront = require(ReplicatedStorage:WaitForChild("Storefront"))
+-- The hatch moment's flavour (LORE.MD 6.1), read here for the same reason the
+-- portraits are built here: the payload names the pet, this machine already
+-- holds every line, and the wire carries neither picture nor prose.
+local Lore = require(ReplicatedStorage:WaitForChild("Lore"))
 
 local remote = ReplicatedStorage:WaitForChild("PetUpdate")
 local intents = ReplicatedStorage:WaitForChild("PetIntent")
@@ -271,6 +275,24 @@ revealSub.ZIndex = 11
 
 local REVEAL_PORTRAIT = 240
 
+-- Under the picture, because the reading order of the moment is name, then
+-- what it is, then what it looks like, then what it is for: the line explains
+-- the ability (LORE.MD 2), so it lands after the player has seen the thing it
+-- is about. Held to a measure narrower than the screen and wrapped, since these
+-- are sentences rather than the labels the rest of this file draws.
+local REVEAL_LORE_WIDTH = 520
+local revealLore = UiTheme.label(
+	reveal,
+	UDim2.new(0, REVEAL_LORE_WIDTH, 0, 56),
+	UDim2.new(0.5, -REVEAL_LORE_WIDTH / 2, 0.42, 96 + REVEAL_PORTRAIT + 14),
+	UiTheme.Body,
+	18,
+	UiTheme.Dim
+)
+revealLore.TextWrapped = true
+revealLore.TextYAlignment = Enum.TextYAlignment.Top
+revealLore.ZIndex = 11
+
 -- The portrait currently on screen. Held rather than looked up, because it is
 -- torn down from a delayed callback and from the next hatch, and a spinning
 -- viewport left parented to a hidden frame is a RenderStepped connection
@@ -308,6 +330,9 @@ local function showReveal(name, rarity, ability, petId, stage)
 	revealSub.Text = string.upper(rarity) .. "  |  " .. ability
 	revealSub.TextColor3 = color
 	revealSub.TextTransparency = 1
+	local lore = petId and Lore.pets[petId]
+	revealLore.Text = lore and lore.hatchLine or ""
+	revealLore.TextTransparency = 1
 
 	for i = 1, rays do
 		local ray = Instance.new("Frame")
@@ -328,6 +353,14 @@ local function showReveal(name, rarity, ability, petId, stage)
 
 	UiTheme.tween(revealTitle, 0.35, { TextTransparency = 0 })
 	UiTheme.tween(revealSub, 0.35, { TextTransparency = 0 })
+	-- Later than the name and the picture, which is the same beat the rays are
+	-- still opening on: the flavour is read after the reveal has landed, never
+	-- alongside it.
+	TweenService:Create(
+		revealLore,
+		TweenInfo.new(0.35, Enum.EasingStyle.Quad, Enum.EasingDirection.Out, 0, false, 0.45),
+		{ TextTransparency = 0 }
+	):Play()
 	if revealPortrait then
 		UiTheme.tween(revealPortrait, 0.35, { ImageTransparency = 0 })
 	end
@@ -345,6 +378,7 @@ local function showReveal(name, rarity, ability, petId, stage)
 		UiTheme.tween(reveal, 0.5, { BackgroundTransparency = 1 })
 		UiTheme.tween(revealTitle, 0.5, { TextTransparency = 1 })
 		UiTheme.tween(revealSub, 0.5, { TextTransparency = 1 })
+		UiTheme.tween(revealLore, 0.5, { TextTransparency = 1 })
 		if mine and revealPortrait == mine then
 			UiTheme.tween(mine, 0.5, { ImageTransparency = 1 })
 		end
@@ -1533,6 +1567,13 @@ remote.OnClientEvent:Connect(function(payload)
 		-- Two things are worth announcing to a whole server and they are not both
 		-- hatches, so the verb and the noun both ride the payload. The hatch sends
 		-- neither and reads as it always did.
+		--
+		-- The subtitle is the pet's short line where it has one and the rarity
+		-- word where it does not (LORE.MD 6.1), which is one rule covering the
+		-- gear broadcast, a pet written without one, and the long line that
+		-- would need three of these banners. Nothing is lost by the swap: the
+		-- rarity is already what this banner is coloured with.
+		local lore = payload.petId and Lore.pets[payload.petId]
 		banner.show(
 			string.format(
 				"%s %s a %s!",
@@ -1540,7 +1581,7 @@ remote.OnClientEvent:Connect(function(payload)
 				payload.verb or "hatched",
 				payload.itemName or payload.petName
 			),
-			string.upper(payload.rarity),
+			lore and lore.broadcastLine or string.upper(payload.rarity),
 			Config.rarityColor(payload.rarity),
 			Config.Pets.BroadcastSeconds
 		)
